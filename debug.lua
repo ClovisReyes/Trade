@@ -210,7 +210,7 @@ local success, err = pcall(function()
     update_history_display(Color3.fromRGB(200, 200, 200))
 
     -- Remote Interception Hooks (Captures exact game-passed arguments in memory)
-    pcall(function()
+    local hook_success, hook_err = pcall(function()
         local function log_remote_call(remote_obj, args)
             local arg_strings = {}
             for i, v in ipairs(args) do
@@ -227,10 +227,10 @@ local success, err = pcall(function()
             local old_namecall
             old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
                 local method = getnamecallmethod()
-                if method == "InvokeServer" or method == "FireServer" then
+                if (method == "InvokeServer" or method == "FireServer") and typeof(self) == "Instance" then
                     local name = self.Name
-                    if name:find("AcceptTradeOffer") or name:find("SendTradeOffer") or name:find("InitiateTrade") then
-                        log_remote_call(self, {...})
+                    if name and (name:find("AcceptTradeOffer") or name:find("SendTradeOffer") or name:find("InitiateTrade")) then
+                        pcall(log_remote_call, self, {...})
                     end
                 end
                 return old_namecall(self, ...)
@@ -238,21 +238,33 @@ local success, err = pcall(function()
             table.insert(click_history, 1, "[HOOK] hookmetamethod registered successfully!")
         else
             -- Method 2: hookfunction on RemoteFunction/RemoteEvent methods
-            local old_invoke
-            if hookfunction and Instance.new("RemoteFunction").InvokeServer then
-                old_invoke = hookfunction(Instance.new("RemoteFunction").InvokeServer, function(self, ...)
-                    local name = self.Name
-                    if name:find("AcceptTradeOffer") or name:find("SendTradeOffer") or name:find("InitiateTrade") then
-                        log_remote_call(self, {...})
-                    end
-                    return old_invoke(self, ...)
-                end)
-                table.insert(click_history, 1, "[HOOK] hookfunction registered successfully!")
+            if hookfunction then
+                local rf = Instance.new("RemoteFunction")
+                local invoke_func = rf.InvokeServer
+                if invoke_func then
+                    local old_invoke
+                    old_invoke = hookfunction(invoke_func, function(self, ...)
+                        if typeof(self) == "Instance" then
+                            local name = self.Name
+                            if name and (name:find("AcceptTradeOffer") or name:find("SendTradeOffer") or name:find("InitiateTrade")) then
+                                pcall(log_remote_call, self, {...})
+                            end
+                        end
+                        return old_invoke(self, ...)
+                    end)
+                    table.insert(click_history, 1, "[HOOK] hookfunction registered successfully!")
+                else
+                    table.insert(click_history, 1, "[HOOK] RemoteFunction.InvokeServer method not found.")
+                end
             else
                 table.insert(click_history, 1, "[HOOK] hookmetamethod/hookfunction not supported on this executor.")
             end
         end
     end)
+
+    if not hook_success then
+        table.insert(click_history, 1, "[HOOK ERROR] Failed to hook remotes: " .. tostring(hook_err))
+    end
     update_history_display(Color3.fromRGB(200, 200, 200))
 
     -- Notification Scanning Logic
