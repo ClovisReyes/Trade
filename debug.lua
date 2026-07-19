@@ -190,6 +190,25 @@ local success, err = pcall(function()
         path_box.TextColor3 = success_color or Color3.fromRGB(0, 191, 255)
     end
 
+    -- Startup Scan: Scan ReplicatedStorage for 'Trade' remotes and log to history box
+    pcall(function()
+        local found_remotes = {}
+        for _, v in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+            if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
+                if v.Name:lower():find("trade") then
+                    table.insert(found_remotes, string.format("  - %s (%s)\n    Path: %s", v.Name, v.ClassName, v:GetFullName()))
+                end
+            end
+        end
+        if #found_remotes > 0 then
+            local startup_log = string.format("[STARTUP] Found %d Trade Remotes:\n%s", #found_remotes, table.concat(found_remotes, "\n\n"))
+            table.insert(click_history, startup_log)
+        else
+            table.insert(click_history, "[STARTUP] No 'Trade' remotes found in ReplicatedStorage.")
+        end
+    end)
+    update_history_display(Color3.fromRGB(200, 200, 200))
+
     -- Notification Scanning Logic
     local function check_descendant(desc)
         if desc:IsA("TextLabel") or desc:IsA("TextButton") then
