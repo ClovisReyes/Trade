@@ -60,7 +60,7 @@ local vendor_utility = require(variables.vendor_utility)
 
 -- Net Lookup for Sleitnick Net Remotes
 local remote_map = {
-    SendTradeOffer     = "SendTradeOffer",
+    SendTradeOffer     = "InitiateTrade",
     AddItem            = "AddItem",
     SetReady           = "SetReady",
     ConfirmTrade       = "ConfirmTrade",
@@ -554,7 +554,7 @@ end
 local function click_gui_button(btn)
     if not btn then return end
 
-    -- Method 2: executor firesignal
+    -- Method 1: executor firesignal
     pcall(function()
         if firesignal then
             firesignal(btn.MouseButton1Click)
@@ -564,14 +564,30 @@ local function click_gui_button(btn)
         end
     end)
 
-    -- Method 3: executor getconnections
+    -- Method 2: executor getconnections (including mock InputBegan/InputEnded for custom buttons)
     pcall(function()
         if getconnections then
-            for _, event_name in ipairs({"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated"}) do
+            for _, event_name in ipairs({"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated", "InputBegan", "InputEnded"}) do
                 local event = btn[event_name]
                 if event then
                     for _, conn in ipairs(getconnections(event)) do
-                        conn:Fire()
+                        if event_name == "InputBegan" then
+                            local mock_input = {
+                                UserInputType = Enum.UserInputType.MouseButton1,
+                                UserInputState = Enum.UserInputState.Begin,
+                                Position = Vector3.new(0, 0, 0)
+                            }
+                            conn:Fire(mock_input)
+                        elseif event_name == "InputEnded" then
+                            local mock_input = {
+                                UserInputType = Enum.UserInputType.MouseButton1,
+                                UserInputState = Enum.UserInputState.End,
+                                Position = Vector3.new(0, 0, 0)
+                            }
+                            conn:Fire(mock_input)
+                        else
+                            conn:Fire()
+                        end
                     end
                 end
             end
@@ -739,7 +755,12 @@ local function set_status_msg(mode_name, msg, details_override)
 end
 
 local function wait_for_trade_end(mode_name)
+    local start_time = tick()
     while local_player:GetAttribute("IsTrading") do
+        if tick() - start_time > 100 then
+            decline_active_trade()
+            break
+        end
         local stage = "Waiting PlayersReady..."
         
         pcall(function()
@@ -805,6 +826,7 @@ local function start_trade_session(target_player, mode)
         end
 
         set_status_msg(mode, "Waiting for target to accept offer...")
+        
         local success, err = trade_remotes.SendTradeOffer:InvokeServer(target_player)
         if not success then
             cache.last_trade_time = tick()
@@ -1499,7 +1521,10 @@ local function run_auto_trade_loop()
             if config.enabled and config.trade_fish_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
-                    pcall(try_trade_fish)
+                    local ok, err = pcall(try_trade_fish)
+                    if not ok then
+                        warn("Noir AutoTrade Error (fish):", tostring(err))
+                    end
                     cache.is_trading_active = false
                 end
             end
@@ -1513,7 +1538,10 @@ local function run_auto_trade_loop()
             if config.enabled and config.trade_rarity_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
-                    pcall(try_trade_rarity)
+                    local ok, err = pcall(try_trade_rarity)
+                    if not ok then
+                        warn("Noir AutoTrade Error (rarity):", tostring(err))
+                    end
                     cache.is_trading_active = false
                 end
             end
@@ -1527,11 +1555,14 @@ local function run_auto_trade_loop()
             if config.enabled and config.trade_enchants_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
-                    pcall(function()
+                    local ok, err = pcall(function()
                         if config.trade_enchants_enabled and #config.selected_items > 0 then
                             try_trade_enchant()
                         end
                     end)
+                    if not ok then
+                        warn("Noir AutoTrade Error (enchant):", tostring(err))
+                    end
                     cache.is_trading_active = false
                 end
             end
@@ -1545,7 +1576,10 @@ local function run_auto_trade_loop()
             if config.enabled and config.trade_coins_enabled and config.target_coin_amount > 0 then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
-                    pcall(try_trade_by_coin)
+                    local ok, err = pcall(try_trade_by_coin)
+                    if not ok then
+                        warn("Noir AutoTrade Error (coin):", tostring(err))
+                    end
                     cache.is_trading_active = false
                 end
             end
@@ -1572,21 +1606,21 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- Wait for the prompt Yes button to load and become visible/clickable on screen
+        -- Wait ONLY for the Yes button to exist in memory (very fast, doesn't need to be visible)
         local yes_btn = nil
         local start_wait = tick()
-        while tick() - start_wait < 3 do
+        while tick() - start_wait < 2 do
             pcall(function()
                 local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
                 local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
                 local options = blackout and blackout:FindFirstChild("Options")
                 local btn = options and options:FindFirstChild("Yes")
-                if btn and btn.Visible and btn.AbsoluteSize.X > 0 and btn.AbsoluteSize.Y > 0 then
+                if btn then
                     yes_btn = btn
                 end
             end)
             if yes_btn then break end
-            task_wait(0.1)
+            task_wait(0.05)
         end
         
         if yes_btn then
