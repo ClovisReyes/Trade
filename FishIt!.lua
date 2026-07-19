@@ -1572,21 +1572,34 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        task_wait(0.5)
+        -- Wait for the prompt Yes button to load and become visible/clickable on screen
+        local yes_btn = nil
+        local start_wait = tick()
+        while tick() - start_wait < 3 do
+            pcall(function()
+                local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+                local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+                local options = blackout and blackout:FindFirstChild("Options")
+                local btn = options and options:FindFirstChild("Yes")
+                if btn and btn.Visible and btn.AbsoluteSize.X > 0 and btn.AbsoluteSize.Y > 0 then
+                    yes_btn = btn
+                end
+            end)
+            if yes_btn then break end
+            task_wait(0.1)
+        end
         
-        -- 1. Call server remote to accept the trade offer directly (stealth)
-        local remote_success, remote_val = pcall(function()
-            return trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
-        end)
-        print("Noir Debug: AcceptTradeOffer(requester, true) result ->", remote_success, tostring(remote_val))
-        
-        -- 2. Safely destroy the visual prompt GUI to clear it from screen without clicks
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui:Destroy()
-            end
-        end)
+        if yes_btn then
+            -- Safe, undetected click of Yes button via Lua signals (firesignal/getconnections)
+            pcall(function()
+                click_gui_button(yes_btn)
+            end)
+        else
+            -- Ultimate fallback: Call remote directly if the button didn't load
+            pcall(function()
+                trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+            end)
+        end
     end)
 
     trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
