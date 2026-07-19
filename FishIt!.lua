@@ -1572,45 +1572,45 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- Wait for the prompt Yes button to load and become visible/clickable on screen
-        local yes_btn = nil
-        local start_wait = tick()
-        while tick() - start_wait < 3 do
-            pcall(function()
-                local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-                local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-                local options = blackout and blackout:FindFirstChild("Options")
-                local btn = options and options:FindFirstChild("Yes")
-                if btn and btn.Visible and btn.AbsoluteSize.X > 0 and btn.AbsoluteSize.Y > 0 then
-                    yes_btn = btn
-                end
-            end)
-            if yes_btn then break end
-            task_wait(0.1)
-        end
+        task_wait(0.5)
         
-        if yes_btn then
-            -- Simulate a physical click on the Yes button coordinate to trigger custom game input scripts (InputBegan)
-            pcall(function()
-                local virtual_input_manager = game:GetService("VirtualInputManager")
-                local abs_pos = yes_btn.AbsolutePosition
-                local abs_size = yes_btn.AbsoluteSize
-                local x = abs_pos.X + abs_size.X / 2
-                local y = abs_pos.Y + abs_size.Y / 2
+        -- 1. Call server remote with true parameter (required by Sleitnick Net to accept trade offers)
+        local remote_success, remote_val = pcall(function()
+            return trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+        end)
+        print("Noir Debug: AcceptTradeOffer(requester, true) result ->", remote_success, tostring(remote_val))
+        
+        -- 2. Fallback: Automatically click the visual "Yes" button in the prompt
+        pcall(function()
+            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+            local options = blackout and blackout:FindFirstChild("Options")
+            local yes_btn = options and options:FindFirstChild("Yes")
+            if yes_btn then
+                -- Click via Lua event signals (firesignal/getconnections)
+                click_gui_button(yes_btn)
                 
-                local gui_service = game:GetService("GuiService")
-                local inset = gui_service:GetGuiInset()
-                x = x + inset.X
-                y = y + inset.Y
+                -- Click via coordinate simulator (VirtualInputManager)
+                task_spawn(function()
+                    pcall(function()
+                        local virtual_input_manager = game:GetService("VirtualInputManager")
+                        local abs_pos = yes_btn.AbsolutePosition
+                        local abs_size = yes_btn.AbsoluteSize
+                        local x = abs_pos.X + abs_size.X / 2
+                        local y = abs_pos.Y + abs_size.Y / 2
+                        
+                        local gui_service = game:GetService("GuiService")
+                        local inset = gui_service:GetGuiInset()
+                        x = x + inset.X
+                        y = y + inset.Y
 
-                virtual_input_manager:SendMouseButtonEvent(x, y, 0, true, game, 0)
-                task_wait(0.05)
-                virtual_input_manager:SendMouseButtonEvent(x, y, 0, false, game, 0)
-            end)
-        end
-        
-        task_wait(1)
-        trade_remotes.AcceptTradeOffer:InvokeServer(requester)
+                        virtual_input_manager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+                        task_wait(0.05)
+                        virtual_input_manager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+                    end)
+                end)
+            end
+        end)
     end)
 
     trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
