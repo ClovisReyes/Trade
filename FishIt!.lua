@@ -1593,13 +1593,11 @@ _G.run_auto_trade_loop = run_auto_trade_loop
 local auto_accept_conn = nil
 local trade_started_conn = nil
 local trade_ended_conn = nil
-local ui_hide_conn = nil
 
 local function toggle_auto_accept(enable)
     if auto_accept_conn then auto_accept_conn:Disconnect(); auto_accept_conn = nil end
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
-    if ui_hide_conn then ui_hide_conn:Disconnect(); ui_hide_conn = nil end
 
     -- Re-enable the Prompt GUI when auto-accept is turned off so manual invites show up normally
     if not enable or not trade_remotes then
@@ -1612,94 +1610,53 @@ local function toggle_auto_accept(enable)
         return
     end
 
-    -- 1. Instantly hide all prompts on creation, but only auto-click Yes for trade offers
-    pcall(function()
-        local function handle_prompt(prompt_gui)
-            if not config.auto_accept_enabled then return end
-            
-            -- Instantly disable Prompt ScreenGui to prevent any popups from ever showing on screen
-            prompt_gui.Enabled = false
-            
-            -- Wait for and click Yes button in background ONLY if it is a trade prompt
-            task_spawn(function()
-                local is_trade_prompt = false
-                local start_wait = tick()
-                
-                while tick() - start_wait < 0.5 do
-                    -- Scan all text labels in prompt to verify it is a trade invitation
-                    for _, child in ipairs(prompt_gui:GetDescendants()) do
-                        if child:IsA("TextLabel") and child.Text ~= "" then
-                            local text = child.Text:lower()
-                            if text:find("trade request") or text:find("want to accept") or text:find("trade") then
-                                is_trade_prompt = true
-                                break
-                            end
-                        end
-                    end
-                    if is_trade_prompt then break end
-                    task_wait(0.02)
-                end
-                
-                if is_trade_prompt then
-                    local yes_btn = nil
-                    local btn_wait = tick()
-                    while tick() - btn_wait < 2 do
-                        local blackout = prompt_gui:FindFirstChild("Blackout")
-                        local options = blackout and blackout:FindFirstChild("Options")
-                        local btn = options and options:FindFirstChild("Yes")
-                        if btn and btn.AbsoluteSize.X > 0 then
-                            yes_btn = btn
-                            break
-                        end
-                        task_wait(0.05)
-                    end
-                    
-                    if yes_btn then
-                        print("Noir Debug: Stealth-clicking Yes button on hidden Trade Prompt!")
-                        click_gui_button(yes_btn)
-                    end
-                end
-                cache.receiving_trade = false
-            end)
-        end
-
-        -- Check existing prompt
-        local existing_prompt = local_player.PlayerGui:FindFirstChild("Prompt")
-        if existing_prompt then
-            handle_prompt(existing_prompt)
-        end
-
-        -- Monitor for new Prompts parented to PlayerGui (prevents even a 1-frame flash)
-        ui_hide_conn = local_player.PlayerGui.ChildAdded:Connect(function(child)
-            if child.Name == "Prompt" then
-                handle_prompt(child)
-            end
-        end)
-    end)
-
-    -- 2. Remote-based auto accept
+    -- Remote-based auto accept
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
         if not config.auto_accept_enabled then return end
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- Prime the UI detector state
-        cache.receiving_trade = true
-        cache.receiving_trade_time = tick()
-
-        -- Safely hide existing prompt immediately if it got created in the same frame
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = false
+        -- 1. Lock Prompt ScreenGui to Enabled = false for 1.5 seconds to override game client activation
+        task_spawn(function()
+            local start_hide = tick()
+            while tick() - start_hide < 1.5 do
+                pcall(function()
+                    local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+                    if prompt_gui and prompt_gui.Enabled then
+                        prompt_gui.Enabled = false
+                    end
+                end)
+                task_wait(0.05)
             end
         end)
         
-        task_wait(0.5)
-        
-        -- Call server remote directly as fallback
+        -- 2. Call server remote to accept the trade offer directly (stealth)
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+        end)
+        
+        -- 3. Wait for the Yes button (regardless of layout size) and click it to reset prompt state
+        task_spawn(function()
+            local yes_btn = nil
+            local start_wait = tick()
+            while tick() - start_wait < 3 do
+                pcall(function()
+                    local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+                    local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+                    local options = blackout and blackout:FindFirstChild("Options")
+                    local btn = options and options:FindFirstChild("Yes")
+                    if btn then
+                        yes_btn = btn
+                    end
+                end)
+                if yes_btn then break end
+                task_wait(0.05)
+            end
+            
+            if yes_btn then
+                print("Noir Debug: Stealth-clicking Yes button on hidden Trade Prompt!")
+                click_gui_button(yes_btn)
+            end
         end)
     end)
 
