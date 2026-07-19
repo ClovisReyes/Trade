@@ -1574,41 +1574,17 @@ local function toggle_auto_accept(enable)
         
         task_wait(0.5)
         
-        -- 1. Call server remote with true parameter (required by Sleitnick Net to accept trade offers)
+        -- 1. Call server remote to accept the trade offer directly (stealth)
         local remote_success, remote_val = pcall(function()
             return trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
         print("Noir Debug: AcceptTradeOffer(requester, true) result ->", remote_success, tostring(remote_val))
         
-        -- 2. Fallback: Automatically click the visual "Yes" button in the prompt
+        -- 2. Safely destroy the visual prompt GUI to clear it from screen without clicks
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-            local options = blackout and blackout:FindFirstChild("Options")
-            local yes_btn = options and options:FindFirstChild("Yes")
-            if yes_btn then
-                -- Click via Lua event signals (firesignal/getconnections)
-                click_gui_button(yes_btn)
-                
-                -- Click via coordinate simulator (VirtualInputManager)
-                task_spawn(function()
-                    pcall(function()
-                        local virtual_input_manager = game:GetService("VirtualInputManager")
-                        local abs_pos = yes_btn.AbsolutePosition
-                        local abs_size = yes_btn.AbsoluteSize
-                        local x = abs_pos.X + abs_size.X / 2
-                        local y = abs_pos.Y + abs_size.Y / 2
-                        
-                        local gui_service = game:GetService("GuiService")
-                        local inset = gui_service:GetGuiInset()
-                        x = x + inset.X
-                        y = y + inset.Y
-
-                        virtual_input_manager:SendMouseButtonEvent(x, y, 0, true, game, 0)
-                        task_wait(0.05)
-                        virtual_input_manager:SendMouseButtonEvent(x, y, 0, false, game, 0)
-                    end)
-                end)
+            if prompt_gui then
+                prompt_gui:Destroy()
             end
         end)
     end)
