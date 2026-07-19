@@ -1571,7 +1571,21 @@ local function toggle_auto_accept(enable)
         if not config.auto_accept_enabled then return end
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
-        task_wait(2)
+        
+        task_wait(1)
+        
+        -- Automatically click the visual "Yes" button in the prompt
+        pcall(function()
+            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+            local options = blackout and blackout:FindFirstChild("Options")
+            local yes_btn = options and options:FindFirstChild("Yes")
+            if yes_btn then
+                click_gui_button(yes_btn)
+            end
+        end)
+        
+        task_wait(1)
         trade_remotes.AcceptTradeOffer:InvokeServer(requester)
     end)
 
