@@ -1612,20 +1612,38 @@ local function toggle_auto_accept(enable)
         return
     end
 
-    -- 1. Instantly hide the trade prompt GUI on creation using network priming
+    -- 1. Instantly hide all prompts on creation, but only auto-click Yes for trade offers
     pcall(function()
         local function handle_prompt(prompt_gui)
             if not config.auto_accept_enabled then return end
             
-            -- Only hide if we recently received a trade offer from the server
-            if cache.receiving_trade and (tick() - cache.receiving_trade_time) < 5 then
-                prompt_gui.Enabled = false
+            -- Instantly disable Prompt ScreenGui to prevent any popups from ever showing on screen
+            prompt_gui.Enabled = false
+            
+            -- Wait for and click Yes button in background ONLY if it is a trade prompt
+            task_spawn(function()
+                local is_trade_prompt = false
+                local start_wait = tick()
                 
-                -- Wait for and click Yes button in background to clear state
-                task_spawn(function()
+                while tick() - start_wait < 0.5 do
+                    -- Scan all text labels in prompt to verify it is a trade invitation
+                    for _, child in ipairs(prompt_gui:GetDescendants()) do
+                        if child:IsA("TextLabel") and child.Text ~= "" then
+                            local text = child.Text:lower()
+                            if text:find("trade request") or text:find("want to accept") or text:find("trade") then
+                                is_trade_prompt = true
+                                break
+                            end
+                        end
+                    end
+                    if is_trade_prompt then break end
+                    task_wait(0.02)
+                end
+                
+                if is_trade_prompt then
                     local yes_btn = nil
-                    local start_wait = tick()
-                    while tick() - start_wait < 3 do
+                    local btn_wait = tick()
+                    while tick() - btn_wait < 2 do
                         local blackout = prompt_gui:FindFirstChild("Blackout")
                         local options = blackout and blackout:FindFirstChild("Options")
                         local btn = options and options:FindFirstChild("Yes")
@@ -1640,9 +1658,9 @@ local function toggle_auto_accept(enable)
                         print("Noir Debug: Stealth-clicking Yes button on hidden Trade Prompt!")
                         click_gui_button(yes_btn)
                     end
-                    cache.receiving_trade = false
-                end)
-            end
+                end
+                cache.receiving_trade = false
+            end)
         end
 
         -- Check existing prompt
