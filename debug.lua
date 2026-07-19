@@ -72,7 +72,7 @@ local success, err = pcall(function()
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, 0, 0, 30)
     title.BackgroundTransparency = 1
-    title.Text = "  NØIR Hub - Debug Path Finder"
+    title.Text = "  NØIR Hub - Debug Path Finder & Tester"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.TextSize = 12
     title.Font = Enum.Font.SourceSansBold
@@ -103,7 +103,7 @@ local success, err = pcall(function()
     status_lbl.Size = UDim2.new(1, -20, 0, 30)
     status_lbl.Position = UDim2.new(0, 10, 0, 35)
     status_lbl.BackgroundTransparency = 1
-    status_lbl.Text = "Status: Click any button or wait for notifications..."
+    status_lbl.Text = "Status: Monitoring clicks and trade prompts..."
     status_lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
     status_lbl.TextSize = 10
     status_lbl.Font = Enum.Font.SourceSans
@@ -183,6 +183,66 @@ local success, err = pcall(function()
         clear_btn.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
     end)
 
+    -- Click GUI Button helper
+    local function click_gui_button(btn)
+        if not btn then return end
+
+        local mock_input = {
+            UserInputType = Enum.UserInputType.MouseButton1,
+            UserInputState = Enum.UserInputState.Begin,
+            Position = Vector3.new(0, 0, 0)
+        }
+
+        local function fire(target)
+            pcall(function()
+                if firesignal then
+                    firesignal(target.MouseButton1Click)
+                    firesignal(target.MouseButton1Down)
+                    firesignal(target.MouseButton1Up)
+                    firesignal(target.Activated)
+                    firesignal(target.InputBegan, mock_input)
+                end
+            end)
+            pcall(function()
+                if getconnections then
+                    for _, event_name in ipairs({"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated"}) do
+                        local event = target[event_name]
+                        if event then
+                            for _, conn in ipairs(getconnections(event)) do
+                                conn:Fire()
+                            end
+                        end
+                    end
+                    local ib = target.InputBegan
+                    if ib then
+                        for _, conn in ipairs(getconnections(ib)) do
+                            conn:Fire(mock_input)
+                        end
+                    end
+                end
+            end)
+        end
+
+        fire(btn)
+        for _, desc in ipairs(btn:GetDescendants()) do
+            fire(desc)
+        end
+    end
+
+    -- History Log Registry
+    local click_history = {}
+    local max_history = 15
+
+    local function update_history_display(success_color)
+        if #click_history == 0 then
+            path_box.Text = "History is empty. Click any elements..."
+            path_box.TextColor3 = Color3.fromRGB(150, 150, 150)
+            return
+        end
+        path_box.Text = table.concat(click_history, "\n\n========================\n\n")
+        path_box.TextColor3 = success_color or Color3.fromRGB(0, 191, 255)
+    end
+
     copy_btn.Activated:Connect(function()
         local current_path = path_box.Text
         if current_path ~= "History is empty. Click any elements..." and current_path ~= "Searching..." then
@@ -199,20 +259,6 @@ local success, err = pcall(function()
         end
     end)
 
-    -- History Log Registry
-    local click_history = {}
-    local max_history = 15
-
-    local function update_history_display(success_color)
-        if #click_history == 0 then
-            path_box.Text = "History is empty. Click any elements..."
-            path_box.TextColor3 = Color3.fromRGB(150, 150, 150)
-            return
-        end
-        path_box.Text = table.concat(click_history, "\n\n========================\n\n")
-        path_box.TextColor3 = success_color or Color3.fromRGB(0, 191, 255)
-    end
-
     clear_btn.Activated:Connect(function()
         table.clear(click_history)
         update_history_display()
@@ -223,6 +269,16 @@ local success, err = pcall(function()
         task.wait(1.5)
         clear_btn.Text = "Clear History"
     end)
+
+    -- Add Startup Diagnostics directly to screen textbox
+    local time_now = get_time_string()
+    local diag_entry = string.format("[%s] Startup Diagnostics:\n  - firesignal: %s\n  - getconnections: %s", 
+        time_now,
+        tostring(firesignal ~= nil),
+        tostring(getconnections ~= nil)
+    )
+    table.insert(click_history, diag_entry)
+    update_history_display()
 
     -- Notification Scanning Logic
     local function check_descendant(desc)
@@ -255,16 +311,66 @@ local success, err = pcall(function()
         end
     end
 
-    -- Scan PlayerGui for notifications
+    -- Automatic Prompt Monitor & Auto-Click Tester
+    local function check_prompt_descendant(desc)
+        if desc.Name == "Yes" and desc:IsA("ImageButton") and desc:IsDescendantOf(player_gui) then
+            local prompt_gui = desc:FindFirstAncestor("Prompt")
+            if prompt_gui then
+                local is_trade_prompt = false
+                local text_found = ""
+                for _, child in ipairs(prompt_gui:GetDescendants()) do
+                    if child:IsA("TextLabel") then
+                        local text = child.Text or ""
+                        if text:lower():find("trade") or text:lower():find("accept") then
+                            is_trade_prompt = true
+                            text_found = text
+                            break
+                        end
+                    end
+                end
+                
+                if is_trade_prompt then
+                    local time_detect = get_time_string()
+                    local log_entry = string.format("[%s] Trade Prompt Detected!\n  Path: %s\n  Prompt Text: \"%s\"\n  Action: Auto-clicking Yes + descendants...", 
+                        time_detect, desc:GetFullName(), text_found)
+                    
+                    table.insert(click_history, 1, log_entry)
+                    if #click_history > max_history then
+                        table.remove(click_history)
+                    end
+                    update_history_display(Color3.fromRGB(255, 165, 0)) -- Orange alert
+                    
+                    task.spawn(function()
+                        task.wait(0.2)
+                        click_gui_button(desc)
+                        
+                        local time_done = get_time_string()
+                        local done_entry = string.format("[%s] Click action completed on Yes button + descendants.", time_done)
+                        table.insert(click_history, 1, done_entry)
+                        if #click_history > max_history then
+                            table.remove(click_history)
+                        end
+                        update_history_display(Color3.fromRGB(0, 255, 127)) -- Green success
+                    end)
+                end
+            end
+        end
+    end
+
+    -- Scan PlayerGui for notifications and prompts
     for _, desc in ipairs(player_gui:GetDescendants()) do
         check_descendant(desc)
+        check_prompt_descendant(desc)
     end
 
     -- Connections Registry for Cleanup
     local connections = {}
 
-    -- Notification Connection
-    local playergui_conn = player_gui.DescendantAdded:Connect(check_descendant)
+    -- Notification & Prompt Connection
+    local playergui_conn = player_gui.DescendantAdded:Connect(function(desc)
+        check_descendant(desc)
+        check_prompt_descendant(desc)
+    end)
     table.insert(connections, playergui_conn)
 
     -- Single Global Mouse Click / Touch Tap Listener (High Performance, 0% CPU Overhead)
