@@ -1599,16 +1599,7 @@ local function toggle_auto_accept(enable)
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
 
-    -- Re-enable the Prompt GUI when auto-accept is turned off so manual invites show up normally
-    if not enable or not trade_remotes then
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = true
-            end
-        end)
-        return
-    end
+    if not enable or not trade_remotes then return end
 
     -- Remote-based auto accept
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
@@ -1616,14 +1607,15 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- 1. Lock Prompt ScreenGui to Enabled = false for 1.5 seconds to override game client activation
+        -- 1. Lock Blackout frame to Visible = false for 1.5 seconds to hide it from screen
         task_spawn(function()
             local start_hide = tick()
             while tick() - start_hide < 1.5 do
                 pcall(function()
                     local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-                    if prompt_gui and prompt_gui.Enabled then
-                        prompt_gui.Enabled = false
+                    local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+                    if blackout and blackout.Visible then
+                        blackout.Visible = false
                     end
                 end)
                 task_wait(0.05)
@@ -1635,7 +1627,7 @@ local function toggle_auto_accept(enable)
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
         
-        -- 3. Wait for the Yes button (regardless of layout size) and click it to reset prompt state
+        -- 3. Wait for the Yes button and click it to reset prompt state (succeeds since ScreenGui is Enabled)
         task_spawn(function()
             local yes_btn = nil
             local start_wait = tick()
@@ -4257,6 +4249,33 @@ if not success then
     print("UI Creation Error: " .. tostring(err))
 end
 pcall(log_inventory_fish)
+
+-- Dismiss any active/leftover trade prompts on startup to clean screen
+pcall(function()
+    local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+    local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+    local options = blackout and blackout:FindFirstChild("Options")
+    local no_btn = options and options:FindFirstChild("No")
+    
+    -- Check if it's a trade prompt
+    local is_trade = false
+    if prompt_gui and blackout and blackout.Visible then
+        for _, child in ipairs(prompt_gui:GetDescendants()) do
+            if child:IsA("TextLabel") then
+                local text = child.Text:lower()
+                if text:find("trade") or text:find("accept") then
+                    is_trade = true
+                    break
+                end
+            end
+        end
+    end
+    if no_btn and is_trade then
+        click_gui_button(no_btn)
+        print("Noir Debug: Dismissed leftover trade prompt on startup.")
+    end
+end)
+
 pcall(function()
     toggle_auto_accept(config.auto_accept_enabled)
 end)
