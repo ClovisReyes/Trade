@@ -311,38 +311,52 @@ local success, err = pcall(function()
         end
     end
 
-    -- Automatic Prompt Monitor & Auto-Click Tester
-    local function check_prompt_descendant(desc)
-        if desc.Name == "Yes" and desc:IsA("ImageButton") and desc:IsDescendantOf(player_gui) then
-            local prompt_gui = desc:FindFirstAncestor("Prompt")
-            if prompt_gui then
-                local is_trade_prompt = false
-                local text_found = ""
-                for _, child in ipairs(prompt_gui:GetDescendants()) do
-                    if child:IsA("TextLabel") then
-                        local text = child.Text or ""
-                        if text:lower():find("trade") or text:lower():find("accept") then
-                            is_trade_prompt = true
-                            text_found = text
-                            break
-                        end
-                    end
+    -- Real-time background loop to monitor active Prompt visibility and handle auto-clicks
+    task.spawn(function()
+        local last_state = false
+        while true do
+            task.wait(0.1)
+            pcall(function()
+                local prompt_gui = player_gui:FindFirstChild("Prompt")
+                local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+                local options = blackout and blackout:FindFirstChild("Options")
+                local yes_btn = options and options:FindFirstChild("Yes")
+                
+                local is_active = false
+                if prompt_gui and prompt_gui.Enabled and blackout and blackout.Visible and yes_btn and yes_btn.Visible and yes_btn.AbsoluteSize.X > 0 then
+                    is_active = true
                 end
                 
-                if is_trade_prompt then
-                    local time_detect = get_time_string()
-                    local log_entry = string.format("[%s] Trade Prompt Detected!\n  Path: %s\n  Prompt Text: \"%s\"\n  Action: Auto-clicking Yes + descendants...", 
-                        time_detect, desc:GetFullName(), text_found)
+                if is_active and not last_state then
+                    last_state = true
+                    task.wait(0.2) -- Wait for text population
                     
-                    table.insert(click_history, 1, log_entry)
-                    if #click_history > max_history then
-                        table.remove(click_history)
+                    local is_trade = false
+                    local text_found = ""
+                    for _, child in ipairs(prompt_gui:GetDescendants()) do
+                        if child:IsA("TextLabel") then
+                            local text = child.Text or ""
+                            if text:lower():find("trade") or text:lower():find("accept") then
+                                is_trade = true
+                                text_found = text
+                                break
+                            end
+                        end
                     end
-                    update_history_display(Color3.fromRGB(255, 165, 0)) -- Orange alert
                     
-                    task.spawn(function()
-                        task.wait(0.2)
-                        click_gui_button(desc)
+                    if is_trade then
+                        local time_detect = get_time_string()
+                        local log_entry = string.format("[%s] Trade Prompt Detected!\n  Path: %s\n  Prompt Text: \"%s\"\n  Action: Auto-clicking Yes + descendants...", 
+                            time_detect, yes_btn:GetFullName(), text_found)
+                        
+                        table.insert(click_history, 1, log_entry)
+                        if #click_history > max_history then
+                            table.remove(click_history)
+                        end
+                        update_history_display(Color3.fromRGB(255, 165, 0))
+                        
+                        task.wait(0.1)
+                        click_gui_button(yes_btn)
                         
                         local time_done = get_time_string()
                         local done_entry = string.format("[%s] Click action completed on Yes button + descendants.", time_done)
@@ -350,26 +364,26 @@ local success, err = pcall(function()
                         if #click_history > max_history then
                             table.remove(click_history)
                         end
-                        update_history_display(Color3.fromRGB(0, 255, 127)) -- Green success
-                    end)
+                        update_history_display(Color3.fromRGB(0, 255, 127))
+                    end
+                elseif not is_active then
+                    last_state = false
                 end
-            end
+            end)
         end
-    end
+    end)
 
-    -- Scan PlayerGui for notifications and prompts
+    -- Scan PlayerGui for notifications
     for _, desc in ipairs(player_gui:GetDescendants()) do
         check_descendant(desc)
-        check_prompt_descendant(desc)
     end
 
     -- Connections Registry for Cleanup
     local connections = {}
 
-    -- Notification & Prompt Connection
+    -- Notification Connection
     local playergui_conn = player_gui.DescendantAdded:Connect(function(desc)
         check_descendant(desc)
-        check_prompt_descendant(desc)
     end)
     table.insert(connections, playergui_conn)
 
