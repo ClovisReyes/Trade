@@ -43,6 +43,15 @@ local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
 local http_service          = cloneref(game:GetService("HttpService"))
 --#endregion
 
+-- Anti-AFK (Automatic background process, no toggle needed)
+pcall(function()
+    local virtual_user = game:GetService("VirtualUser")
+    local_player.Idled:Connect(function()
+        virtual_user:CaptureController()
+        virtual_user:ClickButton2(Vector2.new())
+    end)
+end)
+
 
 --#region Variables
 local variables = {
@@ -173,14 +182,14 @@ local cache = {
     total_caught_start  = 0,
     caught_history      = {},
     active_trade        = false,
-    fish_status_text    = "Success: 0 items - 0 items sent (0/0)",
-    fish_status_details = "Items Sent: 0 | Progress: 0/0 | Attempts: 0 | Failed: 0",
-    enchant_status_text = "Success: 0 items - 0 items sent (0/0)",
-    enchant_status_details = "Items Sent: 0 | Progress: 0/0 | Attempts: 0 | Failed: 0",
-    coin_status_text    = "Success: 0 items - 0 items sent (0/0)",
-    coin_status_details = "Items Sent: 0 | Progress: 0/0 | Attempts: 0 | Failed: 0",
-    rarity_status_text  = "Success: 0 items - 0 items sent (0/0)",
-    rarity_status_details = "Items Sent: 0 | Progress: 0/0 | Attempts: 0 | Failed: 0",
+    fish_status_text    = "Idle",
+    fish_status_details = "",
+    enchant_status_text = "Idle",
+    enchant_status_details = "",
+    coin_status_text    = "Idle",
+    coin_status_details = "",
+    rarity_status_text  = "Idle",
+    rarity_status_details = "",
     count_labels        = {},
     last_trade_time     = nil,
     stats = {
@@ -687,39 +696,129 @@ local function listen_for_trade_completion()
     }
 end
 
+local function get_mode_display_name(mode_name)
+    if mode_name == "enchant" then
+        if #config.selected_items > 0 and config.selected_items[1] ~= "All" then
+            return config.selected_items[1]
+        end
+        return "Enchant Stone"
+    elseif mode_name == "fish" then
+        if #config.selected_fish > 0 and config.selected_fish[1] ~= "All" then
+            return config.selected_fish[1]
+        end
+        return "Fish"
+    elseif mode_name == "rarity" then
+        if #config.selected_tiers > 0 and config.selected_tiers[1] ~= "All" then
+            local names = {}
+            for _, tier in ipairs(config.selected_tiers) do
+                local t_name = tier_mapping[tier]
+                if t_name then table_insert(names, t_name:sub(1,1):upper() .. t_name:sub(2)) end
+            end
+            if #names > 0 then return table_concat(names, "/") end
+        end
+        return "Rarity"
+    elseif mode_name == "coin" then
+        return "Coin"
+    end
+    return "Items"
+end
+
+local function set_status_msg(mode_name, msg, details_override)
+    local s = cache.stats[mode_name]
+    if not s then return end
+    
+    local target = config.quantity
+    if mode_name == "coin" then target = config.target_coin_amount end
+    local progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
+    
+    local details = details_override or string.format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
+    
+    if mode_name == "fish" then
+        if msg then cache.fish_status_text = msg end
+        cache.fish_status_details = details
+    elseif mode_name == "rarity" then
+        if msg then cache.rarity_status_text = msg end
+        cache.rarity_status_details = details
+    elseif mode_name == "enchant" then
+        if msg then cache.enchant_status_text = msg end
+        cache.enchant_status_details = details
+    elseif mode_name == "coin" then
+        if msg then cache.coin_status_text = msg end
+        cache.coin_status_details = details
+    end
+end
+
+local function wait_for_trade_end(mode_name)
+    while local_player:GetAttribute("IsTrading") do
+        local stage = "Waiting PlayersReady..."
+        
+        pcall(function()
+            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
+            if t_gui then
+                local seconds = nil
+                for _, desc in ipairs(t_gui:GetDescendants()) do
+                    if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+                        local text = desc.Text or ""
+                        local sec = string_match(text, "%((%d)s?%)") or string_match(text, "^(%d)$") or string_match(text, "Countdown: (%d)") or string_match(text, "Confirm%s*%(?(%d)%)?") or string_match(text, "Ready%s*%(?(%d)%)?")
+                        if sec then
+                            seconds = sec
+                            break
+                        end
+                    end
+                end
+                
+                if seconds then
+                    stage = "Waiting lock countdown (" .. seconds .. "s)..."
+                else
+                    local has_confirm = false
+                    local frame = t_gui:FindFirstChild("Frame")
+                    local interior = frame and frame:FindFirstChild("Interior")
+                    local buttons = interior and interior:FindFirstChild("Buttons")
+                    if buttons then
+                        local confirm_btn = buttons:FindFirstChild("Confirm")
+                        if confirm_btn and confirm_btn.Visible then
+                            has_confirm = true
+                        end
+                    end
+                    
+                    if not has_confirm then
+                        for _, desc in ipairs(t_gui:GetDescendants()) do
+                            if desc:IsA("TextButton") and (desc.Name == "Confirm" or desc.Text == "Confirm") then
+                                has_confirm = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if has_confirm then
+                        stage = "Confirming trade (spamming)..."
+                    end
+                end
+            end
+        end)
+        
+        set_status_msg(mode_name, stage)
+        task_wait(0.1)
+    end
+end
+
 local function start_trade_session(target_player, mode)
     if not target_player or not trade_remotes then return false, "No remotes" end
-
-    local function update_status(text, details)
-        if mode == "fish" then
-            if text then cache.fish_status_text = text end
-            if details then cache.fish_status_details = details end
-        elseif mode == "enchant" then
-            if text then cache.enchant_status_text = text end
-            if details then cache.enchant_status_details = details end
-        elseif mode == "coin" then
-            if text then cache.coin_status_text = text end
-            if details then cache.coin_status_details = details end
-        elseif mode == "rarity" then
-            if text then cache.rarity_status_text = text end
-            if details then cache.rarity_status_details = details end
-        end
-    end
 
     if not local_player:GetAttribute("IsTrading") then
         if cache.last_trade_time then
             local elapsed = tick() - cache.last_trade_time
             if elapsed < 5 then
-                update_status(nil, "Cooldown (" .. string.format("%.1fs", 5 - elapsed) .. ")")
+                set_status_msg(mode, nil, "Cooldown (" .. string.format("%.1fs", 5 - elapsed) .. ")")
                 task_wait(5 - elapsed)
             end
         end
 
-        update_status("Sending Offer", "Offering trade to " .. target_player.DisplayName)
+        set_status_msg(mode, "Waiting for target to accept offer...")
         local success, err = trade_remotes.SendTradeOffer:InvokeServer(target_player)
         if not success then
             cache.last_trade_time = tick()
-            update_status("Idle", "Failed: " .. (err or "Declined"))
+            set_status_msg(mode, "Failed: " .. (err or "Declined"))
             return false, err
         end
 
@@ -730,7 +829,7 @@ local function start_trade_session(target_player, mode)
 
         if not local_player:GetAttribute("IsTrading") then
             cache.last_trade_time = tick()
-            update_status("Idle", "Trade request timed out")
+            set_status_msg(mode, "Trade request timed out")
             return false, "Timeout"
         end
     end
@@ -749,7 +848,14 @@ local function update_mode_status(mode_name)
     
     local progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
     
-    local text = string.format("Success: %d items - %d items sent (%s)", s.last_items, s.total_items, progress_str)
+    local text
+    if target > 0 and s.total_items >= target then
+        text = string.format("Completed! %d/%d sukses | %d items sent", s.total_items, target, s.total_items)
+    else
+        local display_name = get_mode_display_name(mode_name)
+        text = string.format("Success: %s - %d items sent (%s)", display_name, s.total_items, progress_str)
+    end
+    
     local details = string.format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
     
     if mode_name == "fish" then
@@ -769,10 +875,15 @@ end
 
 local function try_trade_fish()
     cache.processed_trades = {}
-    cache.fish_status_text = "Idle"
-    cache.fish_status_details = "Waiting..."
     local target_player = find_target_player()
-    if not target_player or not player_data then return end
+    if not target_player or not player_data then
+        local err_msg = "Error: Target player belum dipilih"
+        if config.trade_with ~= "" and player_data then
+            err_msg = "Error: Target player tidak ditemukan"
+        end
+        set_status_msg("fish", err_msg)
+        return
+    end
 
     local total_sent = cache.stats.fish.total_items
     if config.quantity > 0 and total_sent >= config.quantity then
@@ -808,6 +919,11 @@ local function try_trade_fish()
     end
 
     if #items_to_trade == 0 then
+        local item_name = "fish"
+        if #config.selected_fish > 0 then
+            item_name = config.selected_fish[1]
+        end
+        set_status_msg("fish", "Error: Tidak ada lagi " .. item_name .. " di inventory")
         config.enabled = false
         if byname_toggle_ctrl then
             byname_toggle_ctrl.set_state(false)
@@ -828,12 +944,11 @@ local function try_trade_fish()
     end
 
     local added_items = {}
+    set_status_msg("fish", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
     for _, item in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
         local fish_data = item_utility:GetItemData(item.Id)
-        cache.fish_status_text = "Adding..."
-        cache.fish_status_details = "Adding " .. tostring(fish_data.Data.Name)
         local add_success, add_err = trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
@@ -848,9 +963,7 @@ local function try_trade_fish()
             trade_remotes.SetReady:InvokeServer(true)
         end)
         
-        while local_player:GetAttribute("IsTrading") do
-            task_wait(0.1)
-        end
+        wait_for_trade_end("fish")
         task_wait(0.5)
 
         local trade_success = false
@@ -913,10 +1026,15 @@ end
 
 local function try_trade_rarity()
     cache.processed_trades = {}
-    cache.rarity_status_text = "Idle"
-    cache.rarity_status_details = "Waiting..."
     local target_player = find_target_player()
-    if not target_player or not player_data then return end
+    if not target_player or not player_data then
+        local err_msg = "Error: Target player belum dipilih"
+        if config.trade_with ~= "" and player_data then
+            err_msg = "Error: Target player tidak ditemukan"
+        end
+        set_status_msg("rarity", err_msg)
+        return
+    end
 
     local total_sent = cache.stats.rarity.total_items
     if config.quantity > 0 and total_sent >= config.quantity then
@@ -952,6 +1070,16 @@ local function try_trade_rarity()
     end
 
     if #items_to_trade == 0 then
+        local rarity_name = "matching rarity"
+        if #config.selected_tiers > 0 then
+            local names = {}
+            for _, tier in ipairs(config.selected_tiers) do
+                local t_name = tier_mapping[tier]
+                if t_name then table_insert(names, t_name:sub(1,1):upper() .. t_name:sub(2)) end
+            end
+            if #names > 0 then rarity_name = table_concat(names, "/") end
+        end
+        set_status_msg("rarity", "Error: Tidak ada lagi " .. rarity_name .. " di inventory")
         config.enabled = false
         if rarity_toggle_ctrl then
             rarity_toggle_ctrl.set_state(false)
@@ -972,12 +1100,11 @@ local function try_trade_rarity()
     end
 
     local added_items = {}
+    set_status_msg("rarity", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
     for _, item in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
         local fish_data = item_utility:GetItemData(item.Id)
-        cache.rarity_status_text = "Adding..."
-        cache.rarity_status_details = "Adding " .. tostring(fish_data.Data.Name)
         local add_success, add_err = trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
@@ -992,9 +1119,7 @@ local function try_trade_rarity()
             trade_remotes.SetReady:InvokeServer(true)
         end)
         
-        while local_player:GetAttribute("IsTrading") do
-            task_wait(0.1)
-        end
+        wait_for_trade_end("rarity")
         task_wait(0.5)
 
         local trade_success = false
@@ -1057,10 +1182,15 @@ end
 
 local function try_trade_enchant()
     cache.processed_trades = {}
-    cache.enchant_status_text = "Idle"
-    cache.enchant_status_details = "Waiting..."
     local target_player = find_target_player()
-    if not target_player or not player_data then return end
+    if not target_player or not player_data then
+        local err_msg = "Error: Target player belum dipilih"
+        if config.trade_with ~= "" and player_data then
+            err_msg = "Error: Target player tidak ditemukan"
+        end
+        set_status_msg("enchant", err_msg)
+        return
+    end
 
     local total_sent = cache.stats.enchant.total_items
     if config.quantity > 0 and total_sent >= config.quantity then
@@ -1097,6 +1227,11 @@ local function try_trade_enchant()
     end
 
     if #items_to_trade == 0 then
+        local item_name = "Enchant Stone"
+        if #config.selected_items > 0 then
+            item_name = config.selected_items[1]
+        end
+        set_status_msg("enchant", "Error: Tidak ada lagi " .. item_name .. " di inventory")
         config.enabled = false
         if enchant_toggle_ctrl then
             enchant_toggle_ctrl.set_state(false)
@@ -1117,12 +1252,11 @@ local function try_trade_enchant()
     end
 
     local added_items = {}
+    set_status_msg("enchant", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
     for _, item in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
         local item_data = item_utility:GetItemData(item.Id)
-        cache.enchant_status_text = "Adding..."
-        cache.enchant_status_details = "Adding " .. tostring(item_data.Data.Name)
         local add_success, add_err = trade_remotes.AddItem:InvokeServer(item_data.Data.Type or "Items", item.UUID)
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
@@ -1137,9 +1271,7 @@ local function try_trade_enchant()
             trade_remotes.SetReady:InvokeServer(true)
         end)
         
-        while local_player:GetAttribute("IsTrading") do
-            task_wait(0.1)
-        end
+        wait_for_trade_end("enchant")
         task_wait(0.5)
 
         local trade_success = false
@@ -1216,10 +1348,15 @@ end
 
 local function try_trade_by_coin()
     cache.processed_trades = {}
-    cache.coin_status_text = "Idle"
-    cache.coin_status_details = "Waiting..."
     local target_player = find_target_player()
-    if not target_player or not player_data then return end
+    if not target_player or not player_data then
+        local err_msg = "Error: Target player belum dipilih"
+        if config.trade_with ~= "" and player_data then
+            err_msg = "Error: Target player tidak ditemukan"
+        end
+        set_status_msg("coin", err_msg)
+        return
+    end
 
     local inventory = player_data:Get("Inventory")
     local player_data_items = inventory and inventory.Items or {}
@@ -1240,14 +1377,13 @@ local function try_trade_by_coin()
     end
 
     if #fish_list == 0 then
-        if config.target_coin_amount > 0 then
-            config.enabled = false
-            if coin_toggle_ctrl then
-                coin_toggle_ctrl.set_state(false)
-                config.trade_coins_enabled = false
-            end
-            save_config()
+        set_status_msg("coin", "Error: Tidak ada lagi fish di inventory")
+        config.enabled = false
+        if coin_toggle_ctrl then
+            coin_toggle_ctrl.set_state(false)
+            config.trade_coins_enabled = false
         end
+        save_config()
         return
     end
 
@@ -1261,14 +1397,13 @@ local function try_trade_by_coin()
     end
 
     if #items_to_trade == 0 or #selected == 0 then
-        if config.target_coin_amount > 0 then
-            config.enabled = false
-            if coin_toggle_ctrl then
-                coin_toggle_ctrl.set_state(false)
-                config.trade_coins_enabled = false
-            end
-            save_config()
+        set_status_msg("coin", "Error: Tidak ada lagi fish di inventory")
+        config.enabled = false
+        if coin_toggle_ctrl then
+            coin_toggle_ctrl.set_state(false)
+            config.trade_coins_enabled = false
         end
+        save_config()
         return
     end
 
@@ -1283,11 +1418,10 @@ local function try_trade_by_coin()
     end
 
     local added_items = {}
+    set_status_msg("coin", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
     for _, fish in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
-        cache.coin_status_text = "Adding..."
-        cache.coin_status_details = "Adding " .. tostring(fish.Name)
         local add_success, add_err = trade_remotes.AddItem:InvokeServer("Fish", fish.UUID)
         if add_success then
             table_insert(cache.processed_trades, fish.UUID)
@@ -1302,9 +1436,7 @@ local function try_trade_by_coin()
             trade_remotes.SetReady:InvokeServer(true)
         end)
         
-        while local_player:GetAttribute("IsTrading") do
-            task_wait(0.1)
-        end
+        wait_for_trade_end("coin")
         task_wait(0.5)
 
         local trade_success = false
@@ -3994,16 +4126,32 @@ local function create_ui()
             end
             
             if status_val_lbl then
-                status_val_lbl.Text = cache.fish_status_text .. "\n" .. cache.fish_status_details
+                if cache.fish_status_details == "" then
+                    status_val_lbl.Text = cache.fish_status_text
+                else
+                    status_val_lbl.Text = cache.fish_status_text .. "\n" .. cache.fish_status_details
+                end
             end
             if enchant_status_val_lbl then
-                enchant_status_val_lbl.Text = cache.enchant_status_text .. "\n" .. cache.enchant_status_details
+                if cache.enchant_status_details == "" then
+                    enchant_status_val_lbl.Text = cache.enchant_status_text
+                else
+                    enchant_status_val_lbl.Text = cache.enchant_status_text .. "\n" .. cache.enchant_status_details
+                end
             end
             if coin_status_val_lbl then
-                coin_status_val_lbl.Text = cache.coin_status_text .. "\n" .. cache.coin_status_details
+                if cache.coin_status_details == "" then
+                    coin_status_val_lbl.Text = cache.coin_status_text
+                else
+                    coin_status_val_lbl.Text = cache.coin_status_text .. "\n" .. cache.coin_status_details
+                end
             end
             if rarity_status_val_lbl then
-                rarity_status_val_lbl.Text = cache.rarity_status_text .. "\n" .. cache.rarity_status_details
+                if cache.rarity_status_details == "" then
+                    rarity_status_val_lbl.Text = cache.rarity_status_text
+                else
+                    rarity_status_val_lbl.Text = cache.rarity_status_text .. "\n" .. cache.rarity_status_details
+                end
             end
 
             if byname_toggle_ctrl then
