@@ -209,6 +209,52 @@ local success, err = pcall(function()
     end)
     update_history_display(Color3.fromRGB(200, 200, 200))
 
+    -- Remote Interception Hooks (Captures exact game-passed arguments in memory)
+    pcall(function()
+        local function log_remote_call(remote_obj, args)
+            local arg_strings = {}
+            for i, v in ipairs(args) do
+                table.insert(arg_strings, string.format("  Arg %d: %s (%s)", i, tostring(v), type(v)))
+            end
+            local log_entry = string.format("[%s] Hooked %s (%s):\n%s", get_time_string(), remote_obj:GetFullName(), remote_obj.ClassName, table.concat(arg_strings, "\n"))
+            table.insert(click_history, 1, log_entry)
+            if #click_history > max_history then table.remove(click_history) end
+            update_history_display()
+        end
+
+        -- Method 1: hookmetamethod (standard executor hook)
+        if hookmetamethod then
+            local old_namecall
+            old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
+                local method = getnamecallmethod()
+                if method == "InvokeServer" or method == "FireServer" then
+                    local name = self.Name
+                    if name:find("AcceptTradeOffer") or name:find("SendTradeOffer") or name:find("InitiateTrade") then
+                        log_remote_call(self, {...})
+                    end
+                end
+                return old_namecall(self, ...)
+            end)
+            table.insert(click_history, 1, "[HOOK] hookmetamethod registered successfully!")
+        else
+            -- Method 2: hookfunction on RemoteFunction/RemoteEvent methods
+            local old_invoke
+            if hookfunction and Instance.new("RemoteFunction").InvokeServer then
+                old_invoke = hookfunction(Instance.new("RemoteFunction").InvokeServer, function(self, ...)
+                    local name = self.Name
+                    if name:find("AcceptTradeOffer") or name:find("SendTradeOffer") or name:find("InitiateTrade") then
+                        log_remote_call(self, {...})
+                    end
+                    return old_invoke(self, ...)
+                end)
+                table.insert(click_history, 1, "[HOOK] hookfunction registered successfully!")
+            else
+                table.insert(click_history, 1, "[HOOK] hookmetamethod/hookfunction not supported on this executor.")
+            end
+        end
+    end)
+    update_history_display(Color3.fromRGB(200, 200, 200))
+
     -- Notification Scanning Logic
     local function check_descendant(desc)
         if desc:IsA("TextLabel") or desc:IsA("TextButton") then
