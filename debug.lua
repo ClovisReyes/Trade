@@ -139,7 +139,7 @@ local success, err = pcall(function()
 
     -- Copy Button
     local copy_btn = Instance.new("TextButton")
-    copy_btn.Size = UDim2.new(1, -20, 0, 30)
+    copy_btn.Size = UDim2.new(0, 225, 0, 30)
     copy_btn.Position = UDim2.new(0, 10, 0, 315)
     copy_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
     copy_btn.Text = "Copy Path to Clipboard"
@@ -152,12 +152,35 @@ local success, err = pcall(function()
     copy_c.CornerRadius = UDim.new(0, 4)
     copy_c.Parent = copy_btn
 
-    -- Dynamic Button Effects
+    -- Clear History Button
+    local clear_btn = Instance.new("TextButton")
+    clear_btn.Size = UDim2.new(0, 225, 0, 30)
+    clear_btn.Position = UDim2.new(0, 245, 0, 315)
+    clear_btn.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
+    clear_btn.Text = "Clear History"
+    clear_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    clear_btn.TextSize = 10
+    clear_btn.Font = Enum.Font.SourceSansBold
+    clear_btn.Parent = main_frame
+
+    local clear_c = Instance.new("UICorner")
+    clear_c.CornerRadius = UDim.new(0, 4)
+    clear_c.Parent = clear_btn
+
+    -- Dynamic Button Effects (Copy)
     copy_btn.MouseEnter:Connect(function()
         copy_btn.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
     end)
     copy_btn.MouseLeave:Connect(function()
         copy_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    end)
+
+    -- Dynamic Button Effects (Clear)
+    clear_btn.MouseEnter:Connect(function()
+        clear_btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    end)
+    clear_btn.MouseLeave:Connect(function()
+        clear_btn.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
     end)
 
     copy_btn.Activated:Connect(function()
@@ -190,82 +213,16 @@ local success, err = pcall(function()
         path_box.TextColor3 = success_color or Color3.fromRGB(0, 191, 255)
     end
 
-    -- Startup Scan: Scan ReplicatedStorage for 'Trade' remotes and log to history box
-    pcall(function()
-        local found_remotes = {}
-        for _, v in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
-            if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
-                if v.Name:lower():find("trade") then
-                    table.insert(found_remotes, string.format("  - %s (%s)\n    Path: %s", v.Name, v.ClassName, v:GetFullName()))
-                end
-            end
-        end
-        if #found_remotes > 0 then
-            local startup_log = string.format("[STARTUP] Found %d Trade Remotes:\n%s", #found_remotes, table.concat(found_remotes, "\n\n"))
-            table.insert(click_history, startup_log)
-        else
-            table.insert(click_history, "[STARTUP] No 'Trade' remotes found in ReplicatedStorage.")
-        end
+    clear_btn.Activated:Connect(function()
+        table.clear(click_history)
+        update_history_display()
+        status_lbl.Text = "Status: History cleared!"
+        status_lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+        
+        clear_btn.Text = "History Cleared!"
+        task.wait(1.5)
+        clear_btn.Text = "Clear History"
     end)
-    update_history_display(Color3.fromRGB(200, 200, 200))
-
-    -- Remote Interception Hooks (Captures exact game-passed arguments in memory)
-    local hook_success, hook_err = pcall(function()
-        local function log_remote_call(remote_obj, args)
-            local arg_strings = {}
-            for i, v in ipairs(args) do
-                table.insert(arg_strings, string.format("  Arg %d: %s (%s)", i, tostring(v), type(v)))
-            end
-            local log_entry = string.format("[%s] Hooked %s (%s):\n%s", get_time_string(), remote_obj:GetFullName(), remote_obj.ClassName, table.concat(arg_strings, "\n"))
-            table.insert(click_history, 1, log_entry)
-            if #click_history > max_history then table.remove(click_history) end
-            update_history_display()
-        end
-
-        -- Method 1: hookmetamethod (standard executor hook)
-        if hookmetamethod then
-            local old_namecall
-            old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
-                local method = getnamecallmethod()
-                if (method == "InvokeServer" or method == "FireServer") and typeof(self) == "Instance" then
-                    local name = self.Name
-                    if name and (name:find("AcceptTradeOffer") or name:find("SendTradeOffer") or name:find("InitiateTrade")) then
-                        pcall(log_remote_call, self, {...})
-                    end
-                end
-                return old_namecall(self, ...)
-            end)
-            table.insert(click_history, 1, "[HOOK] hookmetamethod registered successfully!")
-        else
-            -- Method 2: hookfunction on RemoteFunction/RemoteEvent methods
-            if hookfunction then
-                local rf = Instance.new("RemoteFunction")
-                local invoke_func = rf.InvokeServer
-                if invoke_func then
-                    local old_invoke
-                    old_invoke = hookfunction(invoke_func, function(self, ...)
-                        if typeof(self) == "Instance" then
-                            local name = self.Name
-                            if name and (name:find("AcceptTradeOffer") or name:find("SendTradeOffer") or name:find("InitiateTrade")) then
-                                pcall(log_remote_call, self, {...})
-                            end
-                        end
-                        return old_invoke(self, ...)
-                    end)
-                    table.insert(click_history, 1, "[HOOK] hookfunction registered successfully!")
-                else
-                    table.insert(click_history, 1, "[HOOK] RemoteFunction.InvokeServer method not found.")
-                end
-            else
-                table.insert(click_history, 1, "[HOOK] hookmetamethod/hookfunction not supported on this executor.")
-            end
-        end
-    end)
-
-    if not hook_success then
-        table.insert(click_history, 1, "[HOOK ERROR] Failed to hook remotes: " .. tostring(hook_err))
-    end
-    update_history_display(Color3.fromRGB(200, 200, 200))
 
     -- Notification Scanning Logic
     local function check_descendant(desc)
