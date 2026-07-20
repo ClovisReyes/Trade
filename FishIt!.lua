@@ -1660,12 +1660,6 @@ local function toggle_auto_accept(enable)
     -- Re-enable game's native trade offer connections if auto accept is OFF
     if not enable or not trade_remotes then
         set_game_trade_connections(true)
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = true
-            end
-        end)
         return
     end
 
@@ -4352,31 +4346,7 @@ if not success then
 end
 pcall(log_inventory_fish)
 
--- Dismiss any active/leftover trade prompts on startup to clean screen
-pcall(function()
-    local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-    local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-    local options = blackout and blackout:FindFirstChild("Options")
-    local no_btn = options and options:FindFirstChild("No")
-    
-    -- Check if it's a trade prompt
-    local is_trade = false
-    if prompt_gui and blackout and blackout.Visible then
-        for _, child in ipairs(prompt_gui:GetDescendants()) do
-            if child:IsA("TextLabel") then
-                local text = child.Text:lower()
-                if text:find("trade") or text:find("accept") then
-                    is_trade = true
-                    break
-                end
-            end
-        end
-    end
-    if no_btn and is_trade then
-        click_gui_button(no_btn)
-        print("Noir Debug: Dismissed leftover trade prompt on startup.")
-    end
-end)
+
 
 pcall(function()
     toggle_auto_accept(config.auto_accept_enabled)
