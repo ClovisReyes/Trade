@@ -1607,7 +1607,7 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- 1. Lock Blackout frame to Visible = false for 1.5 seconds to hide it from screen
+        -- 1. Hide Blackout prompt visually
         task_spawn(function()
             local start_hide = tick()
             while tick() - start_hide < 1.5 do
@@ -1622,32 +1622,40 @@ local function toggle_auto_accept(enable)
             end
         end)
         
-        -- 2. Call server remote to accept the trade offer directly (stealth)
+        -- 2. Click Yes button first to trigger game client's UI open sequence
+        pcall(function()
+            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+            local options = blackout and blackout:FindFirstChild("Options")
+            local yes_btn = options and options:FindFirstChild("Yes")
+            if yes_btn then
+                click_gui_button(yes_btn)
+            end
+        end)
+
+        -- 3. Call server remote to accept trade offer directly
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
-        
-        -- 3. Wait for the Yes button and click it to reset prompt state (succeeds since ScreenGui is Enabled)
+
+        -- 4. Force Trade GUI (! Trading) to be enabled and visible on client
         task_spawn(function()
-            local yes_btn = nil
-            local start_wait = tick()
-            while tick() - start_wait < 3 do
+            local start_w = tick()
+            while tick() - start_w < 3 do
+                local shown = false
                 pcall(function()
-                    local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-                    local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-                    local options = blackout and blackout:FindFirstChild("Options")
-                    local btn = options and options:FindFirstChild("Yes")
-                    if btn then
-                        yes_btn = btn
+                    local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
+                    if t_gui then
+                        t_gui.Enabled = true
+                        local frame = t_gui:FindFirstChild("Frame")
+                        if frame then
+                            frame.Visible = true
+                            shown = true
+                        end
                     end
                 end)
-                if yes_btn then break end
-                task_wait(0.05)
-            end
-            
-            if yes_btn then
-                print("Noir Debug: Stealth-clicking Yes button on hidden Trade Prompt!")
-                click_gui_button(yes_btn)
+                if shown then break end
+                task_wait(0.1)
             end
         end)
     end)
@@ -1660,6 +1668,18 @@ local function toggle_auto_accept(enable)
     trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
         if not (config.auto_accept_enabled or config.enabled) then return end
         cache.active_trade = true
+
+        -- Ensure ! Trading GUI is enabled and visible
+        pcall(function()
+            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
+            if t_gui then
+                t_gui.Enabled = true
+                local frame = t_gui:FindFirstChild("Frame")
+                if frame then
+                    frame.Visible = true
+                end
+            end
+        end)
 
         task_spawn(function()
             task_wait(1)
