@@ -1634,16 +1634,12 @@ local function toggle_auto_accept(enable)
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
 
-    -- When Auto Accept is OFF: Zero remotes triggered, restore Prompt GUI state so manual trade popups appear normally
+    -- When Auto Accept is OFF: Zero remotes triggered, enable Prompt GUI container without forcing blackout/frame visible on idle
     if not enable or not trade_remotes then
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
                 prompt_gui.Enabled = true
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = true end
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then frame.Visible = true end
             end
         end)
         return
@@ -1677,15 +1673,11 @@ local function toggle_auto_accept(enable)
         cache.last_trade_time = tick()
         cache.active_trade = false
 
-        -- Restore Prompt GUI state cleanly after trade finishes so all game prompts (sell fish, quests, manual trade) work 100%
+        -- Restore Prompt GUI container cleanly after trade finishes
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
                 prompt_gui.Enabled = true
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = true end
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then frame.Visible = true end
             end
         end)
     end)
