@@ -1634,14 +1634,14 @@ local function toggle_auto_accept(enable)
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
 
-    -- Reset Prompt GUI state so manual trade requests display normally when Auto Accept is OFF
+    -- Reset Prompt GUI state so manual trade request popups appear normally when Auto Accept is OFF
     pcall(function()
         local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
         if prompt_gui then
             prompt_gui.Enabled = true
             local blackout = prompt_gui:FindFirstChild("Blackout")
             if blackout then
-                blackout.Visible = false
+                blackout.Visible = not enable
             end
         end
     end)
@@ -1654,18 +1654,20 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- 1. Call server remote directly to accept the trade offer (stealth, 0ms)
+        -- 1. Call server remote to accept the trade offer directly (stealth)
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
 
-        -- 2. Hide prompt GUI & blackout background cleanly without fake-clicking buttons
+        -- 2. HILANGKAN POPUP DAN BACKGROUND HITAM COMPLETELY
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = false end
                 prompt_gui.Enabled = false
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then
+                    blackout.Visible = false
+                end
             end
         end)
     end)
@@ -1674,13 +1676,15 @@ local function toggle_auto_accept(enable)
         cache.last_trade_time = tick()
         cache.active_trade = false
 
-        -- Restore Prompt GUI state when trade ends
+        -- Restore Prompt GUI enabled state and Blackout visibility after trade finishes
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
                 prompt_gui.Enabled = true
                 local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = false end
+                if blackout then
+                    blackout.Visible = not config.auto_accept_enabled
+                end
             end
         end)
     end)
@@ -1689,8 +1693,19 @@ local function toggle_auto_accept(enable)
         if not (config.auto_accept_enabled or config.enabled) then return end
         cache.active_trade = true
 
-        -- Ensure trade GUI (! Trading) is enabled on client when trade starts
+        -- HILANGKAN POPUP DAN BACKGROUND HITAM when trade starts
         pcall(function()
+            if config.auto_accept_enabled then
+                local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+                if prompt_gui then
+                    prompt_gui.Enabled = false
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then
+                        blackout.Visible = false
+                    end
+                end
+            end
+
             local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
             if t_gui then
                 t_gui.Enabled = true
