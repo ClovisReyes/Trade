@@ -1634,14 +1634,20 @@ local function toggle_auto_accept(enable)
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
 
-    -- Reset Prompt GUI state so manual trade request popups appear normally when Auto Accept is OFF
+    -- Reset Prompt GUI state according to debugged hierarchy (Prompt.Blackout, Prompt.Frame)
     pcall(function()
         local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
         if prompt_gui then
-            prompt_gui.Enabled = true
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            if blackout then
-                blackout.Visible = not enable
+            if enable then
+                prompt_gui.Enabled = false
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then blackout.Visible = false end
+                local frame = prompt_gui:FindFirstChild("Frame")
+                if frame then frame.Visible = false end
+            else
+                prompt_gui.Enabled = true
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then blackout.Visible = false end
             end
         end
     end)
@@ -1665,9 +1671,9 @@ local function toggle_auto_accept(enable)
             if prompt_gui then
                 prompt_gui.Enabled = false
                 local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then
-                    blackout.Visible = false
-                end
+                if blackout then blackout.Visible = false end
+                local frame = prompt_gui:FindFirstChild("Frame")
+                if frame then frame.Visible = false end
             end
         end)
     end)
@@ -1676,14 +1682,18 @@ local function toggle_auto_accept(enable)
         cache.last_trade_time = tick()
         cache.active_trade = false
 
-        -- Restore Prompt GUI enabled state and Blackout visibility after trade finishes
+        -- Restore Prompt GUI state after trade finishes
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
-                prompt_gui.Enabled = true
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then
-                    blackout.Visible = not config.auto_accept_enabled
+                if config.auto_accept_enabled then
+                    prompt_gui.Enabled = false
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then blackout.Visible = false end
+                else
+                    prompt_gui.Enabled = true
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then blackout.Visible = false end
                 end
             end
         end)
@@ -1700,9 +1710,9 @@ local function toggle_auto_accept(enable)
                 if prompt_gui then
                     prompt_gui.Enabled = false
                     local blackout = prompt_gui:FindFirstChild("Blackout")
-                    if blackout then
-                        blackout.Visible = false
-                    end
+                    if blackout then blackout.Visible = false end
+                    local frame = prompt_gui:FindFirstChild("Frame")
+                    if frame then frame.Visible = false end
                 end
             end
 
