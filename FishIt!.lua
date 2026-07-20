@@ -1642,20 +1642,36 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- 1. Call server remote to accept the trade offer directly
-        pcall(function()
-            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
-        end)
+        -- Asynchronously poll for Yes button and click it immediately upon creation to resolve prompt naturally
+        task_spawn(function()
+            local start_time = tick()
+            local clicked = false
 
-        -- 2. Click Yes button on prompt to resolve the prompt GUI naturally
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-            local options = blackout and blackout:FindFirstChild("Options")
-            local yes_btn = options and options:FindFirstChild("Yes")
-            if yes_btn then
-                click_gui_button(yes_btn)
+            while tick() - start_time < 1.5 do
+                local yes_btn = nil
+                pcall(function()
+                    local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+                    local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+                    local options = blackout and blackout:FindFirstChild("Options")
+                    local btn = options and options:FindFirstChild("Yes")
+                    if btn then
+                        yes_btn = btn
+                    end
+                end)
+
+                if yes_btn then
+                    click_gui_button(yes_btn)
+                    clicked = true
+                    break
+                end
+
+                task_wait(0.02)
             end
+
+            -- Invoke server remote to ensure trade offer is accepted
+            pcall(function()
+                trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+            end)
         end)
     end)
 
