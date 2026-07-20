@@ -1634,20 +1634,19 @@ local function toggle_auto_accept(enable)
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
 
-    if not enable or not trade_remotes then
-        -- Ensure Prompt GUI is reset and visible for manual trade requests when Auto Accept is OFF
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = true
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then
-                    blackout.Visible = false
-                end
+    -- Reset Prompt GUI state so manual trade requests display normally when Auto Accept is OFF
+    pcall(function()
+        local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+        if prompt_gui then
+            prompt_gui.Enabled = true
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            if blackout then
+                blackout.Visible = false
             end
-        end)
-        return
-    end
+        end
+    end)
+
+    if not enable or not trade_remotes then return end
 
     -- Remote-based auto accept
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
@@ -1655,21 +1654,16 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- 1. Call server remote to accept the trade offer directly (stealth)
+        -- 1. Call server remote directly to accept the trade offer (stealth, 0ms)
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
 
-        -- 2. Instantly hide and dismiss the trade request popup and blackout background
+        -- 2. Hide prompt GUI & blackout background cleanly without fake-clicking buttons
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
                 local blackout = prompt_gui:FindFirstChild("Blackout")
-                local options = blackout and blackout:FindFirstChild("Options")
-                local yes_btn = options and options:FindFirstChild("Yes")
-                if yes_btn then
-                    click_gui_button(yes_btn)
-                end
                 if blackout then blackout.Visible = false end
                 prompt_gui.Enabled = false
             end
@@ -1680,7 +1674,7 @@ local function toggle_auto_accept(enable)
         cache.last_trade_time = tick()
         cache.active_trade = false
 
-        -- Restore Prompt GUI enabled state after trade finishes so next manual trade works
+        -- Restore Prompt GUI state when trade ends
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
