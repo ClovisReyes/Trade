@@ -1628,64 +1628,89 @@ _G.run_auto_trade_loop = run_auto_trade_loop
 local auto_accept_conn = nil
 local trade_started_conn = nil
 local trade_ended_conn = nil
-
-local function set_game_trade_connections(enabled)
-    pcall(function()
-        if not getconnections or not trade_remotes then return end
-        local raw_remote = trade_remotes.TradeOfferReceived.instance
-        if not raw_remote or not raw_remote.OnClientEvent then return end
-
-        for _, conn in ipairs(getconnections(raw_remote.OnClientEvent)) do
-            if auto_accept_conn and (conn == auto_accept_conn or (conn.Function and auto_accept_conn.Function and conn.Function == auto_accept_conn.Function)) then
-                -- Keep script connection active
-            else
-                pcall(function() conn.Enabled = enabled end)
-                if not enabled then
-                    pcall(function() if conn.Disable then conn:Disable() end end)
-                else
-                    pcall(function() if conn.Enable then conn:Enable() end end)
-                end
-            end
-        end
-    end)
-end
+local prompt_interceptor_conn = nil
 
 local function toggle_auto_accept(enable)
     if auto_accept_conn then auto_accept_conn:Disconnect(); auto_accept_conn = nil end
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
+    if prompt_interceptor_conn then prompt_interceptor_conn:Disconnect(); prompt_interceptor_conn = nil end
 
-    -- Re-enable game's native trade offer connections if auto accept is OFF
+    -- Re-enable game's prompt GUI if auto accept is OFF
     if not enable or not trade_remotes then
-        set_game_trade_connections(true)
+        pcall(function()
+            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+            if prompt_gui then
+                prompt_gui.Enabled = true
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then blackout.Visible = false end
+            end
+        end)
         return
     end
 
-    -- Disable game's native trade offer connections so game NEVER creates the popup GUI
-    set_game_trade_connections(false)
+    -- Intercept and suppress trade prompts instantly on creation/activation
+    pcall(function()
+        local function check_and_hide(prompt_gui)
+            if not config.auto_accept_enabled then return end
+            
+            task_spawn(function()
+                local is_trade_prompt = false
+                local start_check = tick()
+                while tick() - start_check < 0.3 do
+                    for _, desc in ipairs(prompt_gui:GetDescendants()) do
+                        if desc:IsA("TextLabel") and desc.Text ~= "" then
+                            local text = desc.Text:lower()
+                            if text:find("trade") or text:find("accept") then
+                                is_trade_prompt = true
+                                break
+                            end
+                        end
+                    end
+                    if is_trade_prompt then break end
+                    task_wait(0.02)
+                end
+
+                if is_trade_prompt then
+                    prompt_gui.Enabled = false
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then blackout.Visible = false end
+                end
+            end)
+        end
+
+        -- Monitor new children added to PlayerGui
+        prompt_interceptor_conn = local_player.PlayerGui.ChildAdded:Connect(function(child)
+            if child.Name == "Prompt" then
+                check_and_hide(child)
+            end
+        end)
+
+        -- Check existing prompt if active
+        local existing = local_player.PlayerGui:FindFirstChild("Prompt")
+        if existing then
+            check_and_hide(existing)
+        end
+    end)
 
     -- Remote-based auto accept
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
         if not config.auto_accept_enabled then return end
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
-        
-        -- Enforce suppression of game native connections
-        set_game_trade_connections(false)
 
         -- 1. Call server remote to accept the trade offer directly (stealth)
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
 
-        -- 2. Clean up any leftover blackout frame if game managed to parent one
+        -- 2. Instantly disable Prompt GUI if it got created
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
                 local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout and blackout.Visible then
-                    blackout.Visible = false
-                end
+                if blackout then blackout.Visible = false end
+                prompt_gui.Enabled = false
             end
         end)
     end)
