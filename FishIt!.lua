@@ -1622,6 +1622,7 @@ local function run_auto_trade_loop()
         end
     end)
 end
+_G.run_auto_trade_loop = run_auto_trade_loop
 
 -- Auto Accept Trade Connections
 local auto_accept_conn = nil
@@ -1629,20 +1630,16 @@ local trade_started_conn = nil
 local trade_ended_conn = nil
 
 local function toggle_auto_accept(enable)
-    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
-    if trade_started_conn then pcall(function() trade_started_conn:Disconnect() end); trade_started_conn = nil end
-    if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end); trade_ended_conn = nil end
+    if auto_accept_conn then auto_accept_conn:Disconnect(); auto_accept_conn = nil end
+    if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
+    if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
 
-    -- When Auto Accept is OFF: Restore Prompt GUI elements so game trade request popup works normally
+    -- When Auto Accept is OFF: Zero remotes triggered, enable Prompt GUI container without forcing blackout/frame visible on idle
     if not enable or not trade_remotes then
         pcall(function()
-            local prompt_gui = local_player and local_player:FindFirstChild("PlayerGui") and local_player.PlayerGui:FindFirstChild("Prompt")
+            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
                 prompt_gui.Enabled = true
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then frame.Visible = true end
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = false end
             end
         end)
         return
@@ -1659,7 +1656,7 @@ local function toggle_auto_accept(enable)
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
 
-        -- 2. Hide prompt popup and blackout completely during trade offer
+        -- 2. HILANGKAN POPUP DAN BACKGROUND HITAM COMPLETELY DURING TRADE OFFER
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
@@ -1676,25 +1673,11 @@ local function toggle_auto_accept(enable)
         cache.last_trade_time = tick()
         cache.active_trade = false
 
-        -- Close and hide ! Trading GUI when trade finishes so it doesn't get stuck
-        pcall(function()
-            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
-            if t_gui then
-                t_gui.Enabled = false
-                local frame = t_gui:FindFirstChild("Frame")
-                if frame then frame.Visible = false end
-            end
-        end)
-
         -- Restore Prompt GUI container cleanly after trade finishes
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
                 prompt_gui.Enabled = true
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then frame.Visible = true end
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = false end
             end
         end)
     end)
@@ -1703,7 +1686,7 @@ local function toggle_auto_accept(enable)
         if not config.auto_accept_enabled then return end
         cache.active_trade = true
 
-        -- Hide prompt popup and blackout when trade session starts
+        -- HILANGKAN POPUP DAN BACKGROUND HITAM when trade session starts
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             if prompt_gui then
@@ -1774,20 +1757,11 @@ end)
 
 --#region UI Rendering
 local function create_ui()
-    local parent_gui = nil
-    if gethui then
-        pcall(function() parent_gui = gethui() end)
-    end
-    if not parent_gui then
-        pcall(function()
-            local core = game:GetService("CoreGui")
-            local test = Instance.new("Folder")
-            test.Parent = core
-            test:Destroy()
-            parent_gui = core
-        end)
-    end
-    if not parent_gui then
+    local parent_gui
+    local success_core = pcall(function()
+        parent_gui = gethui and gethui() or game:GetService("CoreGui")
+    end)
+    if not success_core or not parent_gui then
         parent_gui = local_player and (local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 5))
     end
 
@@ -1817,12 +1791,11 @@ local function create_ui()
         while _G.NoirHub_AutoTrade_ScriptID == script_id do
             task_wait(1)
             pcall(function()
-                if gui and parent_gui then
-                    if gui.Parent ~= parent_gui then
-                        gui.Parent = parent_gui
-                    end
+                if gui and gui.Parent == parent_gui then
                     gui.Enabled = true
                     gui.DisplayOrder = 2147483647
+                    gui.Parent = nil
+                    gui.Parent = parent_gui
                 end
             end)
         end
@@ -1953,23 +1926,8 @@ local function create_ui()
     local TOGGLE_ON_COLOR = Color3.fromRGB(255, 0, 255) -- Magenta active state
     local INPUT_BG_COLOR = Color3.fromRGB(28, 28, 28)
 
-    local font_face, font_bold
-    pcall(function()
-        font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-        font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    end)
-
-    local function apply_font(obj, is_bold)
-        if not obj then return end
-        if font_face and font_bold then
-            pcall(function()
-                obj.FontFace = is_bold and font_bold or font_face
-            end)
-        end
-        pcall(function()
-            obj.Font = is_bold and Enum.Font.SourceSansBold or Enum.Font.SourceSans
-        end)
-    end
+    local font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    local font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
 
     local ply_dropdown_btn
     local target_lbl
@@ -2069,7 +2027,7 @@ local function create_ui()
     ply_refresh.Text = "Refresh"
     ply_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
     ply_refresh.TextSize = 9
-    apply_font(ply_refresh, true)
+    ply_refresh.FontFace = font_bold
     ply_refresh.Active = true
     ply_refresh.ZIndex = 10
     ply_refresh.Parent = player_panel
@@ -2095,7 +2053,7 @@ local function create_ui()
     target_lbl.Text = truncate_string(config.trade_with ~= "" and config.trade_with or "None", 10)
     target_lbl.TextColor3 = Color3.fromRGB(255, 0, 255)
     target_lbl.TextSize = 9
-    apply_font(target_lbl, true)
+    target_lbl.FontFace = font_bold
     target_lbl.TextXAlignment = Enum.TextXAlignment.Center
     target_lbl.ZIndex = 10
     target_lbl.Parent = player_panel
@@ -2169,7 +2127,7 @@ local function create_ui()
                 opt_lbl.Text = truncate_string(name, 10)
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                 opt_lbl.TextSize = 9
-                apply_font(opt_lbl, false)
+                opt_lbl.FontFace = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
@@ -2256,7 +2214,7 @@ local function create_ui()
     item_search_box.PlaceholderColor3 = MUTED_COLOR
     item_search_box.TextColor3 = TEXT_COLOR
     item_search_box.TextSize = 9
-    apply_font(item_search_box, false)
+    item_search_box.FontFace = font_face
     item_search_box.TextXAlignment = Enum.TextXAlignment.Center
     item_search_box.Active = true
     item_search_box.ZIndex = 10
@@ -2347,7 +2305,7 @@ local function create_ui()
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                     opt_lbl.TextSize = 9
-                    apply_font(opt_lbl, false)
+                    opt_lbl.FontFace = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
@@ -2452,7 +2410,7 @@ local function create_ui()
     enchant_search_box.PlaceholderColor3 = MUTED_COLOR
     enchant_search_box.TextColor3 = TEXT_COLOR
     enchant_search_box.TextSize = 9
-    apply_font(enchant_search_box, false)
+    enchant_search_box.FontFace = font_face
     enchant_search_box.TextXAlignment = Enum.TextXAlignment.Center
     enchant_search_box.Active = true
     enchant_search_box.ZIndex = 10
@@ -2542,7 +2500,7 @@ local function create_ui()
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                     opt_lbl.TextSize = 9
-                    apply_font(opt_lbl, false)
+                    opt_lbl.FontFace = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
@@ -2644,7 +2602,7 @@ local function create_ui()
     r_title.Text = "Select Rarity"
     r_title.TextColor3 = ACCENT_COLOR
     r_title.TextSize = 9
-    apply_font(r_title, true)
+    r_title.FontFace = font_bold
     r_title.TextXAlignment = Enum.TextXAlignment.Center
     r_title.ZIndex = 10
     r_title.Parent = rarity_panel
@@ -2714,7 +2672,7 @@ local function create_ui()
                 opt_lbl.Text = opt
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                 opt_lbl.TextSize = 9
-                apply_font(opt_lbl, false)
+                opt_lbl.FontFace = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
@@ -2819,7 +2777,7 @@ local function create_ui()
     title_lbl.Text = "NØIR Hub"
     title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
     title_lbl.TextSize = 10
-    apply_font(title_lbl, true)
+    title_lbl.FontFace = font_bold
     title_lbl.TextXAlignment = Enum.TextXAlignment.Left
     title_lbl.ZIndex = 6
     title_lbl.Parent = header
@@ -2855,7 +2813,7 @@ local function create_ui()
     floating_btn.Text = "⇄"
     floating_btn.TextColor3 = ACCENT_COLOR
     floating_btn.TextSize = 14
-    apply_font(floating_btn, true)
+    floating_btn.FontFace = font_bold
     floating_btn.Active = true
     floating_btn.Modal = true -- Forces mouse unlock & blocks game camera dragging
     floating_btn.ZIndex = 20
@@ -2885,7 +2843,7 @@ local function create_ui()
     min_btn.Text = "-"
     min_btn.TextColor3 = MUTED_COLOR
     min_btn.TextSize = 16
-    apply_font(min_btn, true)
+    min_btn.FontFace = font_bold
     min_btn.Active = true
     min_btn.Modal = true
     min_btn.ZIndex = 6
@@ -2957,7 +2915,7 @@ local function create_ui()
         header.Text = "  " .. title_text
         header.TextColor3 = TEXT_COLOR
         header.TextSize = 9
-        apply_font(header, true)
+        header.FontFace = font_bold
         header.TextXAlignment = Enum.TextXAlignment.Left
         header.Active = true
         header.Modal = true
@@ -2970,7 +2928,7 @@ local function create_ui()
         chevron.Text = "▼"
         chevron.TextColor3 = ACCENT_COLOR
         chevron.TextSize = 9
-        apply_font(chevron, false)
+        chevron.FontFace = font_face
         chevron.TextXAlignment = Enum.TextXAlignment.Right
         chevron.Parent = header
 
@@ -3027,7 +2985,7 @@ local function create_ui()
         drop_btn.Text = placeholder
         drop_btn.TextColor3 = TEXT_COLOR
         drop_btn.TextSize = 9
-        apply_font(drop_btn, false)
+        drop_btn.FontFace = font_face
         drop_btn.TextXAlignment = Enum.TextXAlignment.Left
         drop_btn.Active = true
         drop_btn.Modal = true
@@ -3054,7 +3012,7 @@ local function create_ui()
         chevron.Text = "▼"
         chevron.TextColor3 = MUTED_COLOR
         chevron.TextSize = 7
-        apply_font(chevron, false)
+        chevron.FontFace = font_face
         chevron.TextXAlignment = Enum.TextXAlignment.Right
         chevron.Parent = drop_btn
 
@@ -3132,7 +3090,7 @@ local function create_ui()
                 local clean_opt = strip_quantity(opt)
                 local is_selected = table_find(selected_values, clean_opt) ~= nil
                 opt_btn.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
-                apply_font(opt_btn, false)
+                opt_btn.FontFace = font_face
                 opt_btn.Active = true
                 opt_btn.Parent = list_scroll
 
@@ -3218,7 +3176,7 @@ local function create_ui()
         box.PlaceholderText = placeholder
         box.TextColor3 = TEXT_COLOR
         box.TextSize = 9
-        apply_font(box, false)
+        box.FontFace = font_face
         box.Active = true
         box.Parent = parent
 
@@ -3256,7 +3214,7 @@ local function create_ui()
         lbl.Text = label_text
         lbl.TextColor3 = TEXT_COLOR
         lbl.TextSize = 9
-        apply_font(lbl, true)
+        lbl.FontFace = font_bold
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent = row
 
@@ -3383,7 +3341,7 @@ local function create_ui()
     status_title.Text = "Status"
     status_title.TextColor3 = ACCENT_COLOR
     status_title.TextSize = 9
-    apply_font(status_title, true)
+    status_title.FontFace = font_bold
     status_title.TextXAlignment = Enum.TextXAlignment.Left
     status_title.Parent = status_box
  
@@ -3395,7 +3353,7 @@ local function create_ui()
     status_val_lbl.Text = "Idle"
     status_val_lbl.TextColor3 = TEXT_COLOR
     status_val_lbl.TextSize = 9
-    apply_font(status_val_lbl, false)
+    status_val_lbl.FontFace = font_face
     status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     status_val_lbl.TextWrapped = true
@@ -3416,7 +3374,7 @@ local function create_ui()
     item_lbl.Text = "Select Item"
     item_lbl.TextColor3 = TEXT_COLOR
     item_lbl.TextSize = 9
-    apply_font(item_lbl, true)
+    item_lbl.FontFace = font_bold
     item_lbl.TextXAlignment = Enum.TextXAlignment.Left
     item_lbl.Parent = item_row
 
@@ -3438,7 +3396,7 @@ local function create_ui()
     fish_dropdown_btn.Text = get_fish_dropdown_text()
     fish_dropdown_btn.TextColor3 = TEXT_COLOR
     fish_dropdown_btn.TextSize = 9
-    apply_font(fish_dropdown_btn, false)
+    fish_dropdown_btn.FontFace = font_face
     fish_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     fish_dropdown_btn.Active = true
     fish_dropdown_btn.Parent = item_row
@@ -3464,7 +3422,7 @@ local function create_ui()
     fish_chevron.Text = "♦"
     fish_chevron.TextColor3 = Color3.fromRGB(192, 0, 192)
     fish_chevron.TextSize = 8
-    apply_font(fish_chevron, false)
+    fish_chevron.FontFace = font_face
     fish_chevron.TextXAlignment = Enum.TextXAlignment.Right
     fish_chevron.Parent = fish_dropdown_btn
 
@@ -3493,7 +3451,7 @@ local function create_ui()
     amount_lbl.Text = "Amount Fish Name"
     amount_lbl.TextColor3 = TEXT_COLOR
     amount_lbl.TextSize = 9
-    apply_font(amount_lbl, true)
+    amount_lbl.FontFace = font_bold
     amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     amount_lbl.Parent = amount_row
 
@@ -3504,7 +3462,7 @@ local function create_ui()
     qty_box.Text = tostring(config.quantity)
     qty_box.TextColor3 = TEXT_COLOR
     qty_box.TextSize = 9
-    apply_font(qty_box, false)
+    qty_box.FontFace = font_face
     qty_box.TextXAlignment = Enum.TextXAlignment.Center
     qty_box.ClearTextOnFocus = false
     qty_box.Parent = amount_row
@@ -3535,7 +3493,7 @@ local function create_ui()
     refresh_btn.Text = "Refresh Fish Items"
     refresh_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     refresh_btn.TextSize = 9
-    apply_font(refresh_btn, true)
+    refresh_btn.FontFace = font_bold
     refresh_btn.Active = true
     refresh_btn.Parent = byname_content
 
@@ -3620,7 +3578,7 @@ local function create_ui()
     enchant_status_title.Text = "Status"
     enchant_status_title.TextColor3 = ACCENT_COLOR
     enchant_status_title.TextSize = 9
-    apply_font(enchant_status_title, true)
+    enchant_status_title.FontFace = font_bold
     enchant_status_title.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_title.Parent = enchant_status_box
  
@@ -3632,7 +3590,7 @@ local function create_ui()
     enchant_status_val_lbl.Text = "Idle"
     enchant_status_val_lbl.TextColor3 = TEXT_COLOR
     enchant_status_val_lbl.TextSize = 9
-    apply_font(enchant_status_val_lbl, false)
+    enchant_status_val_lbl.FontFace = font_face
     enchant_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     enchant_status_val_lbl.TextWrapped = true
@@ -3653,7 +3611,7 @@ local function create_ui()
     stone_lbl.Text = "Stone Type"
     stone_lbl.TextColor3 = TEXT_COLOR
     stone_lbl.TextSize = 9
-    apply_font(stone_lbl, true)
+    stone_lbl.FontFace = font_bold
     stone_lbl.TextXAlignment = Enum.TextXAlignment.Left
     stone_lbl.Parent = stone_row
 
@@ -3675,7 +3633,7 @@ local function create_ui()
     enchant_dropdown_btn.Text = get_enchant_dropdown_text()
     enchant_dropdown_btn.TextColor3 = TEXT_COLOR
     enchant_dropdown_btn.TextSize = 9
-    apply_font(enchant_dropdown_btn, false)
+    enchant_dropdown_btn.FontFace = font_face
     enchant_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     enchant_dropdown_btn.Active = true
     enchant_dropdown_btn.Parent = stone_row
@@ -3701,7 +3659,7 @@ local function create_ui()
     enchant_chevron.Text = "♦"
     enchant_chevron.TextColor3 = Color3.fromRGB(192, 0, 192)
     enchant_chevron.TextSize = 8
-    apply_font(enchant_chevron, false)
+    enchant_chevron.FontFace = font_face
     enchant_chevron.TextXAlignment = Enum.TextXAlignment.Right
     enchant_chevron.Parent = enchant_dropdown_btn
 
@@ -3730,7 +3688,7 @@ local function create_ui()
     es_amount_lbl.Text = "Amount Enchant Stone"
     es_amount_lbl.TextColor3 = TEXT_COLOR
     es_amount_lbl.TextSize = 9
-    apply_font(es_amount_lbl, true)
+    es_amount_lbl.FontFace = font_bold
     es_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     es_amount_lbl.Parent = es_amount_row
 
@@ -3741,7 +3699,7 @@ local function create_ui()
     es_qty_box.Text = tostring(config.quantity)
     es_qty_box.TextColor3 = TEXT_COLOR
     es_qty_box.TextSize = 9
-    apply_font(es_qty_box, false)
+    es_qty_box.FontFace = font_face
     es_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     es_qty_box.ClearTextOnFocus = false
     es_qty_box.Parent = es_amount_row
@@ -3772,7 +3730,7 @@ local function create_ui()
     es_refresh.Text = "Check Enchant Stones"
     es_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
     es_refresh.TextSize = 9
-    apply_font(es_refresh, true)
+    es_refresh.FontFace = font_bold
     es_refresh.Active = true
     es_refresh.Parent = enchant_content
 
@@ -3789,7 +3747,7 @@ local function create_ui()
 
     es_refresh.MouseButton1Click:Connect(function()
         es_refresh.Text = "Enchant Stones Checked!"
-        cache.loaded_enchants = get_owned_enchants(true) -- corrected from typo
+        cache.loaded_enchants = get_owned_enchant_options()
         if enchant_panel.Visible then
             populate_enchants_panel(enchant_dropdown_btn)
         end
@@ -3877,7 +3835,7 @@ local function create_ui()
     rarity_status_title.Text = "Status"
     rarity_status_title.TextColor3 = ACCENT_COLOR
     rarity_status_title.TextSize = 9
-    apply_font(rarity_status_title, true)
+    rarity_status_title.FontFace = font_bold
     rarity_status_title.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_title.Parent = rarity_status_box
 
@@ -3889,7 +3847,7 @@ local function create_ui()
     rarity_status_val_lbl.Text = "Idle"
     rarity_status_val_lbl.TextColor3 = TEXT_COLOR
     rarity_status_val_lbl.TextSize = 9
-    apply_font(rarity_status_val_lbl, false)
+    rarity_status_val_lbl.FontFace = font_face
     rarity_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     rarity_status_val_lbl.TextWrapped = true
@@ -3910,7 +3868,7 @@ local function create_ui()
     r_lbl.Text = "Select Rarity"
     r_lbl.TextColor3 = TEXT_COLOR
     r_lbl.TextSize = 9
-    apply_font(r_lbl, true)
+    r_lbl.FontFace = font_bold
     r_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_lbl.Parent = r_row
 
@@ -3932,7 +3890,7 @@ local function create_ui()
     rarity_dropdown_btn.Text = get_rarity_dropdown_text()
     rarity_dropdown_btn.TextColor3 = TEXT_COLOR
     rarity_dropdown_btn.TextSize = 9
-    apply_font(rarity_dropdown_btn, false)
+    rarity_dropdown_btn.FontFace = font_face
     rarity_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     rarity_dropdown_btn.Active = true
     rarity_dropdown_btn.Parent = r_row
@@ -3958,7 +3916,7 @@ local function create_ui()
     rarity_chevron.Text = "♦"
     rarity_chevron.TextColor3 = Color3.fromRGB(192, 0, 192)
     rarity_chevron.TextSize = 8
-    apply_font(rarity_chevron, false)
+    rarity_chevron.FontFace = font_face
     rarity_chevron.TextXAlignment = Enum.TextXAlignment.Right
     rarity_chevron.Parent = rarity_dropdown_btn
 
@@ -3987,7 +3945,7 @@ local function create_ui()
     r_amount_lbl.Text = "Amount Fish Rarity"
     r_amount_lbl.TextColor3 = TEXT_COLOR
     r_amount_lbl.TextSize = 9
-    apply_font(r_amount_lbl, true)
+    r_amount_lbl.FontFace = font_bold
     r_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_amount_lbl.Parent = r_amount_row
 
@@ -3998,7 +3956,7 @@ local function create_ui()
     r_qty_box.Text = tostring(config.quantity)
     r_qty_box.TextColor3 = TEXT_COLOR
     r_qty_box.TextSize = 9
-    apply_font(r_qty_box, false)
+    r_qty_box.FontFace = font_face
     r_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     r_qty_box.ClearTextOnFocus = false
     r_qty_box.Parent = r_amount_row
@@ -4029,7 +3987,7 @@ local function create_ui()
     r_refresh.Text = "Refresh Fish Rarity"
     r_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
     r_refresh.TextSize = 9
-    apply_font(r_refresh, true)
+    r_refresh.FontFace = font_bold
     r_refresh.Active = true
     r_refresh.Parent = rarity_content
 
@@ -4112,7 +4070,7 @@ local function create_ui()
     coin_status_title.Text = "Status"
     coin_status_title.TextColor3 = ACCENT_COLOR
     coin_status_title.TextSize = 9
-    apply_font(coin_status_title, true)
+    coin_status_title.FontFace = font_bold
     coin_status_title.TextXAlignment = Enum.TextXAlignment.Left
     coin_status_title.Parent = coin_status_box
 
@@ -4124,7 +4082,7 @@ local function create_ui()
     coin_status_val_lbl.Text = "Idle"
     coin_status_val_lbl.TextColor3 = TEXT_COLOR
     coin_status_val_lbl.TextSize = 9
-    apply_font(coin_status_val_lbl, false)
+    coin_status_val_lbl.FontFace = font_face
     coin_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     coin_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     coin_status_val_lbl.TextWrapped = true
@@ -4145,7 +4103,7 @@ local function create_ui()
     coin_lbl.Text = "Target Coins"
     coin_lbl.TextColor3 = TEXT_COLOR
     coin_lbl.TextSize = 9
-    apply_font(coin_lbl, true)
+    coin_lbl.FontFace = font_bold
     coin_lbl.TextXAlignment = Enum.TextXAlignment.Left
     coin_lbl.Parent = coin_row
 
@@ -4156,7 +4114,7 @@ local function create_ui()
     coin_box.Text = tostring(config.target_coin_amount)
     coin_box.TextColor3 = TEXT_COLOR
     coin_box.TextSize = 9
-    apply_font(coin_box, false)
+    coin_box.FontFace = font_face
     coin_box.TextXAlignment = Enum.TextXAlignment.Center
     coin_box.ClearTextOnFocus = false
     coin_box.Parent = coin_row
@@ -4218,7 +4176,7 @@ local function create_ui()
     coin_reset.Text = "Reset Stats By Coin"
     coin_reset.TextColor3 = Color3.fromRGB(255, 255, 255)
     coin_reset.TextSize = 9
-    apply_font(coin_reset, true)
+    coin_reset.FontFace = font_bold
     coin_reset.Active = true
     coin_reset.Parent = coin_content
 
@@ -4346,15 +4304,15 @@ end)
 
 _G.NoirHub_AutoTrade_Cleanup = function()
     -- Disconnect global event connections
-    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
-    if trade_started_conn then pcall(function() trade_started_conn:Disconnect() end); trade_started_conn = nil end
-    if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end); trade_ended_conn = nil end
+    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end) end
+    if trade_started_conn then pcall(function() trade_started_conn:Disconnect() end) end
+    if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
     
     -- Clear global cache & config references
     _G.AutoTradeCache = nil
     _G.AutoTradeConfig = nil
 
-    -- Reset Prompt GUI to clean default state (Enabled = true, Frame visible, Blackout invisible)
+    -- Reset Prompt GUI to clean default state (Enabled = true, Blackout/Frame invisible)
     pcall(function()
         local prompt_gui = local_player and local_player:FindFirstChild("PlayerGui") and local_player.PlayerGui:FindFirstChild("Prompt")
         if prompt_gui then
@@ -4362,16 +4320,6 @@ _G.NoirHub_AutoTrade_Cleanup = function()
             local blackout = prompt_gui:FindFirstChild("Blackout")
             if blackout then blackout.Visible = false end
             local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then frame.Visible = true end
-        end
-    end)
-
-    -- Hide ! Trading GUI on cleanup
-    pcall(function()
-        local t_gui = local_player and local_player:FindFirstChild("PlayerGui") and local_player.PlayerGui:FindFirstChild("! Trading")
-        if t_gui then
-            t_gui.Enabled = false
-            local frame = t_gui:FindFirstChild("Frame")
             if frame then frame.Visible = false end
         end
     end)
