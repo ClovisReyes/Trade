@@ -1657,9 +1657,19 @@ local function toggle_auto_accept(enable)
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
     if prompt_observer_conn then prompt_observer_conn:Disconnect(); prompt_observer_conn = nil end
 
-    -- Re-enable game's native trade offer connections if auto accept is OFF
+    -- Re-enable game's native trade offer connections and restore Prompt.Enabled when auto accept is OFF
     if not enable or not trade_remotes then
         set_game_trade_connections(true)
+        pcall(function()
+            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+            if prompt_gui then
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then
+                    blackout.Visible = false
+                end
+                prompt_gui.Enabled = true
+            end
+        end)
         return
     end
 
