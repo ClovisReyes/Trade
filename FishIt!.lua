@@ -45,18 +45,40 @@ local http_service          = cloneref(game:GetService("HttpService"))
 
 --#region Variables
 local variables = {
-    items                   = replicated_storage:WaitForChild("Items"),
-    variants                = replicated_storage:WaitForChild("Variants"),
-    replion                 = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
-    item_utility            = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility"),
-    vendor_utility          = replicated_storage:WaitForChild("Shared"):WaitForChild("VendorUtility"),
-    player_stats_utility    = replicated_storage:WaitForChild("Shared"):WaitForChild("PlayerStatsUtility")
+    items                   = replicated_storage:WaitForChild("Items", 5),
+    variants                = replicated_storage:WaitForChild("Variants", 5),
 }
 
-local success_replion, replion_mod = pcall(require, variables.replion)
-local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
-local item_utility = require(variables.item_utility)
-local vendor_utility = require(variables.vendor_utility)
+local success_replion, replion_mod = pcall(function()
+    local pkg = replicated_storage:WaitForChild("Packages", 5)
+    local rep = pkg and pkg:WaitForChild("Replion", 5)
+    return rep and require(rep) or nil
+end)
+
+local player_data = nil
+if success_replion and replion_mod and replion_mod.Client then
+    pcall(function()
+        task_spawn(function()
+            pcall(function()
+                player_data = replion_mod.Client:WaitReplion("Data")
+            end)
+        end)
+    end)
+end
+
+local item_utility = nil
+pcall(function()
+    local shared_folder = replicated_storage:WaitForChild("Shared", 5)
+    local iu = shared_folder and shared_folder:WaitForChild("ItemUtility", 5)
+    if iu then item_utility = require(iu) end
+end)
+
+local vendor_utility = nil
+pcall(function()
+    local shared_folder = replicated_storage:WaitForChild("Shared", 5)
+    local vu = shared_folder and shared_folder:WaitForChild("VendorUtility", 5)
+    if vu then vendor_utility = require(vu) end
+end)
 
 -- Net Lookup for Sleitnick Net Remotes
 local remote_map = {
@@ -75,23 +97,37 @@ local function get_net_lookup()
     if _net_lookup then return _net_lookup end
     _net_lookup = {}
 
-    local net_folder = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
-    local children = net_folder:GetChildren()
-
-    for i, v in ipairs(children) do
-        for _, logical_name in pairs(remote_map) do
-            if string_find(v.Name, logical_name, 1, true) then
-                for j = i + 1, #children do
-                    local next_obj = children[j]
-                    if string_match(next_obj.Name, "^RF/") or string_match(next_obj.Name, "^RE/") then
-                        _net_lookup[logical_name] = next_obj
-                        break
-                    end
+    pcall(function()
+        local packages = replicated_storage:FindFirstChild("Packages")
+        local index_folder = packages and packages:FindFirstChild("_Index")
+        local net_pkg = nil
+        if index_folder then
+            for _, child in ipairs(index_folder:GetChildren()) do
+                if string_find(child.Name, "sleitnick_net", 1, true) then
+                    net_pkg = child
+                    break
                 end
-                break
             end
         end
-    end
+        local net_folder = net_pkg and net_pkg:FindFirstChild("net")
+        if not net_folder then return end
+
+        local children = net_folder:GetChildren()
+        for i, v in ipairs(children) do
+            for _, logical_name in pairs(remote_map) do
+                if string_find(v.Name, logical_name, 1, true) then
+                    for j = i + 1, #children do
+                        local next_obj = children[j]
+                        if string_match(next_obj.Name, "^RF/") or string_match(next_obj.Name, "^RE/") then
+                            _net_lookup[logical_name] = next_obj
+                            break
+                        end
+                    end
+                    break
+                end
+            end
+        end
+    end)
 
     return _net_lookup
 end
