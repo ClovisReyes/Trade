@@ -35,7 +35,18 @@ local cloneref = cloneref or function(ref) return ref end
 --#region Services
 local players               = cloneref(game:GetService("Players"))
 local local_player          = players.LocalPlayer
-local player_gui            = cloneref(local_player:WaitForChild("PlayerGui"))
+if not local_player then
+    local_player = players:FindFirstChildOfClass("Player")
+    if not local_player then
+        pcall(function() local_player = players.PlayerAdded:Wait() end)
+    end
+end
+
+local player_gui = nil
+pcall(function()
+    player_gui = local_player and cloneref(local_player:WaitForChild("PlayerGui", 10))
+end)
+
 local user_input_service    = cloneref(game:GetService("UserInputService"))
 local run_service           = cloneref(game:GetService("RunService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
@@ -1939,8 +1950,14 @@ local function create_ui()
     local TOGGLE_ON_COLOR = Color3.fromRGB(255, 0, 255) -- Magenta active state
     local INPUT_BG_COLOR = Color3.fromRGB(28, 28, 28)
 
-    local font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-    local font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    local font_face = Font.fromEnum(Enum.Font.GothamMedium)
+    pcall(function()
+        font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    end)
+    local font_bold = Font.fromEnum(Enum.Font.GothamBold)
+    pcall(function()
+        font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    end)
 
     local ply_dropdown_btn
     local target_lbl
