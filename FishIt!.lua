@@ -1634,6 +1634,18 @@ local function toggle_auto_accept(enable)
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
 
+    -- Cleanly reset Prompt GUI state so manual trade requests show normally when auto accept is OFF
+    pcall(function()
+        local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+        if prompt_gui then
+            prompt_gui.Enabled = true
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            if blackout then
+                blackout.Visible = false
+            end
+        end
+    end)
+
     if not enable or not trade_remotes then return end
 
     -- Remote-based auto accept
@@ -1642,22 +1654,7 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- 1. Hide Blackout prompt visually
-        task_spawn(function()
-            local start_hide = tick()
-            while tick() - start_hide < 1.5 do
-                pcall(function()
-                    local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-                    local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-                    if blackout and blackout.Visible then
-                        blackout.Visible = false
-                    end
-                end)
-                task_wait(0.05)
-            end
-        end)
-        
-        -- 2. Click Yes button first to trigger game client's UI open sequence
+        -- 1. Click Yes button immediately to trigger game client's native prompt resolution
         pcall(function()
             local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
             local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
@@ -1668,9 +1665,18 @@ local function toggle_auto_accept(enable)
             end
         end)
 
-        -- 3. Call server remote to accept trade offer directly
+        -- 2. Call server remote to accept trade offer directly
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+        end)
+
+        -- 3. Explicitly hide Blackout frame so no dark overlay hides the Trade GUI
+        pcall(function()
+            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+            if blackout then
+                blackout.Visible = false
+            end
         end)
 
         -- 4. Force Trade GUI (! Trading) to be enabled and visible on client
@@ -1704,8 +1710,13 @@ local function toggle_auto_accept(enable)
         if not (config.auto_accept_enabled or config.enabled) then return end
         cache.active_trade = true
 
-        -- Ensure ! Trading GUI is enabled and visible
+        -- Ensure ! Trading GUI is enabled and visible, and blackout overlay is hidden
         pcall(function()
+            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+            if blackout then
+                blackout.Visible = false
+            end
             local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
             if t_gui then
                 t_gui.Enabled = true
