@@ -1634,7 +1634,7 @@ local function toggle_auto_accept(enable)
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
 
-    -- Cleanly reset Prompt GUI state so manual trade requests show normally when auto accept is OFF
+    -- When auto accept is turned OFF, restore Prompt GUI state so manual popups work 100% normally
     pcall(function()
         local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
         if prompt_gui then
@@ -1654,49 +1654,31 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- 1. Click Yes button immediately to trigger game client's native prompt resolution
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-            local options = blackout and blackout:FindFirstChild("Options")
-            local yes_btn = options and options:FindFirstChild("Yes")
-            if yes_btn then
-                click_gui_button(yes_btn)
-            end
-        end)
-
-        -- 2. Call server remote to accept trade offer directly
+        -- 1. Call server remote to accept the trade offer directly
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
 
-        -- 3. Explicitly hide Blackout frame so no dark overlay hides the Trade GUI
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-            if blackout then
-                blackout.Visible = false
-            end
-        end)
-
-        -- 4. Force Trade GUI (! Trading) to be enabled and visible on client
+        -- 2. Click Yes button and hide blackout overlay so trade GUI is un-blocked
         task_spawn(function()
-            local start_w = tick()
-            while tick() - start_w < 3 do
-                local shown = false
+            local start = tick()
+            while tick() - start < 3 do
+                local found = false
                 pcall(function()
-                    local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
-                    if t_gui then
-                        t_gui.Enabled = true
-                        local frame = t_gui:FindFirstChild("Frame")
-                        if frame then
-                            frame.Visible = true
-                            shown = true
-                        end
+                    local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+                    local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+                    local options = blackout and blackout:FindFirstChild("Options")
+                    local yes_btn = options and options:FindFirstChild("Yes")
+                    if yes_btn then
+                        click_gui_button(yes_btn)
+                        found = true
+                    end
+                    if blackout then
+                        blackout.Visible = false
                     end
                 end)
-                if shown then break end
-                task_wait(0.1)
+                if found then break end
+                task_wait(0.05)
             end
         end)
     end)
@@ -1710,13 +1692,19 @@ local function toggle_auto_accept(enable)
         if not (config.auto_accept_enabled or config.enabled) then return end
         cache.active_trade = true
 
-        -- Ensure ! Trading GUI is enabled and visible, and blackout overlay is hidden
+        -- Hide blackout frame when trade starts if auto accept is active
+        if config.auto_accept_enabled then
+            pcall(function()
+                local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+                local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
+                if blackout then
+                    blackout.Visible = false
+                end
+            end)
+        end
+
+        -- Ensure trade GUI (! Trading) is enabled on client when trade starts
         pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-            if blackout then
-                blackout.Visible = false
-            end
             local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
             if t_gui then
                 t_gui.Enabled = true
