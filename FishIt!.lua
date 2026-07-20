@@ -740,6 +740,38 @@ end
 local function wait_for_trade_end(mode_name)
     while local_player:GetAttribute("IsTrading") do
         local stage = "Waiting PlayersReady..."
+
+        -- 1. Invoke Ready & Confirm remotes directly to auto-accept trade
+        pcall(function()
+            if trade_remotes then
+                if trade_remotes.SetReady then pcall(function() trade_remotes.SetReady:InvokeServer(true) end) end
+                if trade_remotes.ConfirmTrade then pcall(function() trade_remotes.ConfirmTrade:InvokeServer() end) end
+            end
+        end)
+
+        -- 2. Click GUI Accept/Confirm buttons as fallback
+        pcall(function()
+            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
+            if t_gui then
+                local frame = t_gui:FindFirstChild("Frame")
+                local interior = frame and frame:FindFirstChild("Interior")
+                local buttons = interior and interior:FindFirstChild("Buttons")
+                if buttons then
+                    for _, child in ipairs(buttons:GetChildren()) do
+                        if child:IsA("GuiButton") and child.Name ~= "Decline" then
+                            click_gui_button(child)
+                        end
+                    end
+                end
+
+                for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
+                    local btn = t_gui:FindFirstChild(btn_name, true)
+                    if btn and btn:IsA("GuiButton") then
+                        click_gui_button(btn)
+                    end
+                end
+            end
+        end)
         
         pcall(function()
             local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
@@ -759,35 +791,13 @@ local function wait_for_trade_end(mode_name)
                 if seconds then
                     stage = "Waiting lock countdown (" .. seconds .. "s)..."
                 else
-                    local has_confirm = false
-                    local frame = t_gui:FindFirstChild("Frame")
-                    local interior = frame and frame:FindFirstChild("Interior")
-                    local buttons = interior and interior:FindFirstChild("Buttons")
-                    if buttons then
-                        local confirm_btn = buttons:FindFirstChild("Confirm")
-                        if confirm_btn and confirm_btn.Visible then
-                            has_confirm = true
-                        end
-                    end
-                    
-                    if not has_confirm then
-                        for _, desc in ipairs(t_gui:GetDescendants()) do
-                            if desc:IsA("TextButton") and (desc.Name == "Confirm" or desc.Text == "Confirm") then
-                                has_confirm = true
-                                break
-                            end
-                        end
-                    end
-                    
-                    if has_confirm then
-                        stage = "Confirming trade (spamming)..."
-                    end
+                    stage = "Accepting & Confirming trade..."
                 end
             end
         end)
         
         set_status_msg(mode_name, stage)
-        task_wait(0.1)
+        task_wait(0.2)
     end
 end
 
