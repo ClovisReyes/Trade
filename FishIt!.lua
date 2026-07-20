@@ -1624,17 +1624,45 @@ local function run_auto_trade_loop()
 end
 _G.run_auto_trade_loop = run_auto_trade_loop
 
--- Auto Accept Trade Connections
+-- Auto Accept Trade Connections & Game Event Suppression
 local auto_accept_conn = nil
 local trade_started_conn = nil
 local trade_ended_conn = nil
+
+local function set_game_trade_connections(enabled)
+    pcall(function()
+        if not getconnections or not trade_remotes then return end
+        local raw_remote = trade_remotes.TradeOfferReceived.instance
+        if not raw_remote or not raw_remote.OnClientEvent then return end
+
+        for _, conn in ipairs(getconnections(raw_remote.OnClientEvent)) do
+            if auto_accept_conn and (conn == auto_accept_conn or (conn.Function and auto_accept_conn.Function and conn.Function == auto_accept_conn.Function)) then
+                -- Keep script connection active
+            else
+                pcall(function() conn.Enabled = enabled end)
+                if not enabled then
+                    pcall(function() if conn.Disable then conn:Disable() end end)
+                else
+                    pcall(function() if conn.Enable then conn:Enable() end end)
+                end
+            end
+        end
+    end)
+end
 
 local function toggle_auto_accept(enable)
     if auto_accept_conn then auto_accept_conn:Disconnect(); auto_accept_conn = nil end
     if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
     if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
 
-    if not enable or not trade_remotes then return end
+    -- Re-enable game's native trade offer connections if auto accept is OFF
+    if not enable or not trade_remotes then
+        set_game_trade_connections(true)
+        return
+    end
+
+    -- Disable game's native trade offer connections so game NEVER creates the popup GUI
+    set_game_trade_connections(false)
 
     -- Remote-based auto accept
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
@@ -1642,36 +1670,23 @@ local function toggle_auto_accept(enable)
         cache.status_text = "Accepting"
         cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
         
-        -- Asynchronously poll for Yes button and click it immediately upon creation to resolve prompt naturally
-        task_spawn(function()
-            local start_time = tick()
-            local clicked = false
+        -- Enforce suppression of game native connections
+        set_game_trade_connections(false)
 
-            while tick() - start_time < 1.5 do
-                local yes_btn = nil
-                pcall(function()
-                    local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-                    local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-                    local options = blackout and blackout:FindFirstChild("Options")
-                    local btn = options and options:FindFirstChild("Yes")
-                    if btn then
-                        yes_btn = btn
-                    end
-                end)
+        -- 1. Call server remote to accept the trade offer directly (stealth)
+        pcall(function()
+            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+        end)
 
-                if yes_btn then
-                    click_gui_button(yes_btn)
-                    clicked = true
-                    break
+        -- 2. Clean up any leftover blackout frame if game managed to parent one
+        pcall(function()
+            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
+            if prompt_gui then
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout and blackout.Visible then
+                    blackout.Visible = false
                 end
-
-                task_wait(0.02)
             end
-
-            -- Invoke server remote to ensure trade offer is accepted
-            pcall(function()
-                trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
-            end)
         end)
     end)
 
