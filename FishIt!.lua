@@ -35,13 +35,7 @@ local cloneref = cloneref or function(ref) return ref end
 --#region Services
 local players               = cloneref(game:GetService("Players"))
 local local_player          = players.LocalPlayer
-if not local_player then
-    pcall(function()
-        players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-    end)
-    local_player = players.LocalPlayer
-end
-local player_gui            = cloneref(local_player and local_player:WaitForChild("PlayerGui", 10))
+local player_gui            = cloneref(local_player:WaitForChild("PlayerGui"))
 local user_input_service    = cloneref(game:GetService("UserInputService"))
 local run_service           = cloneref(game:GetService("RunService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
@@ -51,33 +45,18 @@ local http_service          = cloneref(game:GetService("HttpService"))
 
 --#region Variables
 local variables = {
-    items                   = replicated_storage:FindFirstChild("Items"),
-    variants                = replicated_storage:FindFirstChild("Variants"),
-    replion                 = replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("Replion"),
-    item_utility            = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("ItemUtility"),
-    vendor_utility          = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("VendorUtility"),
-    player_stats_utility    = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("PlayerStatsUtility")
+    items                   = replicated_storage:WaitForChild("Items"),
+    variants                = replicated_storage:WaitForChild("Variants"),
+    replion                 = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
+    item_utility            = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility"),
+    vendor_utility          = replicated_storage:WaitForChild("Shared"):WaitForChild("VendorUtility"),
+    player_stats_utility    = replicated_storage:WaitForChild("Shared"):WaitForChild("PlayerStatsUtility")
 }
 
 local success_replion, replion_mod = pcall(require, variables.replion)
-local player_data = nil
-if success_replion and replion_mod and replion_mod.Client then
-    pcall(function()
-        player_data = replion_mod.Client:GetReplion("Data")
-    end)
-    if not player_data then
-        task_spawn(function()
-            pcall(function()
-                player_data = replion_mod.Client:WaitReplion("Data")
-            end)
-        end)
-    end
-end
-
-local success_item, item_utility = pcall(require, variables.item_utility)
-item_utility = success_item and item_utility or nil
-local success_vendor, vendor_utility = pcall(require, variables.vendor_utility)
-vendor_utility = success_vendor and vendor_utility or nil
+local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
+local item_utility = require(variables.item_utility)
+local vendor_utility = require(variables.vendor_utility)
 
 -- Net Lookup for Sleitnick Net Remotes
 local remote_map = {
@@ -96,21 +75,7 @@ local function get_net_lookup()
     if _net_lookup then return _net_lookup end
     _net_lookup = {}
 
-    local net_folder = nil
-    pcall(function()
-        local packages = replicated_storage:FindFirstChild("Packages")
-        local index = packages and packages:FindFirstChild("_Index")
-        if index then
-            for _, child in ipairs(index:GetChildren()) do
-                if string_find(child.Name, "sleitnick_net") and child:FindFirstChild("net") then
-                    net_folder = child.net
-                    break
-                end
-            end
-        end
-    end)
-
-    if not net_folder then return _net_lookup end
+    local net_folder = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
     local children = net_folder:GetChildren()
 
     for i, v in ipairs(children) do
@@ -187,7 +152,6 @@ local config = {
     trade_enchants_enabled = false,
     trade_coins_enabled = false,
     trade_rarity_enabled = false,
-    auto_accept_enabled = false,
 
     -- Selection Filters
     selected_fish       = {},
@@ -207,8 +171,6 @@ local cache = {
     total_caught_start  = 0,
     caught_history      = {},
     active_trade        = false,
-    receiving_trade     = false,
-    receiving_trade_time = 0,
     fish_status_text    = "Idle",
     fish_status_details = "",
     enchant_status_text = "Idle",
@@ -591,7 +553,7 @@ end
 local function click_gui_button(btn)
     if not btn then return end
 
-    -- 1. Direct button click signals (firesignal/getconnections)
+    -- Method 2: executor firesignal
     pcall(function()
         if firesignal then
             firesignal(btn.MouseButton1Click)
@@ -601,6 +563,7 @@ local function click_gui_button(btn)
         end
     end)
 
+    -- Method 3: executor getconnections
     pcall(function()
         if getconnections then
             for _, event_name in ipairs({"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated"}) do
@@ -610,39 +573,6 @@ local function click_gui_button(btn)
                         conn:Fire()
                     end
                 end
-            end
-        end
-    end)
-
-    -- 2. Coordinate-based Lua signals (Safe, undetected by BAC since it fires purely in Lua)
-    pcall(function()
-        local abs_pos = btn.AbsolutePosition
-        local abs_size = btn.AbsoluteSize
-        local x = abs_pos.X + abs_size.X / 2
-        local y = abs_pos.Y + abs_size.Y / 2
-
-        local mock_input_begin = {
-            UserInputType = Enum.UserInputType.MouseButton1,
-            UserInputState = Enum.UserInputState.Begin,
-            Position = Vector3.new(x, y, 0)
-        }
-        local mock_input_end = {
-            UserInputType = Enum.UserInputType.MouseButton1,
-            UserInputState = Enum.UserInputState.End,
-            Position = Vector3.new(x, y, 0)
-        }
-
-        local uis = game:GetService("UserInputService")
-        if firesignal then
-            firesignal(uis.InputBegan, mock_input_begin, false)
-            firesignal(uis.InputEnded, mock_input_end, false)
-        end
-        if getconnections then
-            for _, conn in ipairs(getconnections(uis.InputBegan)) do
-                conn:Fire(mock_input_begin, false)
-            end
-            for _, conn in ipairs(getconnections(uis.InputEnded)) do
-                conn:Fire(mock_input_end, false)
             end
         end
     end)
@@ -827,7 +757,7 @@ local function wait_for_trade_end(mode_name)
                 end
                 
                 if seconds then
-                    stage = "Waiting lock countdown (5s)..."
+                    stage = "Waiting lock countdown (" .. seconds .. "s)..."
                 else
                     local has_confirm = false
                     local frame = t_gui:FindFirstChild("Frame")
@@ -1624,133 +1554,14 @@ local function run_auto_trade_loop()
 end
 _G.run_auto_trade_loop = run_auto_trade_loop
 
--- Auto Accept Trade Connections
-local auto_accept_conn = nil
-local trade_started_conn = nil
+-- Trade Event Connections
 local trade_ended_conn = nil
-
-local function toggle_auto_accept(enable)
-    if auto_accept_conn then auto_accept_conn:Disconnect(); auto_accept_conn = nil end
-    if trade_started_conn then trade_started_conn:Disconnect(); trade_started_conn = nil end
-    if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
-
-    -- When Auto Accept is OFF: Zero remotes triggered, enable Prompt GUI container without forcing blackout/frame visible on idle
-    if not enable or not trade_remotes then
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = true
-            end
+pcall(function()
+    if trade_remotes and trade_remotes.TradeEnded then
+        trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
+            cache.last_trade_time = tick()
+            cache.active_trade = false
         end)
-        return
-    end
-
-    -- Remote-based auto accept (ONLY active when Auto Accept is ON)
-    auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
-        if not config.auto_accept_enabled then return end
-        cache.status_text = "Accepting"
-        cache.status_details = "Accepting from " .. (requester and requester.DisplayName or "Player")
-        
-        -- 1. Call server remote to accept the trade offer directly (stealth)
-        pcall(function()
-            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
-        end)
-
-        -- 2. HILANGKAN POPUP DAN BACKGROUND HITAM COMPLETELY DURING TRADE OFFER
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = false
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = false end
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then frame.Visible = false end
-            end
-        end)
-    end)
-
-    trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
-        cache.last_trade_time = tick()
-        cache.active_trade = false
-
-        -- Restore Prompt GUI container cleanly after trade finishes
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = true
-            end
-        end)
-    end)
-
-    trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
-        if not config.auto_accept_enabled then return end
-        cache.active_trade = true
-
-        -- HILANGKAN POPUP DAN BACKGROUND HITAM when trade session starts
-        pcall(function()
-            local prompt_gui = local_player.PlayerGui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = false
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = false end
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then frame.Visible = false end
-            end
-
-            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
-            if t_gui then
-                t_gui.Enabled = true
-                local frame = t_gui:FindFirstChild("Frame")
-                if frame then
-                    frame.Visible = true
-                end
-            end
-        end)
-
-        task_spawn(function()
-            task_wait(1)
-            if not cache.active_trade then return end
-
-            local start_time = tick()
-            while config.auto_accept_enabled and cache.active_trade and (tick() - start_time) < 60 do
-                -- Click GUI Accept/Confirm button (safe Lua event trigger)
-                pcall(function()
-                    local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
-                    if t_gui then
-                        for _, btn_name in ipairs({"Accept", "Confirm"}) do
-                            local btn = t_gui:FindFirstChild(btn_name, true)
-                            if btn then
-                                click_gui_button(btn)
-                            end
-                        end
-                    end
-                end)
-
-                task_wait(0.5)
-            end
-        end)
-    end)
-end
-
--- Background Auto Accept/Confirm GUI button spammer (always active, no connection required)
-task_spawn(function()
-    while true do
-        task_wait(0.5)
-        if (config.auto_accept_enabled or config.enabled) and local_player:GetAttribute("IsTrading") then
-            pcall(function()
-                local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
-                local frame = t_gui and t_gui:FindFirstChild("Frame")
-                local interior = frame and frame:FindFirstChild("Interior")
-                local buttons = interior and interior:FindFirstChild("Buttons")
-                if buttons then
-                    for _, child in ipairs(buttons:GetChildren()) do
-                        if child:IsA("GuiButton") and child.Name ~= "Decline" then
-                            click_gui_button(child)
-                        end
-                    end
-                end
-            end)
-        end
     end
 end)
 --#endregion
@@ -1762,7 +1573,7 @@ local function create_ui()
         parent_gui = gethui and gethui() or game:GetService("CoreGui")
     end)
     if not success_core or not parent_gui then
-        parent_gui = local_player and (local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 5))
+        parent_gui = local_player:WaitForChild("PlayerGui")
     end
 
     -- Destroy old GUIs in CoreGui/gethui
@@ -3314,14 +3125,14 @@ local function create_ui()
     local status_box = Instance.new("Frame")
     status_box.Name = "1_StatusBox"
     status_box.LayoutOrder = 1
-    status_box.Size = UDim2.new(1, 0, 0, 50)
+    status_box.Size = UDim2.new(1, 0, 0, 58)
     status_box.AutomaticSize = Enum.AutomaticSize.Y
     status_box.BackgroundColor3 = CARD_COLOR
     status_box.BorderSizePixel = 0
     status_box.Parent = byname_content
     
     local status_box_pad = Instance.new("UIPadding")
-    status_box_pad.PaddingBottom = UDim.new(0, 4)
+    status_box_pad.PaddingBottom = UDim.new(0, 6)
     status_box_pad.PaddingRight = UDim.new(0, 10)
     status_box_pad.Parent = status_box
     
@@ -3335,8 +3146,8 @@ local function create_ui()
     status_box_stroke.Parent = status_box
  
     local status_title = Instance.new("TextLabel")
-    status_title.Size = UDim2.new(1, -10, 0, 14)
-    status_title.Position = UDim2.new(0, 10, 0, 4)
+    status_title.Size = UDim2.new(1, -10, 0, 16)
+    status_title.Position = UDim2.new(0, 10, 0, 6)
     status_title.BackgroundTransparency = 1
     status_title.Text = "Status"
     status_title.TextColor3 = ACCENT_COLOR
@@ -3346,8 +3157,8 @@ local function create_ui()
     status_title.Parent = status_box
  
     status_val_lbl = Instance.new("TextLabel")
-    status_val_lbl.Size = UDim2.new(1, -20, 0, 24)
-    status_val_lbl.Position = UDim2.new(0, 10, 0, 20)
+    status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
+    status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
     status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
     status_val_lbl.BackgroundTransparency = 1
     status_val_lbl.Text = "Idle"
@@ -3551,14 +3362,14 @@ local function create_ui()
     local enchant_content, enchant_toggle = create_accordion(settings_panel, "Trade Enchant Stone")    local enchant_status_box = Instance.new("Frame")
     enchant_status_box.Name = "1_StatusBox"
     enchant_status_box.LayoutOrder = 1
-    enchant_status_box.Size = UDim2.new(1, 0, 0, 50)
+    enchant_status_box.Size = UDim2.new(1, 0, 0, 58)
     enchant_status_box.AutomaticSize = Enum.AutomaticSize.Y
     enchant_status_box.BackgroundColor3 = CARD_COLOR
     enchant_status_box.BorderSizePixel = 0
     enchant_status_box.Parent = enchant_content
     
     local enchant_status_box_pad = Instance.new("UIPadding")
-    enchant_status_box_pad.PaddingBottom = UDim.new(0, 4)
+    enchant_status_box_pad.PaddingBottom = UDim.new(0, 6)
     enchant_status_box_pad.PaddingRight = UDim.new(0, 10)
     enchant_status_box_pad.Parent = enchant_status_box
     
@@ -3572,8 +3383,8 @@ local function create_ui()
     enchant_status_box_stroke.Parent = enchant_status_box
  
     local enchant_status_title = Instance.new("TextLabel")
-    enchant_status_title.Size = UDim2.new(1, -10, 0, 14)
-    enchant_status_title.Position = UDim2.new(0, 10, 0, 4)
+    enchant_status_title.Size = UDim2.new(1, -10, 0, 16)
+    enchant_status_title.Position = UDim2.new(0, 10, 0, 6)
     enchant_status_title.BackgroundTransparency = 1
     enchant_status_title.Text = "Status"
     enchant_status_title.TextColor3 = ACCENT_COLOR
@@ -3583,8 +3394,8 @@ local function create_ui()
     enchant_status_title.Parent = enchant_status_box
  
     enchant_status_val_lbl = Instance.new("TextLabel")
-    enchant_status_val_lbl.Size = UDim2.new(1, -20, 0, 24)
-    enchant_status_val_lbl.Position = UDim2.new(0, 10, 0, 20)
+    enchant_status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
+    enchant_status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
     enchant_status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
     enchant_status_val_lbl.BackgroundTransparency = 1
     enchant_status_val_lbl.Text = "Idle"
@@ -3808,14 +3619,14 @@ local function create_ui()
     local rarity_status_box = Instance.new("Frame")
     rarity_status_box.Name = "1_StatusBox"
     rarity_status_box.LayoutOrder = 1
-    rarity_status_box.Size = UDim2.new(1, 0, 0, 50)
+    rarity_status_box.Size = UDim2.new(1, 0, 0, 58)
     rarity_status_box.AutomaticSize = Enum.AutomaticSize.Y
     rarity_status_box.BackgroundColor3 = CARD_COLOR
     rarity_status_box.BorderSizePixel = 0
     rarity_status_box.Parent = rarity_content
     
     local rarity_status_box_pad = Instance.new("UIPadding")
-    rarity_status_box_pad.PaddingBottom = UDim.new(0, 4)
+    rarity_status_box_pad.PaddingBottom = UDim.new(0, 6)
     rarity_status_box_pad.PaddingRight = UDim.new(0, 10)
     rarity_status_box_pad.Parent = rarity_status_box
     
@@ -3829,8 +3640,8 @@ local function create_ui()
     rarity_status_box_stroke.Parent = rarity_status_box
 
     local rarity_status_title = Instance.new("TextLabel")
-    rarity_status_title.Size = UDim2.new(1, -10, 0, 14)
-    rarity_status_title.Position = UDim2.new(0, 10, 0, 4)
+    rarity_status_title.Size = UDim2.new(1, -10, 0, 16)
+    rarity_status_title.Position = UDim2.new(0, 10, 0, 6)
     rarity_status_title.BackgroundTransparency = 1
     rarity_status_title.Text = "Status"
     rarity_status_title.TextColor3 = ACCENT_COLOR
@@ -3840,8 +3651,8 @@ local function create_ui()
     rarity_status_title.Parent = rarity_status_box
 
     rarity_status_val_lbl = Instance.new("TextLabel")
-    rarity_status_val_lbl.Size = UDim2.new(1, -20, 0, 24)
-    rarity_status_val_lbl.Position = UDim2.new(0, 10, 0, 20)
+    rarity_status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
+    rarity_status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
     rarity_status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
     rarity_status_val_lbl.BackgroundTransparency = 1
     rarity_status_val_lbl.Text = "Idle"
@@ -4043,14 +3854,14 @@ local function create_ui()
     local coin_status_box = Instance.new("Frame")
     coin_status_box.Name = "1_StatusBox"
     coin_status_box.LayoutOrder = 1
-    coin_status_box.Size = UDim2.new(1, 0, 0, 50)
+    coin_status_box.Size = UDim2.new(1, 0, 0, 58)
     coin_status_box.AutomaticSize = Enum.AutomaticSize.Y
     coin_status_box.BackgroundColor3 = CARD_COLOR
     coin_status_box.BorderSizePixel = 0
     coin_status_box.Parent = coin_content
     
     local coin_status_box_pad = Instance.new("UIPadding")
-    coin_status_box_pad.PaddingBottom = UDim.new(0, 4)
+    coin_status_box_pad.PaddingBottom = UDim.new(0, 6)
     coin_status_box_pad.PaddingRight = UDim.new(0, 10)
     coin_status_box_pad.Parent = coin_status_box
     
@@ -4064,8 +3875,8 @@ local function create_ui()
     coin_status_box_stroke.Parent = coin_status_box
 
     local coin_status_title = Instance.new("TextLabel")
-    coin_status_title.Size = UDim2.new(1, -10, 0, 14)
-    coin_status_title.Position = UDim2.new(0, 10, 0, 4)
+    coin_status_title.Size = UDim2.new(1, -10, 0, 16)
+    coin_status_title.Position = UDim2.new(0, 10, 0, 6)
     coin_status_title.BackgroundTransparency = 1
     coin_status_title.Text = "Status"
     coin_status_title.TextColor3 = ACCENT_COLOR
@@ -4075,8 +3886,8 @@ local function create_ui()
     coin_status_title.Parent = coin_status_box
 
     coin_status_val_lbl = Instance.new("TextLabel")
-    coin_status_val_lbl.Size = UDim2.new(1, -20, 0, 24)
-    coin_status_val_lbl.Position = UDim2.new(0, 10, 0, 20)
+    coin_status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
+    coin_status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
     coin_status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
     coin_status_val_lbl.BackgroundTransparency = 1
     coin_status_val_lbl.Text = "Idle"
@@ -4198,13 +4009,7 @@ local function create_ui()
         coin_reset.Text = "Reset Stats By Coin"
     end)
 
-    -- 5. Auto Accept Trade
-    local accept_content, accept_toggle = create_accordion(settings_panel, "Auto Accept Trade")
-    local accept_toggle_ctrl = create_toggle(accept_content, "Enable Auto Accept Trade", config.auto_accept_enabled, function(active)
-        config.auto_accept_enabled = active
-        toggle_auto_accept(active)
-        save_config()
-    end)
+
 
 
 
@@ -4279,9 +4084,7 @@ local function create_ui()
             if rarity_toggle_ctrl then
                 rarity_toggle_ctrl.set_state(config.enabled and config.trade_rarity_enabled)
             end
-            if accept_toggle_ctrl then
-                accept_toggle_ctrl.set_state(config.auto_accept_enabled)
-            end
+
 
             task_wait(1)
         end
@@ -4295,35 +4098,10 @@ if not success then
     print("UI Creation Error: " .. tostring(err))
 end
 pcall(log_inventory_fish)
-
-
-
-pcall(function()
-    toggle_auto_accept(config.auto_accept_enabled)
-end)
-
 _G.NoirHub_AutoTrade_Cleanup = function()
     -- Disconnect global event connections
-    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end) end
-    if trade_started_conn then pcall(function() trade_started_conn:Disconnect() end) end
-    if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
+    if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end); trade_ended_conn = nil end
     
-    -- Clear global cache & config references
-    _G.AutoTradeCache = nil
-    _G.AutoTradeConfig = nil
-
-    -- Reset Prompt GUI to clean default state (Enabled = true, Blackout/Frame invisible)
-    pcall(function()
-        local prompt_gui = local_player and local_player:FindFirstChild("PlayerGui") and local_player.PlayerGui:FindFirstChild("Prompt")
-        if prompt_gui then
-            prompt_gui.Enabled = true
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            if blackout then blackout.Visible = false end
-            local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then frame.Visible = false end
-        end
-    end)
-
     -- Terminate active auto trade loops
     _G.NoirHub_AutoTrade_ScriptID = nil
     
