@@ -35,7 +35,13 @@ local cloneref = cloneref or function(ref) return ref end
 --#region Services
 local players               = cloneref(game:GetService("Players"))
 local local_player          = players.LocalPlayer
-local player_gui            = cloneref(local_player:WaitForChild("PlayerGui"))
+if not local_player then
+    pcall(function()
+        players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+    end)
+    local_player = players.LocalPlayer
+end
+local player_gui            = cloneref(local_player and local_player:WaitForChild("PlayerGui", 10))
 local user_input_service    = cloneref(game:GetService("UserInputService"))
 local run_service           = cloneref(game:GetService("RunService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
@@ -45,18 +51,20 @@ local http_service          = cloneref(game:GetService("HttpService"))
 
 --#region Variables
 local variables = {
-    items                   = replicated_storage:WaitForChild("Items"),
-    variants                = replicated_storage:WaitForChild("Variants"),
-    replion                 = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
-    item_utility            = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility"),
-    vendor_utility          = replicated_storage:WaitForChild("Shared"):WaitForChild("VendorUtility"),
-    player_stats_utility    = replicated_storage:WaitForChild("Shared"):WaitForChild("PlayerStatsUtility")
+    items                   = replicated_storage:WaitForChild("Items", 10),
+    variants                = replicated_storage:WaitForChild("Variants", 10),
+    replion                 = replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("Replion"),
+    item_utility            = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("ItemUtility"),
+    vendor_utility          = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("VendorUtility"),
+    player_stats_utility    = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("PlayerStatsUtility")
 }
 
 local success_replion, replion_mod = pcall(require, variables.replion)
-local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
-local item_utility = require(variables.item_utility)
-local vendor_utility = require(variables.vendor_utility)
+local player_data = (success_replion and replion_mod and replion_mod.Client) and replion_mod.Client:WaitReplion("Data") or nil
+local success_item, item_utility = pcall(require, variables.item_utility)
+item_utility = success_item and item_utility or nil
+local success_vendor, vendor_utility = pcall(require, variables.vendor_utility)
+vendor_utility = success_vendor and vendor_utility or nil
 
 -- Net Lookup for Sleitnick Net Remotes
 local remote_map = {
@@ -75,7 +83,21 @@ local function get_net_lookup()
     if _net_lookup then return _net_lookup end
     _net_lookup = {}
 
-    local net_folder = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+    local net_folder = nil
+    pcall(function()
+        local packages = replicated_storage:FindFirstChild("Packages")
+        local index = packages and packages:FindFirstChild("_Index")
+        if index then
+            for _, child in ipairs(index:GetChildren()) do
+                if string_find(child.Name, "sleitnick_net") and child:FindFirstChild("net") then
+                    net_folder = child.net
+                    break
+                end
+            end
+        end
+    end)
+
+    if not net_folder then return _net_lookup end
     local children = net_folder:GetChildren()
 
     for i, v in ipairs(children) do
