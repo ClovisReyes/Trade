@@ -1731,21 +1731,22 @@ end)
 
 --#region UI Rendering
 local function create_ui()
-    local parent_gui
-    local success_core = pcall(function()
-        parent_gui = gethui and gethui() or game:GetService("CoreGui")
-    end)
-    if not success_core or not parent_gui then
-        parent_gui = local_player:WaitForChild("PlayerGui")
+    local parent_gui = nil
+    if gethui then
+        pcall(function() parent_gui = gethui() end)
+    end
+    if not parent_gui or not parent_gui.Parent then
+        parent_gui = local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui")
     end
 
-    -- Destroy old GUIs in CoreGui/gethui
+    -- Destroy old GUIs in gethui / CoreGui / PlayerGui
     pcall(function()
-        local core = gethui and gethui() or game:GetService("CoreGui")
-        local old = core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
-        if old then old:Destroy() end
+        if gethui then
+            local g = gethui()
+            local old = g and (g:FindFirstChild("NoirHub_AutoTrade") or g:FindFirstChild("AutoTrade"))
+            if old then old:Destroy() end
+        end
     end)
-    -- Destroy old GUIs in PlayerGui
     pcall(function()
         local pgui = local_player:FindFirstChild("PlayerGui")
         local old = pgui and (pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
@@ -1758,18 +1759,20 @@ local function create_ui()
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 2147483647
+    gui.Enabled = true
     gui.Parent = parent_gui
 
-    -- Periodically force UI to top and keep it enabled to bypass game script disabling
+    -- Periodically keep UI enabled without unparenting
     task_spawn(function()
         while _G.NoirHub_AutoTrade_ScriptID == script_id do
             task_wait(1)
             pcall(function()
-                if gui and gui.Parent == parent_gui then
+                if gui then
                     gui.Enabled = true
                     gui.DisplayOrder = 2147483647
-                    gui.Parent = nil
-                    gui.Parent = parent_gui
+                    if gui.Parent ~= parent_gui then
+                        gui.Parent = parent_gui
+                    end
                 end
             end)
         end
