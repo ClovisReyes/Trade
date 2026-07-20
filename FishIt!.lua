@@ -4306,8 +4306,24 @@ _G.NoirHub_AutoTrade_Cleanup = function()
     -- Disconnect global event connections
     if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end) end
     if trade_started_conn then pcall(function() trade_started_conn:Disconnect() end) end
-    if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end) end
+    if trade_ended_conn then trade_ended_conn:Disconnect(); trade_ended_conn = nil end
     
+    -- Clear global cache & config references
+    _G.AutoTradeCache = nil
+    _G.AutoTradeConfig = nil
+
+    -- Reset Prompt GUI to clean default state (Enabled = true, Blackout/Frame invisible)
+    pcall(function()
+        local prompt_gui = local_player and local_player:FindFirstChild("PlayerGui") and local_player.PlayerGui:FindFirstChild("Prompt")
+        if prompt_gui then
+            prompt_gui.Enabled = true
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            if blackout then blackout.Visible = false end
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then frame.Visible = false end
+        end
+    end)
+
     -- Terminate active auto trade loops
     _G.NoirHub_AutoTrade_ScriptID = nil
     
