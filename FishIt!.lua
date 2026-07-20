@@ -51,8 +51,8 @@ local http_service          = cloneref(game:GetService("HttpService"))
 
 --#region Variables
 local variables = {
-    items                   = replicated_storage:WaitForChild("Items", 10),
-    variants                = replicated_storage:WaitForChild("Variants", 10),
+    items                   = replicated_storage:FindFirstChild("Items"),
+    variants                = replicated_storage:FindFirstChild("Variants"),
     replion                 = replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("Replion"),
     item_utility            = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("ItemUtility"),
     vendor_utility          = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("VendorUtility"),
@@ -60,7 +60,20 @@ local variables = {
 }
 
 local success_replion, replion_mod = pcall(require, variables.replion)
-local player_data = (success_replion and replion_mod and replion_mod.Client) and replion_mod.Client:WaitReplion("Data") or nil
+local player_data = nil
+if success_replion and replion_mod and replion_mod.Client then
+    pcall(function()
+        player_data = replion_mod.Client:GetReplion("Data")
+    end)
+    if not player_data then
+        task_spawn(function()
+            pcall(function()
+                player_data = replion_mod.Client:WaitReplion("Data")
+            end)
+        end)
+    end
+end
+
 local success_item, item_utility = pcall(require, variables.item_utility)
 item_utility = success_item and item_utility or nil
 local success_vendor, vendor_utility = pcall(require, variables.vendor_utility)
@@ -1758,7 +1771,7 @@ local function create_ui()
         parent_gui = gethui and gethui() or game:GetService("CoreGui")
     end)
     if not success_core or not parent_gui then
-        parent_gui = local_player:WaitForChild("PlayerGui")
+        parent_gui = local_player and (local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 5))
     end
 
     -- Destroy old GUIs in CoreGui/gethui
