@@ -635,9 +635,9 @@ end
 local function is_item_shiny(item)
     if not item then return false end
     local meta = item.Metadata
-    if meta and (meta.Shiny == true or meta.Shiny == 1 or (meta.Shiny and tostring(meta.Shiny):lower() ~= "false")) then return true end
-    if item.Shiny == true or item.Shiny == 1 or (item.Shiny and tostring(item.Shiny):lower() ~= "false") then return true end
-    local mut = get_item_mutation(item):lower()
+    if meta and (meta.Shiny == true or meta.Shiny == 1 or (meta.Shiny and string_lower(tostring(meta.Shiny)) ~= "false")) then return true end
+    if item.Shiny == true or item.Shiny == 1 or (item.Shiny and string_lower(tostring(item.Shiny)) ~= "false") then return true end
+    local mut = string_lower(get_item_mutation(item))
     return string_find(mut, "shiny") ~= nil
 end
 
@@ -648,7 +648,7 @@ local function is_item_big(item)
         if meta.Big == true or meta.Big == 1 or meta.Giant == true or meta.Giant == 1 then return true end
     end
     if item.Big == true or item.Big == 1 or item.Giant == true or item.Giant == 1 then return true end
-    local mut = get_item_mutation(item):lower()
+    local mut = string_lower(get_item_mutation(item))
     return string_find(mut, "big") ~= nil or string_find(mut, "giant") ~= nil
 end
 
@@ -1964,32 +1964,21 @@ end)
 
 --#region UI Rendering
 local function create_ui()
-    local parent_gui = nil
-    if gethui then
-        pcall(function() parent_gui = gethui() end)
-    end
-    if not parent_gui then
-        pcall(function()
-            local cg = game:GetService("CoreGui")
-            -- Test if we can write to CoreGui
-            if cg and not cg:FindFirstChild("RobloxGui") then
-                parent_gui = cg
-            end
-        end)
-    end
-    if not parent_gui then
-        pcall(function() parent_gui = game:GetService("CoreGui") end)
-    end
-    if not parent_gui then
-        parent_gui = local_player:WaitForChild("PlayerGui", 5) or local_player:FindFirstChildOfClass("PlayerGui")
+    local parent_gui
+    local success_core = pcall(function()
+        parent_gui = gethui and gethui() or game:GetService("CoreGui")
+    end)
+    if not success_core or not parent_gui then
+        parent_gui = local_player:WaitForChild("PlayerGui")
     end
 
-    -- Destroy old GUIs in CoreGui/gethui and PlayerGui
+    -- Destroy old GUIs in CoreGui/gethui
     pcall(function()
         local core = gethui and gethui() or game:GetService("CoreGui")
         local old = core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
         if old then old:Destroy() end
     end)
+    -- Destroy old GUIs in PlayerGui
     pcall(function()
         local pgui = local_player:FindFirstChild("PlayerGui")
         local old = pgui and (pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
@@ -2002,24 +1991,18 @@ local function create_ui()
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 2147483647
-    
-    local parent_ok = pcall(function() gui.Parent = parent_gui end)
-    if not parent_ok or not gui.Parent then
-        parent_gui = local_player:WaitForChild("PlayerGui", 5) or local_player:FindFirstChildOfClass("PlayerGui")
-        gui.Parent = parent_gui
-    end
+    gui.Parent = parent_gui
 
     -- Periodically force UI to top and keep it enabled to bypass game script disabling
     task_spawn(function()
         while _G.NoirHub_AutoTrade_ScriptID == script_id do
             task_wait(1)
             pcall(function()
-                if gui then
+                if gui and gui.Parent == parent_gui then
                     gui.Enabled = true
                     gui.DisplayOrder = 2147483647
-                    if gui.Parent ~= parent_gui then
-                        gui.Parent = parent_gui
-                    end
+                    gui.Parent = nil
+                    gui.Parent = parent_gui
                 end
             end)
         end
@@ -2150,12 +2133,8 @@ local function create_ui()
     local TOGGLE_ON_COLOR = Color3.fromRGB(255, 0, 255) -- Magenta active state
     local INPUT_BG_COLOR = Color3.fromRGB(28, 28, 28)
 
-    local font_face = Font.fromEnum(Enum.Font.SourceSans)
-    local font_bold = Font.fromEnum(Enum.Font.SourceSansBold)
-    pcall(function()
-        font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-        font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    end)
+    local font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    local font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
 
     local ply_dropdown_btn
     local target_lbl
@@ -4527,7 +4506,6 @@ if not success then
     print("UI Creation Error: " .. tostring(err))
 end
 pcall(log_inventory_fish)
-pcall(run_auto_trade_loop)
 pcall(function() toggle_auto_accept(config.auto_accept_enabled) end)
 
 _G.NoirHub_AutoTrade_Cleanup = function()
