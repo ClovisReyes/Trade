@@ -142,6 +142,7 @@ local trade_remotes = remotes
 --#region Configuration & Cache
 local config = {
     enabled             = false,
+    auto_accept_enabled = false,
     trade_favorited     = false,
     quantity            = 0, -- 0 = unlimited
     target_coin_amount  = 0,
@@ -255,6 +256,222 @@ if active_modes > 1 then
     end
     save_config()
 end
+
+--#region Auto Accept Engine
+local auto_accept_conn = nil
+local auto_accept_trade_started_conn = nil
+local auto_accept_trade_ended_conn = nil
+local auto_accept_active = false
+
+local function click_gui_button(btn)
+    if not btn then return end
+    pcall(function()
+        if firesignal then
+            firesignal(btn.MouseButton1Click)
+            firesignal(btn.Activated)
+        elseif getconnections then
+            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
+                conn:Fire()
+            end
+        end
+    end)
+end
+
+local function is_trade_prompt(prompt_gui)
+    if not prompt_gui then return false end
+    local is_trade = false
+    pcall(function()
+        for _, desc in ipairs(prompt_gui:GetDescendants()) do
+            if desc:IsA("TextLabel") and desc.Text then
+                local text = string_lower(desc.Text)
+                if string_find(text, "trade request", 1, true) or (string_find(text, "trade", 1, true) and string_find(text, "accept", 1, true)) then
+                    is_trade = true
+                    break
+                end
+            end
+        end
+    end)
+    return is_trade
+end
+
+local function dismiss_trade_prompt()
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            local frame = prompt_gui:FindFirstChild("Frame")
+            
+            -- 1. Click all No/Cancel/Decline buttons to trigger client cleanup
+            for _, desc in ipairs(prompt_gui:GetDescendants()) do
+                if desc:IsA("GuiButton") and (desc.Name == "No" or desc.Name == "Cancel" or desc.Name == "Decline") then
+                    click_gui_button(desc)
+                end
+            end
+
+            -- 2. Destroy any dynamic cloned prompt frames inside Prompt
+            for _, child in ipairs(prompt_gui:GetChildren()) do
+                if child.Name ~= "Blackout" and child.Name ~= "Frame" and child.Name ~= "UIListLayout" and child.Name ~= "UIGridLayout" then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+
+            -- 3. Hide stale frame & blackout
+            if blackout then blackout.Visible = false end
+            if frame then frame.Visible = false end
+        end
+    end)
+end
+
+local function apply_prompt_visibility()
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            local frame = prompt_gui:FindFirstChild("Frame")
+            
+            if config.auto_accept_enabled then
+                prompt_gui.Enabled = false
+                if blackout then blackout.Visible = false end
+                if frame then frame.Visible = false end
+            else
+                prompt_gui.Enabled = true
+            end
+        end
+    end)
+end
+
+local function close_trading_gui()
+    auto_accept_active = false
+    pcall(function()
+        local t_gui = player_gui:FindFirstChild("! Trading")
+        if t_gui then
+            t_gui.Enabled = false
+            local frame = t_gui:FindFirstChild("Frame")
+            if frame then frame.Visible = false end
+            
+            for _, btn_name in ipairs({"Close", "Decline", "X"}) do
+                local btn = t_gui:FindFirstChild(btn_name, true)
+                if btn and btn:IsA("GuiButton") then
+                    click_gui_button(btn)
+                end
+            end
+        end
+    end)
+end
+
+local function toggle_auto_accept(enable)
+    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
+    if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
+    if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
+
+    config.auto_accept_enabled = enable
+
+    if not enable then
+        dismiss_trade_prompt()
+    end
+
+    apply_prompt_visibility()
+
+    if not trade_remotes then return end
+
+    -- 1. Trade Offer Received Handler
+    auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
+        if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+        
+        if not config.auto_accept_enabled then
+            pcall(function()
+                local prompt_gui = player_gui:FindFirstChild("Prompt")
+                if prompt_gui then
+                    prompt_gui.Enabled = true
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then blackout.Visible = true end
+                    local frame = prompt_gui:FindFirstChild("Frame")
+                    if frame then frame.Visible = true end
+                end
+            end)
+            return
+        end
+
+        pcall(function()
+            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+        end)
+        apply_prompt_visibility()
+        task_wait(0.05)
+        dismiss_trade_prompt()
+        apply_prompt_visibility()
+    end)
+
+    -- 2. Trade Ended Handler
+    auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
+        if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+        close_trading_gui()
+        dismiss_trade_prompt()
+    end)
+
+    if not enable then return end
+
+    -- 3. Trade Started Handler
+    auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
+        if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+        auto_accept_active = true
+
+        pcall(function()
+            local t_gui = player_gui:FindFirstChild("! Trading")
+            if t_gui then
+                t_gui.Enabled = true
+                local frame = t_gui:FindFirstChild("Frame")
+                if frame then
+                    frame.Visible = true
+                end
+            end
+        end)
+
+        task_spawn(function()
+            task_wait(0.5)
+            if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
+            
+            pcall(function()
+                trade_remotes.SetReady:InvokeServer(true)
+            end)
+
+            local start_time = tick()
+            while config.auto_accept_enabled and auto_accept_active and local_player:GetAttribute("IsTrading") and (tick() - start_time) < 60 do
+                pcall(function()
+                    local t_gui = player_gui:FindFirstChild("! Trading")
+                    if t_gui then
+                        t_gui.Enabled = true
+                        local frame = t_gui:FindFirstChild("Frame")
+                        if frame then frame.Visible = true end
+                    end
+                end)
+
+                pcall(function()
+                    trade_remotes.ConfirmTrade:InvokeServer()
+                end)
+                pcall(function()
+                    trade_remotes.SetReady:InvokeServer(true)
+                end)
+
+                pcall(function()
+                    local t_gui = player_gui:FindFirstChild("! Trading")
+                    if t_gui then
+                        for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
+                            local btn = t_gui:FindFirstChild(btn_name, true)
+                            if btn and btn:IsA("GuiButton") then
+                                click_gui_button(btn)
+                            end
+                        end
+                    end
+                end)
+
+                task_wait(0.4)
+            end
+
+            close_trading_gui()
+        end)
+    end)
+end
+--#endregion
 
 -- CUSTOMABLE SIZE CONFIGURATION (Change these values to scale/adjust the UI)
 local UI_CONFIG = {
@@ -546,34 +763,6 @@ local function log_inventory_fish()
         if writefile then
             writefile("trade_inventory_log.txt", log_text)
             print("Successfully wrote trade_inventory_log.txt to executor workspace.")
-        end
-    end)
-end
-
-local function click_gui_button(btn)
-    if not btn then return end
-
-    -- Method 2: executor firesignal
-    pcall(function()
-        if firesignal then
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.MouseButton1Down)
-            firesignal(btn.MouseButton1Up)
-            firesignal(btn.Activated)
-        end
-    end)
-
-    -- Method 3: executor getconnections
-    pcall(function()
-        if getconnections then
-            for _, event_name in ipairs({"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated"}) do
-                local event = btn[event_name]
-                if event then
-                    for _, conn in ipairs(getconnections(event)) do
-                        conn:Fire()
-                    end
-                end
-            end
         end
     end)
 end
@@ -3106,6 +3295,7 @@ local function create_ui()
     ----------------------------------------------------
     -- RENDER CONTEXT-SPECIFIC ACCORDIONS
     ----------------------------------------------------
+    local auto_accept_toggle_ctrl
     local byname_toggle_ctrl
     local enchant_toggle_ctrl
     local rarity_toggle_ctrl
@@ -3130,7 +3320,8 @@ local function create_ui()
         end
         save_config()
     end
-    -- 2. Trade By Name
+
+    -- 1. Trade By Name
     local byname_content, byname_toggle = create_accordion(settings_panel, "Trade By Name")
     local status_box = Instance.new("Frame")
     status_box.Name = "1_StatusBox"
@@ -4019,6 +4210,13 @@ local function create_ui()
         coin_reset.Text = "Reset Stats By Coin"
     end)
 
+    -- 5. Auto Accept Trade (At the very bottom)
+    local auto_accept_content, auto_accept_toggle = create_accordion(settings_panel, "Auto Accept Trade")
+    auto_accept_toggle_ctrl = create_toggle(auto_accept_content, "Enable Auto Accept", config.auto_accept_enabled, function(state)
+        toggle_auto_accept(state)
+        save_config()
+    end)
+
 
 
 
@@ -4082,6 +4280,9 @@ local function create_ui()
                 end
             end
 
+            if auto_accept_toggle_ctrl then
+                auto_accept_toggle_ctrl.set_state(config.auto_accept_enabled)
+            end
             if byname_toggle_ctrl then
                 byname_toggle_ctrl.set_state(config.enabled and config.trade_fish_enabled)
             end
@@ -4108,9 +4309,12 @@ if not success then
     print("UI Creation Error: " .. tostring(err))
 end
 pcall(log_inventory_fish)
+pcall(function() toggle_auto_accept(config.auto_accept_enabled) end)
+
 _G.NoirHub_AutoTrade_Cleanup = function()
     -- Disconnect global event connections
     if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end); trade_ended_conn = nil end
+    pcall(function() toggle_auto_accept(false) end)
     
     -- Terminate active auto trade loops
     _G.NoirHub_AutoTrade_ScriptID = nil
