@@ -210,6 +210,11 @@ local function save_config()
             writefile("NoirHub_AutoTrade_Config.json", data)
         end
     end)
+local function log_debug(msg)
+    print(tostring(msg))
+    if _G.NoirTradeDebugLog then
+        pcall(_G.NoirTradeDebugLog, tostring(msg))
+    end
 end
 
 local function load_config()
@@ -604,6 +609,56 @@ local tier_mapping = {
     [8] = "forgotten"
 }
 
+local function get_item_mutation(item)
+    if not item then return "None" end
+    local meta = item.Metadata
+    if meta then
+        if meta.VariantId and meta.VariantId ~= "" and meta.VariantId ~= "None" then
+            return tostring(meta.VariantId)
+        end
+        if meta.Mutation and meta.Mutation ~= "" and meta.Mutation ~= "None" then
+            return tostring(meta.Mutation)
+        end
+        if meta.Variant and meta.Variant ~= "" and meta.Variant ~= "None" then
+            return tostring(meta.Variant)
+        end
+    end
+    if item.Mutation and item.Mutation ~= "" and item.Mutation ~= "None" then
+        return tostring(item.Mutation)
+    end
+    if item.Variant and item.Variant ~= "" and item.Variant ~= "None" then
+        return tostring(item.Variant)
+    end
+    return "None"
+end
+
+local function is_item_shiny(item)
+    if not item then return false end
+    local meta = item.Metadata
+    if meta and (meta.Shiny == true or meta.Shiny == 1 or (meta.Shiny and tostring(meta.Shiny):lower() ~= "false")) then return true end
+    if item.Shiny == true or item.Shiny == 1 or (item.Shiny and tostring(item.Shiny):lower() ~= "false") then return true end
+    local mut = get_item_mutation(item):lower()
+    return string_find(mut, "shiny") ~= nil
+end
+
+local function is_item_big(item)
+    if not item then return false end
+    local meta = item.Metadata
+    if meta then
+        if meta.Big == true or meta.Big == 1 or meta.Giant == true or meta.Giant == 1 then return true end
+    end
+    if item.Big == true or item.Big == 1 or item.Giant == true or item.Giant == 1 then return true end
+    local mut = get_item_mutation(item):lower()
+    return string_find(mut, "big") ~= nil or string_find(mut, "giant") ~= nil
+end
+
+local function is_item_sparkling(item)
+    if not item then return false end
+    local meta = item.Metadata
+    if meta and (meta.Sparkling == true or meta.Sparkling == 1) then return true end
+    return item.Sparkling == true or item.Sparkling == 1
+end
+
 local function should_trade_fish(item_data, inventory_item)
     if not config.enabled then return false end
     
@@ -631,10 +686,10 @@ local function should_trade_fish(item_data, inventory_item)
     if #config.selected_mutations == 0 or has_all_mutation then
         mutation_match = true
     else
-        local mutation_name = inventory_item.Mutation and string_lower(inventory_item.Mutation)
-        if mutation_name then
+        local mutation_name = get_item_mutation(inventory_item)
+        if mutation_name and mutation_name ~= "None" then
             for _, selected_mutation in ipairs(config.selected_mutations) do
-                if mutation_name == string_lower(selected_mutation) then
+                if string_lower(mutation_name) == string_lower(selected_mutation) then
                     mutation_match = true
                     break
                 end
@@ -683,10 +738,10 @@ local function should_trade_fish_by_rarity(item_data, inventory_item)
     if #config.selected_mutations == 0 or has_all_mutation then
         mutation_match = true
     else
-        local mutation_name = inventory_item.Mutation and string_lower(inventory_item.Mutation)
-        if mutation_name then
+        local mutation_name = get_item_mutation(inventory_item)
+        if mutation_name and mutation_name ~= "None" then
             for _, selected_mutation in ipairs(config.selected_mutations) do
-                if mutation_name == string_lower(selected_mutation) then
+                if string_lower(mutation_name) == string_lower(selected_mutation) then
                     mutation_match = true
                     break
                 end
@@ -727,15 +782,17 @@ local function log_inventory_fish()
                         fish_count = fish_count + 1
                         local fish_name = data.Data.Name
                         local tier = data.Data.Tier or "Unknown"
-                        local mutation = item.Mutation or "None"
+                        local mutation = get_item_mutation(item)
+                        local shiny_str = is_item_shiny(item) and " [Shiny]" or ""
+                        local big_str = is_item_big(item) and " [Big]" or ""
                         local is_favorited = item.Favorited and " [Favorited]" or ""
                         local matches = should_trade_fish(data, item)
                         local matches_filter = matches and " [MATCHES FILTER]" or ""
                         if matches then
                             match_count = match_count + 1
                         end
-                        table_insert(log_lines, string_format("[%d] %s | Tier: %s | Mutation: %s%s%s | UUID: %s", 
-                            fish_count, fish_name, tier, mutation, is_favorited, matches_filter, item.UUID))
+                        table_insert(log_lines, string_format("[%d] %s | Tier: %s | Mutation: %s%s%s%s%s | UUID: %s", 
+                            fish_count, fish_name, tier, mutation, shiny_str, big_str, is_favorited, matches_filter, item.UUID))
                     end
                 end
             end
@@ -1645,16 +1702,16 @@ local function try_trade_by_coin()
             local data = item_utility:GetItemData(item.Id)
             if data and data.Data and data.Data.Type == "Fish" then
                 if not (item.Favorited and not config.trade_favorited) then
-                    local mutation_str = item.Mutation and tostring(item.Mutation) or ""
-                    local is_mutation = (mutation_str ~= "" and mutation_str ~= "None")
-                    local is_shiny = (item.Shiny == true or item.Shiny == 1 or string_find(string_lower(mutation_str), "shiny") ~= nil)
-                    local is_big = (item.Big == true or item.Big == 1 or string_find(string_lower(mutation_str), "big") ~= nil or string_find(string_lower(mutation_str), "giant") ~= nil)
-                    local is_sparkling = (item.Sparkling == true or item.Sparkling == 1)
+                    local mut_name = get_item_mutation(item)
+                    local is_mutation = (mut_name ~= "None")
+                    local is_shiny = is_item_shiny(item)
+                    local is_big = is_item_big(item)
+                    local is_sparkling = is_item_sparkling(item)
 
                     local special_score = 0
-                    if is_shiny then special_score = special_score + 1 end
+                    if is_shiny then special_score = special_score + 2 end
+                    if is_mutation then special_score = special_score + 2 end
                     if is_big then special_score = special_score + 1 end
-                    if is_mutation then special_score = special_score + 1 end
                     if is_sparkling then special_score = special_score + 1 end
 
                     local sell_price = 0
@@ -1695,11 +1752,16 @@ local function try_trade_by_coin()
     local selected = choose_fishes_by_range(fish_list, remaining_target, 20)
     
     local items_to_trade = {}
+    local total_selected_value = 0
     for _, fish in ipairs(selected) do
         if not table_find(cache.processed_trades, fish.UUID) then
             table_insert(items_to_trade, fish)
+            total_selected_value = total_selected_value + (fish.SellPrice or 0)
         end
     end
+
+    log_debug(string_format("[TradeByCoin] Target: %d | Remaining: %d | Total Fish Available: %d | Selected Fish Count: %d | Total Est. Value: %d coins", 
+        target_coins, remaining_target, #fish_list, #items_to_trade, total_selected_value))
 
     if #items_to_trade == 0 or #selected == 0 then
         set_status_msg("coin", "Error: Tidak ada lagi fish di inventory")
@@ -1725,7 +1787,7 @@ local function try_trade_by_coin()
     local added_items = {}
     local added_coins = 0
     set_status_msg("coin", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
-    for _, fish in ipairs(items_to_trade) do
+    for idx, fish in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
         local add_success = false
@@ -1737,15 +1799,18 @@ local function try_trade_by_coin()
                 add_success = true
                 break
             end
-            task_wait(0.1)
+            task_wait(0.12)
         end
 
         if add_success then
             table_insert(cache.processed_trades, fish.UUID)
             table_insert(added_items, fish)
             added_coins = added_coins + (fish.SellPrice or 0)
+            log_debug(string_format("  [+] Added Slot %d/%d: %s (Price: %d, Score: %d)", idx, #items_to_trade, fish.Name, fish.SellPrice or 0, fish.SpecialScore or 0))
+        else
+            log_debug(string_format("  [-] Failed to add Slot %d/%d: %s (UUID: %s)", idx, #items_to_trade, fish.Name, fish.UUID))
         end
-        task_wait(0.08)
+        task_wait(0.1)
     end
 
     if #added_items > 0 and local_player:GetAttribute("IsTrading") then
