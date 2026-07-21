@@ -174,45 +174,21 @@ task.spawn(function()
 
                 total_value = total_value + final_price
 
-                -- Comprehensive Mutation & Variant Detection
-                local mutation_detected = nil
+                -- Comprehensive Mutation & Variant Detection via Metadata
+                local meta = item.Metadata or {}
+                local mutation_detected = meta.VariantId or meta.Mutation or meta.Variant or item.Mutation or item.Variant
 
-                if item.Mutation and item.Mutation ~= "" and item.Mutation ~= "None" then
-                    mutation_detected = tostring(item.Mutation)
-                elseif item.Variant and item.Variant ~= "" and item.Variant ~= "None" then
-                    mutation_detected = tostring(item.Variant)
-                elseif item.VariantId and item.VariantId ~= "" then
-                    mutation_detected = "VariantId: " .. tostring(item.VariantId)
-                elseif item.Mutations and type(item.Mutations) == "table" and #item.Mutations > 0 then
-                    mutation_detected = table.concat(item.Mutations, ", ")
-                end
-
-                local is_shiny = (item.Shiny == true or item.Shiny == 1 or (item.Shiny and tostring(item.Shiny):lower() ~= "false")) and " [Shiny]" or ""
-                local is_big = (item.Big == true or item.Big == 1 or (item.Big and tostring(item.Big):lower() ~= "false")) and " [Big]" or ""
-                local is_sparkling = (item.Sparkling == true or item.Sparkling == 1) and " [Sparkling]" or ""
+                local is_shiny = (meta.Shiny == true or meta.Shiny == 1 or item.Shiny == true) and " [Shiny]" or ""
+                local is_big = (meta.Big == true or meta.Big == 1 or item.Big == true) and " [Big]" or ""
+                local is_sparkling = (meta.Sparkling == true or meta.Sparkling == 1 or item.Sparkling == true) and " [Sparkling]" or ""
                 local fav = item.Favorited and " [Fav]" or ""
-                local weight = item.Weight and string.format(" (Weight: %.1fkg)", tonumber(item.Weight) or 0) or ""
+                local item_weight = meta.Weight or item.Weight
+                local weight_str = item_weight and string.format(" (Weight: %.1fkg)", tonumber(item_weight) or 0) or ""
 
-                -- Full Keys Dump for Deep Inspection
-                local item_dump_str = ""
-                local dump_ok, dump_res = pcall(function()
-                    local http = game:GetService("HttpService")
-                    return http:JSONEncode(item)
-                end)
-                if dump_ok and dump_res then
-                    item_dump_str = " | RAW: " .. dump_res
-                else
-                    local k_list = {}
-                    for k, v in pairs(item) do
-                        table_insert(k_list, tostring(k) .. "=" .. tostring(v))
-                    end
-                    item_dump_str = " | KEYS: {" .. table_concat(k_list, ", ") .. "}"
-                end
+                local mut_str = (mutation_detected and tostring(mutation_detected) ~= "" and tostring(mutation_detected) ~= "None") and tostring(mutation_detected) or "None"
 
-                local mut_str = mutation_detected or "None"
-
-                table.insert(lines, string.format("[%d] %s%s%s%s%s%s | Price: %d (Base: %d) | Mut: %s%s", 
-                    fish_count, fish_name, is_shiny, is_big, is_sparkling, fav, weight, final_price, base_price, mut_str, item_dump_str))
+                table.insert(lines, string.format("[%d] %s%s%s%s%s%s | Price: %d | Mut: %s", 
+                    fish_count, fish_name, is_shiny, is_big, is_sparkling, fav, weight_str, final_price, mut_str))
             end
         end
     end
