@@ -210,6 +210,8 @@ local function save_config()
             writefile("NoirHub_AutoTrade_Config.json", data)
         end
     end)
+end
+
 local function log_debug(msg)
     print(tostring(msg))
     if _G.NoirTradeDebugLog then
