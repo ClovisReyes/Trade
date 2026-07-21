@@ -1548,25 +1548,28 @@ local function try_trade_enchant()
     end
 end
 
-local function choose_fishes_by_range(fish_list, target_amount)
+local function choose_fishes_by_range(fish_list, target_amount, max_slots)
+    max_slots = max_slots or 20
     table_sort(fish_list, function(a, b)
         if a.SpecialScore ~= b.SpecialScore then
             return a.SpecialScore > b.SpecialScore
         end
         return a.SellPrice > b.SellPrice
     end)
+
     local selected_fishes = {}
     local accumulated_amount = 0
+
     for _, fish in ipairs(fish_list) do
-        if (accumulated_amount + fish.SellPrice) <= target_amount then
-            accumulated_amount = accumulated_amount + fish.SellPrice
-            table_insert(selected_fishes, fish)
+        table_insert(selected_fishes, fish)
+        accumulated_amount = accumulated_amount + fish.SellPrice
+
+        -- Stop if target amount is reached (when target_amount > 0) OR max_slots (20 items) is reached
+        if (target_amount > 0 and accumulated_amount >= target_amount) or #selected_fishes >= max_slots then
+            break
         end
-        if accumulated_amount >= target_amount then break end
     end
-    if #selected_fishes == 0 and #fish_list > 0 then
-        table_insert(selected_fishes, fish_list[#fish_list])
-    end
+
     return selected_fishes
 end
 
@@ -1580,6 +1583,22 @@ local function try_trade_by_coin()
         end
         set_status_msg("coin", err_msg)
         return
+    end
+
+    local current_coins = cache.stats.coin.total_coins or 0
+    local target_coins = config.target_coin_amount
+    local remaining_target = 0
+    if target_coins > 0 then
+        remaining_target = math.max(0, target_coins - current_coins)
+        if remaining_target <= 0 then
+            config.enabled = false
+            if coin_toggle_ctrl then
+                coin_toggle_ctrl.set_state(false)
+                config.trade_coins_enabled = false
+            end
+            save_config()
+            return
+        end
     end
 
     local inventory = player_data:Get("Inventory")
@@ -1624,7 +1643,7 @@ local function try_trade_by_coin()
         return
     end
 
-    local selected = choose_fishes_by_range(fish_list, config.target_coin_amount)
+    local selected = choose_fishes_by_range(fish_list, remaining_target, 20)
     
     local items_to_trade = {}
     for _, fish in ipairs(selected) do
