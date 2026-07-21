@@ -1593,13 +1593,15 @@ local function choose_fishes_by_range(fish_list, target_amount, max_slots)
 
     local selected_fishes = {}
     local accumulated_amount = 0
+    -- Add 20% safety margin if target_amount > 0 so in-game merchant sell price guarantees reaching/exceeding target
+    local effective_target = (target_amount > 0) and (target_amount * 1.2) or 0
 
     for _, fish in ipairs(fish_list) do
         table_insert(selected_fishes, fish)
         accumulated_amount = accumulated_amount + fish.SellPrice
 
-        -- Stop if target amount is reached (when target_amount > 0) OR max_slots (20 items) is reached
-        if (target_amount > 0 and accumulated_amount >= target_amount) or #selected_fishes >= max_slots then
+        -- Stop if effective target is met OR max_slots (20 items) is reached
+        if (effective_target > 0 and accumulated_amount >= effective_target) or #selected_fishes >= max_slots then
             break
         end
     end
@@ -1655,10 +1657,23 @@ local function try_trade_by_coin()
                     if is_mutation then special_score = special_score + 1 end
                     if is_sparkling then special_score = special_score + 1 end
 
+                    local sell_price = 0
+                    pcall(function()
+                        sell_price = vendor_utility:GetSellPrice(item)
+                    end)
+                    if not sell_price or sell_price <= 0 then
+                        pcall(function()
+                            sell_price = vendor_utility.GetSellPrice(item)
+                        end)
+                    end
+                    if not sell_price or sell_price <= 0 then
+                        sell_price = (data and data.Data and (data.Data.SellPrice or data.Data.Price)) or 100
+                    end
+
                     table_insert(fish_list, {
                         UUID = item.UUID,
                         Name = data.Data.Name,
-                        SellPrice = vendor_utility:GetSellPrice(item) or 0,
+                        SellPrice = sell_price,
                         SpecialScore = special_score
                     })
                 end
