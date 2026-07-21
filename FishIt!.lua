@@ -637,8 +637,10 @@ end
 local function is_item_shiny(item)
     if not item then return false end
     local meta = item.Metadata
-    if meta and (meta.Shiny == true or meta.Shiny == 1 or (meta.Shiny and string_lower(tostring(meta.Shiny)) ~= "false")) then return true end
-    if item.Shiny == true or item.Shiny == 1 or (item.Shiny and string_lower(tostring(item.Shiny)) ~= "false") then return true end
+    if meta then
+        if meta.Shiny == true or meta.Shiny == 1 or (type(meta.Shiny) == "string" and string_lower(meta.Shiny) == "true") then return true end
+    end
+    if item.Shiny == true or item.Shiny == 1 or (type(item.Shiny) == "string" and string_lower(item.Shiny) == "true") then return true end
     local mut = string_lower(get_item_mutation(item))
     return string_find(mut, "shiny") ~= nil
 end
@@ -648,8 +650,10 @@ local function is_item_big(item)
     local meta = item.Metadata
     if meta then
         if meta.Big == true or meta.Big == 1 or meta.Giant == true or meta.Giant == 1 then return true end
+        if type(meta.Big) == "string" and string_lower(meta.Big) == "true" then return true end
     end
     if item.Big == true or item.Big == 1 or item.Giant == true or item.Giant == 1 then return true end
+    if type(item.Big) == "string" and string_lower(item.Big) == "true" then return true end
     local mut = string_lower(get_item_mutation(item))
     return string_find(mut, "big") ~= nil or string_find(mut, "giant") ~= nil
 end
@@ -657,8 +661,8 @@ end
 local function is_item_sparkling(item)
     if not item then return false end
     local meta = item.Metadata
-    if meta and (meta.Sparkling == true or meta.Sparkling == 1) then return true end
-    return item.Sparkling == true or item.Sparkling == 1
+    if meta and (meta.Sparkling == true or meta.Sparkling == 1 or (type(meta.Sparkling) == "string" and string_lower(meta.Sparkling) == "true")) then return true end
+    return item.Sparkling == true or item.Sparkling == 1 or (type(item.Sparkling) == "string" and string_lower(item.Sparkling) == "true")
 end
 
 local function should_trade_fish(item_data, inventory_item)
