@@ -848,45 +848,8 @@ local function decline_active_trade()
 end
 
 local function find_success_notification()
-    local found = false
-    pcall(function()
-        local PlayerGui = local_player:FindFirstChild("PlayerGui")
-        if not PlayerGui then return end
-        
-        -- 1. Targeted Fast Path Check (Lag-Free & Specific)
-        local text_notifications = PlayerGui:FindFirstChild("Text Notifications")
-        local frame = text_notifications and text_notifications:FindFirstChild("Frame")
-        if frame then
-            for _, tile in ipairs(frame:GetChildren()) do
-                local header = tile:FindFirstChild("Header")
-                if header then
-                    local text = ""
-                    local has_text = pcall(function() text = header.Text end)
-                    if has_text and text then
-                        local lower = string.lower(text)
-                        if lower:find("completed") and (lower:find("trade") or lower:find("with")) then
-                            found = true
-                            return
-                        end
-                    end
-                end
-            end
-        end
-        
-        -- 2. Fallback Scan of Descendants (Case-Insensitive & Class-Agnostic)
-        for _, desc in ipairs(PlayerGui:GetDescendants()) do
-            local text = ""
-            local has_text = pcall(function() text = desc.Text end)
-            if has_text and text then
-                local lower = string.lower(text)
-                if lower:find("completed") and (lower:find("trade") or lower:find("with")) then
-                    found = true
-                    break
-                end
-            end
-        end
-    end)
-    return found
+    -- Disable legacy descendant scan which matched stale notifications from old sessions
+    return false
 end
 
 local function listen_for_trade_completion()
@@ -905,25 +868,9 @@ local function listen_for_trade_completion()
         table_insert(connections, conn)
     end)
 
-    -- Legacy Chat Events
-    pcall(function()
-        local chat_events = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
-        local on_message = chat_events and chat_events:FindFirstChild("OnMessageDoneFiltering")
-        if on_message then
-            local conn = on_message.OnClientEvent:Connect(function(msg_data)
-                local text = msg_data and msg_data.Message or ""
-                if text:find("completed!") and (text:find("Trade with") or text:find("Trade completed")) then
-                    completed = true
-                end
-            end)
-            table_insert(connections, conn)
-        end
-    end)
-
     return {
         is_completed = function()
-            if completed then return true end
-            return find_success_notification()
+            return completed
         end,
         disconnect = function()
             for _, conn in ipairs(connections) do
@@ -1254,36 +1201,28 @@ local function try_trade_fish()
 
         local trade_success = false
         local check_start = tick()
-        while tick() - check_start < 3.5 do
-            if chat_listener.is_completed() then
-                trade_success = true
-                break
-            end
-
+        while tick() - check_start < 4 do
             local still_has_items = false
             pcall(function()
                 local inv = player_data:Get("Inventory")
                 local current_items = inv and inv.Items or {}
                 for _, trade_item in ipairs(added_items) do
-                    local found = false
                     for _, inv_item in ipairs(current_items) do
                         if inv_item.UUID == trade_item.UUID then
-                            found = true
+                            still_has_items = true
                             break
                         end
                     end
-                    if found then
-                        still_has_items = true
-                        break
-                    end
+                    if still_has_items then break end
                 end
             end)
+
             if not still_has_items then
                 trade_success = true
                 break
             end
 
-            task_wait(0.2)
+            task_wait(0.3)
         end
         chat_listener.disconnect()
 
@@ -1421,36 +1360,28 @@ local function try_trade_rarity()
 
         local trade_success = false
         local check_start = tick()
-        while tick() - check_start < 3.5 do
-            if chat_listener.is_completed() then
-                trade_success = true
-                break
-            end
-
+        while tick() - check_start < 4 do
             local still_has_items = false
             pcall(function()
                 local inv = player_data:Get("Inventory")
                 local current_items = inv and inv.Items or {}
                 for _, trade_item in ipairs(added_items) do
-                    local found = false
                     for _, inv_item in ipairs(current_items) do
                         if inv_item.UUID == trade_item.UUID then
-                            found = true
+                            still_has_items = true
                             break
                         end
                     end
-                    if found then
-                        still_has_items = true
-                        break
-                    end
+                    if still_has_items then break end
                 end
             end)
+
             if not still_has_items then
                 trade_success = true
                 break
             end
 
-            task_wait(0.2)
+            task_wait(0.3)
         end
         chat_listener.disconnect()
 
@@ -1585,36 +1516,28 @@ local function try_trade_enchant()
 
         local trade_success = false
         local check_start = tick()
-        while tick() - check_start < 3.5 do
-            if chat_listener.is_completed() then
-                trade_success = true
-                break
-            end
-
+        while tick() - check_start < 4 do
             local still_has_items = false
             pcall(function()
                 local inv = player_data:Get("Inventory")
                 local current_items = inv and inv.Items or {}
                 for _, trade_item in ipairs(added_items) do
-                    local found = false
                     for _, inv_item in ipairs(current_items) do
                         if inv_item.UUID == trade_item.UUID then
-                            found = true
+                            still_has_items = true
                             break
                         end
                     end
-                    if found then
-                        still_has_items = true
-                        break
-                    end
+                    if still_has_items then break end
                 end
             end)
+
             if not still_has_items then
                 trade_success = true
                 break
             end
 
-            task_wait(0.2)
+            task_wait(0.3)
         end
         chat_listener.disconnect()
 
@@ -1838,36 +1761,28 @@ local function try_trade_by_coin()
 
         local trade_success = false
         local check_start = tick()
-        while tick() - check_start < 3.5 do
-            if chat_listener.is_completed() then
-                trade_success = true
-                break
-            end
-
+        while tick() - check_start < 4 do
             local still_has_items = false
             pcall(function()
                 local inv = player_data:Get("Inventory")
                 local current_items = inv and inv.Items or {}
                 for _, trade_item in ipairs(added_items) do
-                    local found = false
                     for _, inv_item in ipairs(current_items) do
                         if inv_item.UUID == trade_item.UUID then
-                            found = true
+                            still_has_items = true
                             break
                         end
                     end
-                    if found then
-                        still_has_items = true
-                        break
-                    end
+                    if still_has_items then break end
                 end
             end)
+
             if not still_has_items then
                 trade_success = true
                 break
             end
 
-            task_wait(0.2)
+            task_wait(0.3)
         end
         chat_listener.disconnect()
 
