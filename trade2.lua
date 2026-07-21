@@ -764,6 +764,124 @@ local function should_trade_fish_by_rarity(item_data, inventory_item)
     return should_trade;
 end
 
+local function collect_round_robin_rarity(player_data_items, selected_tiers, limit)
+    local buckets = {}
+    local bucket_keys = {}
+
+    for _, tier in ipairs(selected_tiers) do
+        local t_lower = string_lower(tier)
+        if t_lower ~= "all" then
+            buckets[t_lower] = {}
+            table_insert(bucket_keys, t_lower)
+        end
+    end
+
+    for _, fish_item in ipairs(player_data_items) do
+        if fish_item and fish_item.Id then
+            local fish_data = item_utility:GetItemData(fish_item.Id)
+            if fish_data and fish_data.Data and fish_data.Data.Type == "Fish" then
+                if should_trade_fish_by_rarity(fish_data, fish_item) then
+                    local raw_tier = fish_data.Data.Tier
+                    local tier_name = ""
+                    if type(raw_tier) == "number" then
+                        tier_name = tier_mapping[raw_tier] or ""
+                    elseif type(raw_tier) == "string" then
+                        tier_name = string_lower(raw_tier)
+                    end
+                    if buckets[tier_name] then
+                        table_insert(buckets[tier_name], fish_item)
+                    end
+                end
+            end
+        end
+    end
+
+    local items_to_trade = {}
+    local added_uuids = {}
+    local max_pass = 20
+
+    for pass = 1, max_pass do
+        if #items_to_trade >= limit then break end
+        local added_any = false
+
+        for _, key in ipairs(bucket_keys) do
+            if #items_to_trade >= limit then break end
+            local bucket = buckets[key]
+            if bucket then
+                for i = 1, #bucket do
+                    local item = bucket[i]
+                    if not added_uuids[item.UUID] and not table_find(cache.processed_trades, item.UUID) then
+                        added_uuids[item.UUID] = true
+                        table_insert(items_to_trade, item)
+                        added_any = true
+                        break
+                    end
+                end
+            end
+        end
+
+        if not added_any then break end
+    end
+
+    return items_to_trade
+end
+
+local function collect_round_robin_names(player_data_items, selected_fish, limit)
+    local buckets = {}
+    local bucket_keys = {}
+
+    for _, f_name in ipairs(selected_fish) do
+        local n_lower = string_lower(f_name)
+        if n_lower ~= "all" then
+            buckets[n_lower] = {}
+            table_insert(bucket_keys, n_lower)
+        end
+    end
+
+    for _, fish_item in ipairs(player_data_items) do
+        if fish_item and fish_item.Id then
+            local fish_data = item_utility:GetItemData(fish_item.Id)
+            if fish_data and fish_data.Data and fish_data.Data.Type == "Fish" then
+                if should_trade_fish(fish_data, fish_item) then
+                    local name_lower = string_lower(fish_data.Data.Name)
+                    if buckets[name_lower] then
+                        table_insert(buckets[name_lower], fish_item)
+                    end
+                end
+            end
+        end
+    end
+
+    local items_to_trade = {}
+    local added_uuids = {}
+    local max_pass = 20
+
+    for pass = 1, max_pass do
+        if #items_to_trade >= limit then break end
+        local added_any = false
+
+        for _, key in ipairs(bucket_keys) do
+            if #items_to_trade >= limit then break end
+            local bucket = buckets[key]
+            if bucket then
+                for i = 1, #bucket do
+                    local item = bucket[i]
+                    if not added_uuids[item.UUID] and not table_find(cache.processed_trades, item.UUID) then
+                        added_uuids[item.UUID] = true
+                        table_insert(items_to_trade, item)
+                        added_any = true
+                        break
+                    end
+                end
+            end
+        end
+
+        if not added_any then break end
+    end
+
+    return items_to_trade
+end
+
 local function log_inventory_fish()
     local log_lines = {}
     table_insert(log_lines, "=== CURRENT INVENTORY FISH LOG ===")
@@ -1140,31 +1258,22 @@ local function try_trade_fish()
     local inventory = player_data:Get("Inventory")
     local player_data_items = inventory and inventory.Items or {}
     
-    -- Prioritize Big, Shiny, Mutated & Heavier fish first
-    table_sort(player_data_items, function(a, b)
-        local score_a = (is_item_shiny(a) and 2 or 0) + (is_item_big(a) and 2 or 0) + (get_item_mutation(a) ~= "None" and 2 or 0)
-        local score_b = (is_item_shiny(b) and 2 or 0) + (is_item_big(b) and 2 or 0) + (get_item_mutation(b) ~= "None" and 2 or 0)
-        if score_a ~= score_b then
-            return score_a > score_b
-        end
-        local w_a = (a and a.Metadata and a.Metadata.Weight) or 0
-        local w_b = (b and b.Metadata and b.Metadata.Weight) or 0
-        return w_a > w_b
-    end)
-    
     local items_to_trade = {}
     local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
-    for _, fish_item in ipairs(player_data_items) do
-        if #items_to_trade >= limit then
-            break
-        end
-
-        if fish_item and fish_item.Id then
-            local fish_data = item_utility:GetItemData(fish_item.Id)
-            if fish_data and fish_data.Data.Type == "Fish" then
-                if should_trade_fish(fish_data, fish_item) then
-                    if not table_find(cache.processed_trades, fish_item.UUID) then
-                        table_insert(items_to_trade, fish_item)
+    
+    local has_all_fish = table_find(config.selected_fish, "All") ~= nil
+    if #config.selected_fish > 1 and not has_all_fish then
+        items_to_trade = collect_round_robin_names(player_data_items, config.selected_fish, limit)
+    else
+        for _, fish_item in ipairs(player_data_items) do
+            if #items_to_trade >= limit then break end
+            if fish_item and fish_item.Id then
+                local fish_data = item_utility:GetItemData(fish_item.Id)
+                if fish_data and fish_data.Data.Type == "Fish" then
+                    if should_trade_fish(fish_data, fish_item) then
+                        if not table_find(cache.processed_trades, fish_item.UUID) then
+                            table_insert(items_to_trade, fish_item)
+                        end
                     end
                 end
             end
@@ -1306,31 +1415,22 @@ local function try_trade_rarity()
     local inventory = player_data:Get("Inventory")
     local player_data_items = inventory and inventory.Items or {}
     
-    -- Prioritize Big, Shiny, Mutated & Heavier fish first
-    table_sort(player_data_items, function(a, b)
-        local score_a = (is_item_shiny(a) and 2 or 0) + (is_item_big(a) and 2 or 0) + (get_item_mutation(a) ~= "None" and 2 or 0)
-        local score_b = (is_item_shiny(b) and 2 or 0) + (is_item_big(b) and 2 or 0) + (get_item_mutation(b) ~= "None" and 2 or 0)
-        if score_a ~= score_b then
-            return score_a > score_b
-        end
-        local w_a = (a and a.Metadata and a.Metadata.Weight) or 0
-        local w_b = (b and b.Metadata and b.Metadata.Weight) or 0
-        return w_a > w_b
-    end)
-    
     local items_to_trade = {}
     local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
-    for _, fish_item in ipairs(player_data_items) do
-        if #items_to_trade >= limit then
-            break
-        end
-
-        if fish_item and fish_item.Id then
-            local fish_data = item_utility:GetItemData(fish_item.Id)
-            if fish_data and fish_data.Data.Type == "Fish" then
-                if should_trade_fish_by_rarity(fish_data, fish_item) then
-                    if not table_find(cache.processed_trades, fish_item.UUID) then
-                        table_insert(items_to_trade, fish_item)
+    
+    local has_all_tier = table_find(config.selected_tiers, "All") ~= nil
+    if #config.selected_tiers > 1 and not has_all_tier then
+        items_to_trade = collect_round_robin_rarity(player_data_items, config.selected_tiers, limit)
+    else
+        for _, fish_item in ipairs(player_data_items) do
+            if #items_to_trade >= limit then break end
+            if fish_item and fish_item.Id then
+                local fish_data = item_utility:GetItemData(fish_item.Id)
+                if fish_data and fish_data.Data.Type == "Fish" then
+                    if should_trade_fish_by_rarity(fish_data, fish_item) then
+                        if not table_find(cache.processed_trades, fish_item.UUID) then
+                            table_insert(items_to_trade, fish_item)
+                        end
                     end
                 end
             end
