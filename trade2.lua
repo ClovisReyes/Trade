@@ -37,7 +37,6 @@ local players               = cloneref(game:GetService("Players"))
 local local_player          = players.LocalPlayer
 local player_gui            = cloneref(local_player:WaitForChild("PlayerGui"))
 local user_input_service    = cloneref(game:GetService("UserInputService"))
-local run_service           = cloneref(game:GetService("RunService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
 local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
 local http_service          = cloneref(game:GetService("HttpService"))
@@ -479,15 +478,6 @@ local function toggle_auto_accept(enable)
     end)
 end
 --#endregion
-
--- CUSTOMABLE SIZE CONFIGURATION (Change these values to scale/adjust the UI)
-local UI_CONFIG = {
-    HUD_WIDTH = 225,
-    HUD_HEIGHT = 270,
-    MINI_HUD_HEIGHT = 165,
-    SETTINGS_WIDTH = 250,
-    SETTINGS_HEIGHT = 380,
-}
 
 local function get_item_count(item_name)
     local count = 0
@@ -3125,40 +3115,26 @@ local function create_ui()
         floating_btn.Visible = false
     end)
 
-    -- Minimize Button in Header Bar (Enlarged & Easy-to-click)
+    -- Minimize Button in Header Bar (Transparent background, large easy-to-click icon)
     local min_btn = Instance.new("TextButton")
     min_btn.Name = "MinimizeBtn"
-    min_btn.Size = UDim2.new(0, 36, 0, 22)
-    min_btn.Position = UDim2.new(1, -42, 0.5, -11)
-    min_btn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
-    min_btn.BackgroundTransparency = 0.2
+    min_btn.Size = UDim2.new(0, 36, 0, 24)
+    min_btn.Position = UDim2.new(1, -40, 0.5, -12)
+    min_btn.BackgroundTransparency = 1
     min_btn.Text = "─"
-    min_btn.TextColor3 = Color3.fromRGB(240, 240, 240)
-    min_btn.TextSize = 14
+    min_btn.TextColor3 = MUTED_COLOR
+    min_btn.TextSize = 20
     min_btn.FontFace = font_bold
     min_btn.Active = true
     min_btn.Modal = true
     min_btn.ZIndex = 6
     min_btn.Parent = header
 
-    local min_corner = Instance.new("UICorner")
-    min_corner.CornerRadius = UDim.new(0, 5)
-    min_corner.Parent = min_btn
-
-    local min_stroke = Instance.new("UIStroke")
-    min_stroke.Color = Color3.fromRGB(55, 55, 55)
-    min_stroke.Thickness = 1
-    min_stroke.Parent = min_btn
-
     min_btn.MouseEnter:Connect(function()
-        min_btn.BackgroundColor3 = Color3.fromRGB(255, 0, 255)
-        min_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        min_stroke.Color = Color3.fromRGB(255, 0, 255)
+        min_btn.TextColor3 = Color3.fromRGB(255, 0, 255)
     end)
     min_btn.MouseLeave:Connect(function()
-        min_btn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
-        min_btn.TextColor3 = Color3.fromRGB(240, 240, 240)
-        min_stroke.Color = Color3.fromRGB(55, 55, 55)
+        min_btn.TextColor3 = MUTED_COLOR
     end)
 
     min_btn.MouseButton1Click:Connect(function()
