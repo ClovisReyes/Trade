@@ -718,12 +718,12 @@ local function should_trade_fish_by_rarity(item_data, inventory_item)
     local rarity_match = false
     local mutation_match = false
 
-    -- 2. Check Rarity (Tier)
+    -- 2. Check Rarity (Tier or Rarity string)
     local has_all_rarity = table_find(config.selected_tiers, "All") ~= nil
     if #config.selected_tiers == 0 or has_all_rarity then
         rarity_match = true
     else
-        local raw_tier = item_data.Data.Tier
+        local raw_tier = item_data.Data.Tier or item_data.Data.Rarity
         local tier_name = ""
         if type(raw_tier) == "number" then
             tier_name = tier_mapping[raw_tier] or ""
@@ -745,7 +745,11 @@ local function should_trade_fish_by_rarity(item_data, inventory_item)
         mutation_match = true
     else
         local mutation_name = get_item_mutation(inventory_item)
-        if mutation_name and mutation_name ~= "None" then
+        if mutation_name == "None" or mutation_name == "" then
+            if table_find(config.selected_mutations, "None") or table_find(config.selected_mutations, "Normal") then
+                mutation_match = true
+            end
+        else
             for _, selected_mutation in ipairs(config.selected_mutations) do
                 if string_lower(mutation_name) == string_lower(selected_mutation) then
                     mutation_match = true
