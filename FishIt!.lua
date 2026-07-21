@@ -263,35 +263,15 @@ local auto_accept_trade_started_conn = nil
 local auto_accept_trade_ended_conn = nil
 local auto_accept_active = false
 
-local vim = cloneref(game:GetService("VirtualInputManager"))
-
 local function click_gui_button(btn)
     if not btn then return end
     pcall(function()
-        if vim and btn:IsA("GuiObject") and btn.AbsolutePosition and btn.AbsoluteSize then
-            local pos = btn.AbsolutePosition + (btn.AbsoluteSize / 2)
-            vim:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-            task_wait(0.02)
-            vim:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
-        end
-    end)
-    pcall(function()
         if firesignal then
             firesignal(btn.MouseButton1Click)
-            firesignal(btn.MouseButton1Down)
-            firesignal(btn.MouseButton1Up)
             firesignal(btn.Activated)
-        end
-    end)
-    pcall(function()
-        if getconnections then
-            for _, event_name in ipairs({"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated"}) do
-                local event = btn[event_name]
-                if event then
-                    for _, conn in ipairs(getconnections(event)) do
-                        conn:Fire()
-                    end
-                end
+        elseif getconnections then
+            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
+                conn:Fire()
             end
         end
     end)
@@ -299,49 +279,63 @@ end
 
 local function is_trade_prompt(prompt_gui)
     if not prompt_gui then return false end
-    local blackout = prompt_gui:FindFirstChild("Blackout")
-    local frame = prompt_gui:FindFirstChild("Frame")
-    local is_vis = (blackout and blackout.Visible) or (frame and frame.Visible) or prompt_gui.Enabled
-    if is_vis then
+    local is_trade = false
+    pcall(function()
         for _, desc in ipairs(prompt_gui:GetDescendants()) do
             if desc:IsA("TextLabel") and desc.Text then
                 local text = string_lower(desc.Text)
                 if string_find(text, "trade request", 1, true) or (string_find(text, "trade", 1, true) and string_find(text, "accept", 1, true)) then
-                    return true
-                end
-            end
-        end
-    end
-    return false
-end
-
-local function accept_trade_prompt()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if not prompt_gui then return end
-        
-        -- Direct path: game.Players.LocalPlayer.PlayerGui.Prompt.Blackout.Options.Yes
-        local blackout = prompt_gui:FindFirstChild("Blackout")
-        local options = blackout and blackout:FindFirstChild("Options")
-        local yes_btn = options and options:FindFirstChild("Yes")
-
-        if not yes_btn then
-            local frame = prompt_gui:FindFirstChild("Frame")
-            options = frame and frame:FindFirstChild("Options")
-            yes_btn = options and (options:FindFirstChild("Yes") or options:FindFirstChild("Accept"))
-        end
-
-        if not yes_btn then
-            for _, desc in ipairs(prompt_gui:GetDescendants()) do
-                if desc:IsA("GuiButton") and (desc.Name == "Yes" or desc.Name == "Accept" or desc.Text == "Yes") then
-                    yes_btn = desc
+                    is_trade = true
                     break
                 end
             end
         end
+    end)
+    return is_trade
+end
 
-        if yes_btn then
-            click_gui_button(yes_btn)
+local function dismiss_trade_prompt()
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            local frame = prompt_gui:FindFirstChild("Frame")
+            
+            -- 1. Click all No/Cancel/Decline buttons to trigger client cleanup
+            for _, desc in ipairs(prompt_gui:GetDescendants()) do
+                if desc:IsA("GuiButton") and (desc.Name == "No" or desc.Name == "Cancel" or desc.Name == "Decline") then
+                    click_gui_button(desc)
+                end
+            end
+
+            -- 2. Destroy any dynamic cloned prompt frames inside Prompt
+            for _, child in ipairs(prompt_gui:GetChildren()) do
+                if child.Name ~= "Blackout" and child.Name ~= "Frame" and child.Name ~= "UIListLayout" and child.Name ~= "UIGridLayout" then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+
+            -- 3. Hide stale frame & blackout
+            if blackout then blackout.Visible = false end
+            if frame then frame.Visible = false end
+        end
+    end)
+end
+
+local function apply_prompt_visibility()
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            local frame = prompt_gui:FindFirstChild("Frame")
+            
+            if config.auto_accept_enabled then
+                prompt_gui.Enabled = false
+                if blackout then blackout.Visible = false end
+                if frame then frame.Visible = false end
+            else
+                prompt_gui.Enabled = true
+            end
         end
     end)
 end
@@ -358,9 +352,7 @@ local function close_trading_gui()
             for _, btn_name in ipairs({"Close", "Decline", "X"}) do
                 local btn = t_gui:FindFirstChild(btn_name, true)
                 if btn and btn:IsA("GuiButton") then
-                    pcall(function()
-                        if firesignal then firesignal(btn.MouseButton1Click) end
-                    end)
+                    click_gui_button(btn)
                 end
             end
         end
@@ -374,50 +366,47 @@ local function toggle_auto_accept(enable)
 
     config.auto_accept_enabled = enable
 
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            if enable then
-                prompt_gui.Enabled = false
-            else
-                prompt_gui.Enabled = true
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = true end
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then frame.Visible = true end
-            end
-        end
-    end)
+    if not enable then
+        dismiss_trade_prompt()
+    end
+
+    apply_prompt_visibility()
 
     if not trade_remotes then return end
 
-    -- 1. Trade Offer Received Handler (Lightning Fast 0ms Remote Server Accept)
+    -- 1. Trade Offer Received Handler
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-
-        if config.auto_accept_enabled then
-            -- Instant 0ms remote invocation (No GUI popups, safe from BAC detection)
-            pcall(function()
-                trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
-            end)
-            
-            -- Ensure prompt stays completely hidden
+        
+        if not config.auto_accept_enabled then
             pcall(function()
                 local prompt_gui = player_gui:FindFirstChild("Prompt")
                 if prompt_gui then
-                    prompt_gui.Enabled = false
+                    prompt_gui.Enabled = true
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then blackout.Visible = true end
+                    local frame = prompt_gui:FindFirstChild("Frame")
+                    if frame then frame.Visible = true end
                 end
             end)
+            return
         end
+
+        pcall(function()
+            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+        end)
+        apply_prompt_visibility()
+        task_wait(0.05)
+        dismiss_trade_prompt()
+        apply_prompt_visibility()
     end)
-    table.insert(_G.NoirHub_AutoTrade_Conns, auto_accept_conn)
 
     -- 2. Trade Ended Handler
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         close_trading_gui()
+        dismiss_trade_prompt()
     end)
-    table.insert(_G.NoirHub_AutoTrade_Conns, auto_accept_trade_ended_conn)
 
     if not enable then return end
 
