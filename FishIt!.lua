@@ -49,6 +49,16 @@ local variables = {
 
 local success_replion, replion_mod = pcall(require, variables.replion)
 local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
+pcall(function()
+    if player_data and player_data.OnChange then
+        player_data:OnChange("Inventory", function()
+            if cache and cache.price_cache then
+                cache.price_cache = {}
+                cache.metadata_cache = {}
+            end
+        end)
+    end
+end)
 local item_utility = require(variables.item_utility)
 local vendor_utility = require(variables.vendor_utility)
 
@@ -151,6 +161,8 @@ local config = {
 
 local cache = {
     processed_trades    = {},
+    price_cache         = {},
+    metadata_cache      = {},
     current_item        = nil,
     fish_list           = {},
     loaded_fish         = {},
@@ -177,6 +189,25 @@ local cache = {
         coin = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
     },
 }
+
+local function get_cached_sell_price(item)
+    if not item or not item.UUID then return 0 end
+    local cached = cache.price_cache[item.UUID]
+    if cached then return cached end
+
+    local sell_price = 0
+    pcall(function() sell_price = vendor_utility:GetSellPrice(item) end)
+    if not sell_price or sell_price <= 0 then
+        pcall(function() sell_price = vendor_utility.GetSellPrice(item) end)
+    end
+    if not sell_price or sell_price <= 0 then
+        local data = item.Id and item_utility:GetItemData(item.Id)
+        sell_price = (data and data.Data and (data.Data.SellPrice or data.Data.Price)) or 100
+    end
+
+    cache.price_cache[item.UUID] = sell_price
+    return sell_price
+end
 
 _G.AutoTradeConfig = config
 _G.AutoTradeCache = cache
@@ -1654,14 +1685,16 @@ local function try_trade_enchant()
     end
 end
 
+local function coin_fish_comparator(a, b)
+    if a.SpecialScore ~= b.SpecialScore then
+        return a.SpecialScore > b.SpecialScore
+    end
+    return a.SellPrice > b.SellPrice
+end
+
 local function choose_fishes_by_range(fish_list, target_amount, max_slots)
     max_slots = max_slots or 20
-    table_sort(fish_list, function(a, b)
-        if a.SpecialScore ~= b.SpecialScore then
-            return a.SpecialScore > b.SpecialScore
-        end
-        return a.SellPrice > b.SellPrice
-    end)
+    table_sort(fish_list, coin_fish_comparator)
 
     local selected_fishes = {}
     local accumulated_amount = 0
@@ -1736,18 +1769,7 @@ local function try_trade_by_coin()
                     if is_big then special_score = special_score + 2 end
                     if is_sparkling then special_score = special_score + 1 end
 
-                    local sell_price = 0
-                    pcall(function()
-                        sell_price = vendor_utility:GetSellPrice(item)
-                    end)
-                    if not sell_price or sell_price <= 0 then
-                        pcall(function()
-                            sell_price = vendor_utility.GetSellPrice(item)
-                        end)
-                    end
-                    if not sell_price or sell_price <= 0 then
-                        sell_price = (data and data.Data and (data.Data.SellPrice or data.Data.Price)) or 100
-                    end
+                    local sell_price = get_cached_sell_price(item)
 
                     table_insert(fish_list, {
                         UUID = item.UUID,
@@ -2583,10 +2605,14 @@ local function create_ui()
         end
     end
 
+    local item_search_thread = nil
     item_search_box:GetPropertyChangedSignal("Text"):Connect(function()
-        if fish_dropdown_btn then
-            populate_items_panel(fish_dropdown_btn)
-        end
+        if item_search_thread then pcall(function() task.cancel(item_search_thread) end) end
+        item_search_thread = task.delay(0.12, function()
+            if fish_dropdown_btn then
+                populate_items_panel(fish_dropdown_btn)
+            end
+        end)
     end)
 
     enchant_panel = Instance.new("Frame")
@@ -2773,10 +2799,14 @@ local function create_ui()
         end
     end
 
+    local enchant_search_thread = nil
     enchant_search_box:GetPropertyChangedSignal("Text"):Connect(function()
-        if enchant_dropdown_btn then
-            populate_enchants_panel(enchant_dropdown_btn)
-        end
+        if enchant_search_thread then pcall(function() task.cancel(enchant_search_thread) end) end
+        enchant_search_thread = task.delay(0.12, function()
+            if enchant_dropdown_btn then
+                populate_enchants_panel(enchant_dropdown_btn)
+            end
+        end)
     end)
 
     rarity_panel = Instance.new("Frame")
@@ -3000,16 +3030,12 @@ local function create_ui()
             main.Position = UDim2.new(start_pos.X.Scale, start_pos.X.Offset + delta.X, start_pos.Y.Scale, start_pos.Y.Offset + delta.Y)
         end
     end)
-
     local floating_btn = Instance.new("TextButton")
     floating_btn.Name = "FloatingRestore"
-    floating_btn.Size = UDim2.new(0, 32, 0, 32)
-    floating_btn.Position = UDim2.new(0, 15, 0.5, -16)
-    floating_btn.BackgroundColor3 = SIDEBAR_COLOR
-    floating_btn.Text = "⇄"
-    floating_btn.TextColor3 = ACCENT_COLOR
-    floating_btn.TextSize = 14
-    floating_btn.FontFace = font_bold
+    floating_btn.Size = UDim2.new(0, 38, 0, 38)
+    floating_btn.Position = UDim2.new(0, 15, 0.5, -19)
+    floating_btn.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+    floating_btn.Text = ""
     floating_btn.Active = true
     floating_btn.Modal = true
     floating_btn.ZIndex = 20
@@ -3017,13 +3043,41 @@ local function create_ui()
     floating_btn.Parent = gui
 
     local float_corner = Instance.new("UICorner")
-    float_corner.CornerRadius = UDim.new(1, 0)
+    float_corner.CornerRadius = UDim.new(0, 9)
     float_corner.Parent = floating_btn
 
     local float_stroke = Instance.new("UIStroke")
     float_stroke.Color = ACCENT_COLOR
     float_stroke.Thickness = 1.5
     float_stroke.Parent = floating_btn
+
+    local float_gradient = Instance.new("UIGradient")
+    float_gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 12, 28)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 16))
+    })
+    float_gradient.Rotation = 45
+    float_gradient.Parent = floating_btn
+
+    local icon_lbl = Instance.new("TextLabel")
+    icon_lbl.Size = UDim2.new(1, 0, 1, 0)
+    icon_lbl.Position = UDim2.new(0, 0, 0, 0)
+    icon_lbl.BackgroundTransparency = 1
+    icon_lbl.Text = "N"
+    icon_lbl.TextColor3 = Color3.fromRGB(255, 0, 255)
+    icon_lbl.TextSize = 22
+    icon_lbl.FontFace = font_bold
+    icon_lbl.ZIndex = 21
+    icon_lbl.Parent = floating_btn
+
+    floating_btn.MouseEnter:Connect(function()
+        float_stroke.Thickness = 2
+        icon_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+    floating_btn.MouseLeave:Connect(function()
+        float_stroke.Thickness = 1.5
+        icon_lbl.TextColor3 = Color3.fromRGB(255, 0, 255)
+    end)
 
     floating_btn.MouseButton1Click:Connect(function()
         main.Visible = true
