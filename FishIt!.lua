@@ -1998,11 +1998,12 @@ local function create_ui()
         while _G.NoirHub_AutoTrade_ScriptID == script_id do
             task_wait(1)
             pcall(function()
-                if gui and gui.Parent == parent_gui then
+                if gui then
                     gui.Enabled = true
                     gui.DisplayOrder = 2147483647
-                    gui.Parent = nil
-                    gui.Parent = parent_gui
+                    if gui.Parent ~= parent_gui then
+                        gui.Parent = parent_gui
+                    end
                 end
             end)
         end
@@ -4506,6 +4507,7 @@ if not success then
     print("UI Creation Error: " .. tostring(err))
 end
 pcall(log_inventory_fish)
+pcall(run_auto_trade_loop)
 pcall(function() toggle_auto_accept(config.auto_accept_enabled) end)
 
 _G.NoirHub_AutoTrade_Cleanup = function()
