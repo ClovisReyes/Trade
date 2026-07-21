@@ -1202,22 +1202,22 @@ local function try_trade_fish()
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
         local add_success = false
-        for attempt = 1, 3 do
+        for attempt = 1, 2 do
             local ok, res = pcall(function()
                 return trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
             end)
-            if ok and res then
+            if ok and res ~= false then
                 add_success = true
                 break
             end
-            task_wait(0.1)
+            task_wait(0.04)
         end
 
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
-        task_wait(0.08)
+        task_wait(0.03)
     end
 
     if #added_items > 0 and local_player:GetAttribute("IsTrading") then
@@ -1373,21 +1373,22 @@ local function try_trade_rarity()
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
         local add_success = false
-        for attempt = 1, 3 do
+        for attempt = 1, 2 do
             local ok, res = pcall(function()
                 return trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
             end)
-            if ok and res then
+            if ok and res ~= false then
                 add_success = true
                 break
             end
-            task_wait(0.1)
+            task_wait(0.04)
         end
 
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
+        task_wait(0.03)
         task_wait(0.08)
     end
 
@@ -1529,21 +1530,22 @@ local function try_trade_enchant()
         
         local item_data = item_utility:GetItemData(item.Id)
         local add_success = false
-        for attempt = 1, 3 do
+        for attempt = 1, 2 do
             local ok, res = pcall(function()
                 return trade_remotes.AddItem:InvokeServer(item_data.Data.Type or "Items", item.UUID)
             end)
-            if ok and res then
+            if ok and res ~= false then
                 add_success = true
                 break
             end
-            task_wait(0.1)
+            task_wait(0.04)
         end
 
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
+        task_wait(0.03)
         task_wait(0.08)
     end
 
@@ -1770,15 +1772,15 @@ local function try_trade_by_coin()
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
         local add_success = false
-        for attempt = 1, 3 do
+        for attempt = 1, 2 do
             local ok, res = pcall(function()
                 return trade_remotes.AddItem:InvokeServer("Fish", fish.UUID)
             end)
-            if ok and res then
+            if ok and res ~= false then
                 add_success = true
                 break
             end
-            task_wait(0.12)
+            task_wait(0.04)
         end
 
         if add_success then
@@ -1789,7 +1791,7 @@ local function try_trade_by_coin()
         else
             log_debug(string_format("  [-] Failed to add Slot %d/%d: %s (UUID: %s)", idx, #items_to_trade, fish.Name, fish.UUID))
         end
-        task_wait(0.1)
+        task_wait(0.03)
     end
 
     if #added_items > 0 and local_player:GetAttribute("IsTrading") then
