@@ -1042,7 +1042,19 @@ local function start_trade_session(target_player, mode)
             return false, "Timeout"
         end
 
-        -- Delay 0.5s for native trade UI (! Trading) to initialize and show on sender screen
+        -- Ensure native game trade UI (! Trading) is forcibly enabled and visible on sender screen
+        pcall(function()
+            local pgui = local_player:FindFirstChild("PlayerGui")
+            if pgui then
+                local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
+                if t_gui then
+                    t_gui.Enabled = true
+                    local container = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container") or t_gui:FindFirstChild("Main")
+                    if container then container.Visible = true end
+                end
+            end
+        end)
+
         task_wait(0.5)
     end
 
@@ -1127,6 +1139,18 @@ local function try_trade_fish()
 
     local inventory = player_data:Get("Inventory")
     local player_data_items = inventory and inventory.Items or {}
+    
+    -- Prioritize Big, Shiny, Mutated & Heavier fish first
+    table_sort(player_data_items, function(a, b)
+        local score_a = (is_item_shiny(a) and 2 or 0) + (is_item_big(a) and 2 or 0) + (get_item_mutation(a) ~= "None" and 2 or 0)
+        local score_b = (is_item_shiny(b) and 2 or 0) + (is_item_big(b) and 2 or 0) + (get_item_mutation(b) ~= "None" and 2 or 0)
+        if score_a ~= score_b then
+            return score_a > score_b
+        end
+        local w_a = (a and a.Metadata and a.Metadata.Weight) or 0
+        local w_b = (b and b.Metadata and b.Metadata.Weight) or 0
+        return w_a > w_b
+    end)
     
     local items_to_trade = {}
     local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
@@ -1281,6 +1305,18 @@ local function try_trade_rarity()
 
     local inventory = player_data:Get("Inventory")
     local player_data_items = inventory and inventory.Items or {}
+    
+    -- Prioritize Big, Shiny, Mutated & Heavier fish first
+    table_sort(player_data_items, function(a, b)
+        local score_a = (is_item_shiny(a) and 2 or 0) + (is_item_big(a) and 2 or 0) + (get_item_mutation(a) ~= "None" and 2 or 0)
+        local score_b = (is_item_shiny(b) and 2 or 0) + (is_item_big(b) and 2 or 0) + (get_item_mutation(b) ~= "None" and 2 or 0)
+        if score_a ~= score_b then
+            return score_a > score_b
+        end
+        local w_a = (a and a.Metadata and a.Metadata.Weight) or 0
+        local w_b = (b and b.Metadata and b.Metadata.Weight) or 0
+        return w_a > w_b
+    end)
     
     local items_to_trade = {}
     local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
