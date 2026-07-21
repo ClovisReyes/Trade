@@ -1005,12 +1005,20 @@ end
 local function get_mode_display_name(mode_name)
     if mode_name == "enchant" then
         if #config.selected_items > 0 and config.selected_items[1] ~= "All" then
-            return config.selected_items[1]
+            local names = {}
+            for _, item in ipairs(config.selected_items) do
+                table_insert(names, item)
+            end
+            if #names > 0 then return table_concat(names, "/") end
         end
         return "Enchant Stone"
     elseif mode_name == "fish" then
         if #config.selected_fish > 0 and config.selected_fish[1] ~= "All" then
-            return config.selected_fish[1]
+            local names = {}
+            for _, fish in ipairs(config.selected_fish) do
+                table_insert(names, fish)
+            end
+            if #names > 0 then return table_concat(names, "/") end
         end
         return "Fish"
     elseif mode_name == "rarity" then
@@ -1281,10 +1289,7 @@ local function try_trade_fish()
     end
 
     if #items_to_trade == 0 then
-        local item_name = "fish"
-        if #config.selected_fish > 0 then
-            item_name = config.selected_fish[1]
-        end
+        local item_name = get_mode_display_name("fish")
         set_status_msg("fish", "Error: Tidak ada lagi " .. item_name .. " di inventory")
         config.enabled = false
         if byname_toggle_ctrl then
@@ -1438,15 +1443,7 @@ local function try_trade_rarity()
     end
 
     if #items_to_trade == 0 then
-        local rarity_name = "matching rarity"
-        if #config.selected_tiers > 0 then
-            local names = {}
-            for _, tier in ipairs(config.selected_tiers) do
-                local t_name = tier_mapping[tier]
-                if t_name then table_insert(names, t_name:sub(1,1):upper() .. t_name:sub(2)) end
-            end
-            if #names > 0 then rarity_name = table_concat(names, "/") end
-        end
+        local rarity_name = get_mode_display_name("rarity")
         set_status_msg("rarity", "Error: Tidak ada lagi " .. rarity_name .. " di inventory")
         config.enabled = false
         if rarity_toggle_ctrl then
@@ -1599,10 +1596,7 @@ local function try_trade_enchant()
     end
 
     if #items_to_trade == 0 then
-        local item_name = "Enchant Stone"
-        if #config.selected_items > 0 then
-            item_name = config.selected_items[1]
-        end
+        local item_name = get_mode_display_name("enchant")
         set_status_msg("enchant", "Error: Tidak ada lagi " .. item_name .. " di inventory")
         config.enabled = false
         if enchant_toggle_ctrl then
@@ -3131,20 +3125,41 @@ local function create_ui()
         floating_btn.Visible = false
     end)
 
-    -- Minimize Button in Header Bar
+    -- Minimize Button in Header Bar (Enlarged & Easy-to-click)
     local min_btn = Instance.new("TextButton")
     min_btn.Name = "MinimizeBtn"
-    min_btn.Size = UDim2.new(0, 24, 0, 24)
-    min_btn.Position = UDim2.new(1, -28, 0.5, -12)
-    min_btn.BackgroundTransparency = 1
-    min_btn.Text = "-"
-    min_btn.TextColor3 = MUTED_COLOR
-    min_btn.TextSize = 16
+    min_btn.Size = UDim2.new(0, 36, 0, 22)
+    min_btn.Position = UDim2.new(1, -42, 0.5, -11)
+    min_btn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+    min_btn.BackgroundTransparency = 0.2
+    min_btn.Text = "─"
+    min_btn.TextColor3 = Color3.fromRGB(240, 240, 240)
+    min_btn.TextSize = 14
     min_btn.FontFace = font_bold
     min_btn.Active = true
     min_btn.Modal = true
     min_btn.ZIndex = 6
     min_btn.Parent = header
+
+    local min_corner = Instance.new("UICorner")
+    min_corner.CornerRadius = UDim.new(0, 5)
+    min_corner.Parent = min_btn
+
+    local min_stroke = Instance.new("UIStroke")
+    min_stroke.Color = Color3.fromRGB(55, 55, 55)
+    min_stroke.Thickness = 1
+    min_stroke.Parent = min_btn
+
+    min_btn.MouseEnter:Connect(function()
+        min_btn.BackgroundColor3 = Color3.fromRGB(255, 0, 255)
+        min_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        min_stroke.Color = Color3.fromRGB(255, 0, 255)
+    end)
+    min_btn.MouseLeave:Connect(function()
+        min_btn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+        min_btn.TextColor3 = Color3.fromRGB(240, 240, 240)
+        min_stroke.Color = Color3.fromRGB(55, 55, 55)
+    end)
 
     min_btn.MouseButton1Click:Connect(function()
         main.Visible = false
