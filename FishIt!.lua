@@ -1041,6 +1041,9 @@ local function start_trade_session(target_player, mode)
             set_status_msg(mode, "Trade request timed out")
             return false, "Timeout"
         end
+
+        -- Delay 0.5s for native trade UI (! Trading) to initialize and show on sender screen
+        task_wait(0.5)
     end
 
     return true
@@ -1570,12 +1573,12 @@ end
 
 local function choose_fishes_by_range(fish_list, target_amount, max_slots)
     max_slots = max_slots or 20
-    -- Sort fish: Special score first, but then lower price first so multiple fish fill the 20 slots instead of 1 giant fish
+    -- Sort fish: Special score first (Big/Shiny/Mutations), then HIGHEST sell price first!
     table_sort(fish_list, function(a, b)
         if a.SpecialScore ~= b.SpecialScore then
             return a.SpecialScore > b.SpecialScore
         end
-        return a.SellPrice < b.SellPrice
+        return a.SellPrice > b.SellPrice
     end)
 
     local selected_fishes = {}
@@ -1587,13 +1590,13 @@ local function choose_fishes_by_range(fish_list, target_amount, max_slots)
         table_insert(selected_fishes, fish)
         accumulated_amount = accumulated_amount + fish.SellPrice
 
-        -- If target_amount is 0, fill all 20 slots. If target_amount > 0, stop when effective target met or 20 slots reached
+        -- Stop if effective target is met OR 20 slots reached
         if (effective_target > 0 and accumulated_amount >= effective_target) or #selected_fishes >= max_slots then
             break
         end
     end
 
-    -- If 1 fish alone was picked because it exceeded target, but we still have slots and target_amount is 0 or target is large, fill up to 20 slots
+    -- If target_amount is 0 (unlimited mode), fill up to 20 slots
     if target_amount == 0 and #selected_fishes < max_slots then
         for _, fish in ipairs(fish_list) do
             if #selected_fishes >= max_slots then break end
@@ -1651,7 +1654,7 @@ local function try_trade_by_coin()
                     local special_score = 0
                     if is_shiny then special_score = special_score + 2 end
                     if is_mutation then special_score = special_score + 2 end
-                    if is_big then special_score = special_score + 1 end
+                    if is_big then special_score = special_score + 2 end
                     if is_sparkling then special_score = special_score + 1 end
 
                     local sell_price = 0
