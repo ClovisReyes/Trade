@@ -1966,21 +1966,29 @@ end)
 
 --#region UI Rendering
 local function create_ui()
-    local parent_gui
-    local success_core = pcall(function()
-        parent_gui = gethui and gethui() or game:GetService("CoreGui")
-    end)
-    if not success_core or not parent_gui then
+    local parent_gui = nil
+    if gethui then
+        pcall(function() parent_gui = gethui() end)
+    end
+    if not parent_gui then
+        pcall(function()
+            local test_gui = Instance.new("ScreenGui")
+            test_gui.Parent = game:GetService("CoreGui")
+            test_gui:Destroy()
+            parent_gui = game:GetService("CoreGui")
+        end)
+    end
+    if not parent_gui then
         parent_gui = local_player:WaitForChild("PlayerGui")
     end
 
-    -- Destroy old GUIs in CoreGui/gethui
+    -- Destroy old GUIs in parent_gui and PlayerGui
     pcall(function()
-        local core = gethui and gethui() or game:GetService("CoreGui")
-        local old = core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
-        if old then old:Destroy() end
+        if parent_gui then
+            local old = parent_gui:FindFirstChild("NoirHub_AutoTrade") or parent_gui:FindFirstChild("AutoTrade")
+            if old then old:Destroy() end
+        end
     end)
-    -- Destroy old GUIs in PlayerGui
     pcall(function()
         local pgui = local_player:FindFirstChild("PlayerGui")
         local old = pgui and (pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
@@ -1993,18 +2001,23 @@ local function create_ui()
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 2147483647
-    gui.Parent = parent_gui
+    
+    local success_parent = pcall(function()
+        gui.Parent = parent_gui
+    end)
+    if not success_parent then
+        parent_gui = local_player:WaitForChild("PlayerGui")
+        gui.Parent = parent_gui
+    end
 
-    -- Periodically force UI to top and keep it enabled to bypass game script disabling
+    -- Periodically force UI to stay enabled without resetting parent
     task_spawn(function()
         while _G.NoirHub_AutoTrade_ScriptID == script_id do
             task_wait(1)
             pcall(function()
-                if gui and gui.Parent == parent_gui then
+                if gui and gui.Parent then
                     gui.Enabled = true
                     gui.DisplayOrder = 2147483647
-                    gui.Parent = nil
-                    gui.Parent = parent_gui
                 end
             end)
         end
@@ -2135,8 +2148,12 @@ local function create_ui()
     local TOGGLE_ON_COLOR = Color3.fromRGB(255, 0, 255) -- Magenta active state
     local INPUT_BG_COLOR = Color3.fromRGB(28, 28, 28)
 
-    local font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-    local font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    local font_face = Font.fromEnum(Enum.Font.SourceSans)
+    local font_bold = Font.fromEnum(Enum.Font.SourceSansBold)
+    pcall(function()
+        font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    end)
 
     local ply_dropdown_btn
     local target_lbl
@@ -4504,8 +4521,9 @@ end
 -- Run initialization
 local success, err = pcall(create_ui)
 if not success then
-    warn("UI Creation Error: " .. tostring(err))
-    print("UI Creation Error: " .. tostring(err))
+    local err_msg = "UI Creation Error: " .. tostring(err)
+    warn(err_msg)
+    log_debug(err_msg)
 end
 pcall(log_inventory_fish)
 pcall(function() toggle_auto_accept(config.auto_accept_enabled) end)
