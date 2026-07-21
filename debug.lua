@@ -1,475 +1,224 @@
--- NØIR Hub - Debug Path Finder
--- Standalone Debug Tool
+-- NØIR Hub - Simple Fish Price Debugger & Checker
+-- Run this in Roblox executor to check exact fish prices and copy to clipboard
 
 local players = game:GetService("Players")
 local local_player = players.LocalPlayer
-while not local_player do
-    task.wait(0.1)
-    local_player = players.LocalPlayer
-end
+local replicated_storage = game:GetService("ReplicatedStorage")
 
--- Safe Time Retrieval Fallback System (Guards against executor os.date crashes)
-local function get_time_string()
-    local success_time, result = pcall(function()
-        return DateTime.now():FormatLocalTime("HH:mm:ss", "en-us")
-    end)
-    if success_time and result then return result end
-    
-    local success_os, result_os = pcall(function()
-        return os.date("%X")
-    end)
-    if success_os and result_os then return result_os end
-    
-    local t = tick()
-    local hours = math.floor(t / 3600) % 24
-    local mins = math.floor(t / 60) % 60
-    local secs = math.floor(t) % 60
-    return string.format("%02d:%02d:%02d", hours, mins, secs)
-end
+-- Wait for PlayerGui
+local player_gui = local_player:WaitForChild("PlayerGui", 10) or local_player:FindFirstChildOfClass("PlayerGui")
+local parent_gui = gethui and gethui() or game:GetService("CoreGui") or player_gui
 
-local success, err = pcall(function()
-    -- WaitForChild ensures the PlayerGui folder is fully initialized before accessing
-    local player_gui = local_player:WaitForChild("PlayerGui", 10)
-    if not player_gui then
-        player_gui = local_player:FindFirstChildOfClass("PlayerGui")
-    end
-    if not player_gui then
-        error("PlayerGui folder could not be found or loaded!")
-    end
+-- Destroy old UI if exists
+local old = parent_gui:FindFirstChild("SimplePriceDebugger")
+if old then old:Destroy() end
 
-    -- Clean up any existing debug UI
-    local old_gui = player_gui:FindFirstChild("NoirNotifDebugger")
-    if old_gui then old_gui:Destroy() end
+-- ScreenGui Setup
+local gui = Instance.new("ScreenGui")
+gui.Name = "SimplePriceDebugger"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.DisplayOrder = 2147483647
+gui.Parent = parent_gui
 
-    -- ScreenGui Setup
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "NoirNotifDebugger"
-    gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
-    gui.DisplayOrder = 2147483647
-    gui.Parent = player_gui
+-- Main Small Floating Window
+local frame = Instance.new("Frame")
+frame.Name = "Main"
+frame.Size = UDim2.new(0, 380, 0, 260)
+frame.Position = UDim2.new(0.5, -190, 0.3, 0)
+frame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
 
-    -- Main Container
-    local main_frame = Instance.new("Frame")
-    main_frame.Name = "MainFrame"
-    main_frame.Size = UDim2.new(0, 480, 0, 360)
-    main_frame.Position = UDim2.new(0.5, -240, 0.2, 0)
-    main_frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    main_frame.Active = true
-    main_frame.Draggable = true
-    main_frame.Parent = gui
+local frame_corner = Instance.new("UICorner")
+frame_corner.CornerRadius = UDim.new(0, 8)
+frame_corner.Parent = frame
 
-    local main_corner = Instance.new("UICorner")
-    main_corner.CornerRadius = UDim.new(0, 8)
-    main_corner.Parent = main_frame
+local frame_stroke = Instance.new("UIStroke")
+frame_stroke.Color = Color3.fromRGB(255, 0, 255) -- Magenta Accent
+frame_stroke.Thickness = 1.5
+frame_stroke.Parent = frame
 
-    local main_stroke = Instance.new("UIStroke")
-    main_stroke.Color = Color3.fromRGB(192, 0, 192) -- Pink Accent
-    main_stroke.Thickness = 1.5
-    main_stroke.Parent = main_frame
+-- Title
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -40, 0, 28)
+title.Position = UDim2.new(0, 10, 0, 2)
+title.BackgroundTransparency = 1
+title.Text = "Fish Price Debugger"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextSize = 12
+title.Font = Enum.Font.SourceSansBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = frame
 
-    -- Title Bar
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 30)
-    title.BackgroundTransparency = 1
-    title.Text = "  NØIR Hub - Debug Path Finder & Tester"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 12
-    title.Font = Enum.Font.SourceSansBold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = main_frame
+-- Close Button
+local close_btn = Instance.new("TextButton")
+close_btn.Size = UDim2.new(0, 20, 0, 20)
+close_btn.Position = UDim2.new(1, -25, 0, 5)
+close_btn.BackgroundColor3 = Color3.fromRGB(40, 15, 15)
+close_btn.Text = "X"
+close_btn.TextColor3 = Color3.fromRGB(255, 80, 80)
+close_btn.TextSize = 11
+close_btn.Font = Enum.Font.SourceSansBold
+close_btn.Parent = frame
 
-    -- Close Button
-    local close_btn = Instance.new("TextButton")
-    close_btn.Size = UDim2.new(0, 24, 0, 24)
-    close_btn.Position = UDim2.new(1, -28, 0, 3)
-    close_btn.BackgroundColor3 = Color3.fromRGB(30, 15, 15)
-    close_btn.Text = "X"
-    close_btn.TextColor3 = Color3.fromRGB(240, 70, 70)
-    close_btn.TextSize = 12
-    close_btn.Font = Enum.Font.SourceSansBold
-    close_btn.Parent = main_frame
+local close_c = Instance.new("UICorner")
+close_c.CornerRadius = UDim.new(0.5, 0)
+close_c.Parent = close_btn
 
-    local close_c = Instance.new("UICorner")
-    close_c.CornerRadius = UDim.new(0.5, 0)
-    close_c.Parent = close_btn
-
-    close_btn.Activated:Connect(function()
-        gui:Destroy()
-    end)
-
-    -- Status Label
-    local status_lbl = Instance.new("TextLabel")
-    status_lbl.Size = UDim2.new(1, -20, 0, 30)
-    status_lbl.Position = UDim2.new(0, 10, 0, 35)
-    status_lbl.BackgroundTransparency = 1
-    status_lbl.Text = "Status: Monitoring clicks and trade prompts..."
-    status_lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-    status_lbl.TextSize = 10
-    status_lbl.Font = Enum.Font.SourceSans
-    status_lbl.TextXAlignment = Enum.TextXAlignment.Left
-    status_lbl.TextWrapped = true
-    status_lbl.Parent = main_frame
-
-    -- Path TextBox (for easy copying/viewing)
-    local path_box = Instance.new("TextBox")
-    path_box.Size = UDim2.new(1, -20, 0, 235)
-    path_box.Position = UDim2.new(0, 10, 0, 70)
-    path_box.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    path_box.Text = "History is empty. Click any elements..."
-    path_box.TextColor3 = Color3.fromRGB(150, 150, 150)
-    path_box.TextSize = 9
-    path_box.Font = Enum.Font.Code
-    path_box.TextWrapped = true
-    path_box.ClearTextOnFocus = false
-    path_box.TextEditable = false
-    path_box.MultiLine = true
-    path_box.TextXAlignment = Enum.TextXAlignment.Left
-    path_box.TextYAlignment = Enum.TextYAlignment.Top
-    path_box.Parent = main_frame
-
-    local path_c = Instance.new("UICorner")
-    path_c.CornerRadius = UDim.new(0, 4)
-    path_c.Parent = path_box
-
-    local path_stroke = Instance.new("UIStroke")
-    path_stroke.Color = Color3.fromRGB(45, 45, 45)
-    path_stroke.Thickness = 1
-    path_stroke.Parent = path_box
-
-    -- Copy Button
-    local copy_btn = Instance.new("TextButton")
-    copy_btn.Size = UDim2.new(0, 225, 0, 30)
-    copy_btn.Position = UDim2.new(0, 10, 0, 315)
-    copy_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
-    copy_btn.Text = "Copy Path to Clipboard"
-    copy_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    copy_btn.TextSize = 10
-    copy_btn.Font = Enum.Font.SourceSansBold
-    copy_btn.Parent = main_frame
-
-    local copy_c = Instance.new("UICorner")
-    copy_c.CornerRadius = UDim.new(0, 4)
-    copy_c.Parent = copy_btn
-
-    -- Clear History Button
-    local clear_btn = Instance.new("TextButton")
-    clear_btn.Size = UDim2.new(0, 225, 0, 30)
-    clear_btn.Position = UDim2.new(0, 245, 0, 315)
-    clear_btn.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
-    clear_btn.Text = "Clear History"
-    clear_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    clear_btn.TextSize = 10
-    clear_btn.Font = Enum.Font.SourceSansBold
-    clear_btn.Parent = main_frame
-
-    local clear_c = Instance.new("UICorner")
-    clear_c.CornerRadius = UDim.new(0, 4)
-    clear_c.Parent = clear_btn
-
-    -- Dynamic Button Effects (Copy)
-    copy_btn.MouseEnter:Connect(function()
-        copy_btn.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
-    end)
-    copy_btn.MouseLeave:Connect(function()
-        copy_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
-    end)
-
-    -- Dynamic Button Effects (Clear)
-    clear_btn.MouseEnter:Connect(function()
-        clear_btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    end)
-    clear_btn.MouseLeave:Connect(function()
-        clear_btn.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
-    end)
-
-    -- Click GUI Button helper
-    local function click_gui_button(btn)
-        if not btn then return end
-
-        local mock_input = {
-            UserInputType = Enum.UserInputType.MouseButton1,
-            UserInputState = Enum.UserInputState.Begin,
-            Position = Vector3.new(0, 0, 0)
-        }
-
-        local function fire(target)
-            pcall(function()
-                if firesignal then
-                    firesignal(target.MouseButton1Click)
-                    firesignal(target.MouseButton1Down)
-                    firesignal(target.MouseButton1Up)
-                    firesignal(target.Activated)
-                    firesignal(target.InputBegan, mock_input)
-                end
-            end)
-            pcall(function()
-                if getconnections then
-                    for _, event_name in ipairs({"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated"}) do
-                        local event = target[event_name]
-                        if event then
-                            for _, conn in ipairs(getconnections(event)) do
-                                conn:Fire()
-                            end
-                        end
-                    end
-                    local ib = target.InputBegan
-                    if ib then
-                        for _, conn in ipairs(getconnections(ib)) do
-                            conn:Fire(mock_input)
-                        end
-                    end
-                end
-            end)
-        end
-
-        fire(btn)
-        for _, desc in ipairs(btn:GetDescendants()) do
-            fire(desc)
-        end
-    end
-
-    -- History Log Registry
-    local click_history = {}
-    local max_history = 15
-
-    local function update_history_display(success_color)
-        if #click_history == 0 then
-            path_box.Text = "History is empty. Click any elements..."
-            path_box.TextColor3 = Color3.fromRGB(150, 150, 150)
-            return
-        end
-        path_box.Text = table.concat(click_history, "\n\n========================\n\n")
-        path_box.TextColor3 = success_color or Color3.fromRGB(0, 191, 255)
-    end
-
-    copy_btn.Activated:Connect(function()
-        local current_path = path_box.Text
-        if current_path ~= "History is empty. Click any elements..." and current_path ~= "Searching..." then
-            local copy_success = pcall(function()
-                setclipboard(current_path)
-            end)
-            if copy_success then
-                copy_btn.Text = "Copied successfully!"
-            else
-                copy_btn.Text = "Failed to auto-copy. Please select text inside box above."
-            end
-            task.wait(2)
-            copy_btn.Text = "Copy Path to Clipboard"
-        end
-    end)
-
-    clear_btn.Activated:Connect(function()
-        table.clear(click_history)
-        update_history_display()
-        status_lbl.Text = "Status: History cleared!"
-        status_lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-        
-        clear_btn.Text = "History Cleared!"
-        task.wait(1.5)
-        clear_btn.Text = "Clear History"
-    end)
-
-    -- Add Startup Diagnostics directly to screen textbox
-    local time_now = get_time_string()
-    local diag_entry = string.format("[%s] Startup Diagnostics:\n  - firesignal: %s\n  - getconnections: %s", 
-        time_now,
-        tostring(firesignal ~= nil),
-        tostring(getconnections ~= nil)
-    )
-    table.insert(click_history, diag_entry)
-    update_history_display()
-
-    -- Notification Scanning Logic
-    local function check_descendant(desc)
-        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-            local text = desc.Text or ""
-            if text:lower():find("completed!") and (text:lower():find("trade with") or text:lower():find("trade completed")) then
-                local full_path = desc:GetFullName()
-                local time_str = get_time_string()
-                local log_entry = string.format("[%s] Notification Detected:\n  - %s (%s)\n  Text: \"%s\"", time_str, full_path, desc.ClassName, text)
-                
-                table.insert(click_history, 1, log_entry)
-                if #click_history > max_history then
-                    table.remove(click_history)
-                end
-                update_history_display(Color3.fromRGB(0, 255, 127))
-                
-                status_lbl.Text = "Status: Notification Detected! Path copied."
-                status_lbl.TextColor3 = Color3.fromRGB(0, 255, 127)
-                
-                pcall(function()
-                    local clone = desc:Clone()
-                    clone.Name = "Noir_Notification_Debug"
-                    clone.Parent = workspace
-                end)
-                
-                pcall(function()
-                    setclipboard(full_path)
-                end)
-            end
-        end
-    end
-
-    -- Real-time background loop to monitor active Prompt visibility and handle auto-clicks
-    task.spawn(function()
-        local last_state = false
-        while true do
-            task.wait(0.1)
-            pcall(function()
-                local prompt_gui = player_gui:FindFirstChild("Prompt")
-                local blackout = prompt_gui and prompt_gui:FindFirstChild("Blackout")
-                local options = blackout and blackout:FindFirstChild("Options")
-                local yes_btn = options and options:FindFirstChild("Yes")
-                
-                local is_active = false
-                if prompt_gui and prompt_gui.Enabled and blackout and blackout.Visible and yes_btn and yes_btn.Visible and yes_btn.AbsoluteSize.X > 0 then
-                    is_active = true
-                end
-                
-                if is_active and not last_state then
-                    last_state = true
-                    task.wait(0.2) -- Wait for text population
-                    
-                    local is_trade = false
-                    local text_found = ""
-                    for _, child in ipairs(prompt_gui:GetDescendants()) do
-                        if child:IsA("TextLabel") then
-                            local text = child.Text or ""
-                            if text:lower():find("trade") or text:lower():find("accept") then
-                                is_trade = true
-                                text_found = text
-                                break
-                            end
-                        end
-                    end
-                    
-                    if is_trade then
-                        local time_detect = get_time_string()
-                        local log_entry = string.format("[%s] Trade Prompt Detected!\n  Path: %s\n  Prompt Text: \"%s\"\n  Action: Auto-clicking Yes + descendants...", 
-                            time_detect, yes_btn:GetFullName(), text_found)
-                        
-                        table.insert(click_history, 1, log_entry)
-                        if #click_history > max_history then
-                            table.remove(click_history)
-                        end
-                        update_history_display(Color3.fromRGB(255, 165, 0))
-                        
-                        task.wait(0.1)
-                        click_gui_button(yes_btn)
-                        
-                        local time_done = get_time_string()
-                        local done_entry = string.format("[%s] Click action completed on Yes button + descendants.", time_done)
-                        table.insert(click_history, 1, done_entry)
-                        if #click_history > max_history then
-                            table.remove(click_history)
-                        end
-                        update_history_display(Color3.fromRGB(0, 255, 127))
-                    end
-                elseif not is_active then
-                    last_state = false
-                end
-            end)
-        end
-    end)
-
-    -- Scan PlayerGui for notifications
-    for _, desc in ipairs(player_gui:GetDescendants()) do
-        check_descendant(desc)
-    end
-
-    -- Connections Registry for Cleanup
-    local connections = {}
-
-    -- Notification Connection
-    local playergui_conn = player_gui.DescendantAdded:Connect(function(desc)
-        check_descendant(desc)
-    end)
-    table.insert(connections, playergui_conn)
-
-    -- Single Global Mouse Click / Touch Tap Listener (High Performance, 0% CPU Overhead)
-    local user_input_service = game:GetService("UserInputService")
-    local click_conn = user_input_service.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            local pos = input.Position
-            
-            -- Get all GUI elements at click position under PlayerGui
-            local gui_objects = player_gui:GetGuiObjectsAtPosition(pos.X, pos.Y)
-            
-            -- Check if we clicked our own debugger UI first
-            local clicked_self = false
-            for _, obj in ipairs(gui_objects) do
-                if obj:IsDescendantOf(gui) then
-                    clicked_self = true
-                    break
-                end
-            end
-            
-            if clicked_self then
-                return -- Ignore clicks on the debugger UI itself
-            end
-            
-            local clicked_paths = {}
-            local count = 0
-            for _, obj in ipairs(gui_objects) do
-                if not obj:IsDescendantOf(gui) then
-                    count = count + 1
-                    table.insert(clicked_paths, string.format("  %d. %s (%s)", count, obj:GetFullName(), obj.ClassName))
-                end
-            end
-            
-            if count > 0 then
-                local time_str = get_time_string()
-                local log_entry = string.format("[%s] Coordinates Click:\n%s", time_str, table.concat(clicked_paths, "\n"))
-                
-                table.insert(click_history, 1, log_entry)
-                if #click_history > max_history then
-                    table.remove(click_history)
-                end
-                update_history_display(Color3.fromRGB(0, 191, 255))
-                
-                status_lbl.Text = "Status: " .. count .. " element(s) logged under cursor!"
-                status_lbl.TextColor3 = Color3.fromRGB(0, 191, 255)
-                
-                -- Copy the topmost clicked element path to clipboard
-                local topmost_obj = nil
-                for _, obj in ipairs(gui_objects) do
-                    if not obj:IsDescendantOf(gui) then
-                        topmost_obj = obj
-                        break
-                    end
-                end
-                if topmost_obj then
-                    pcall(function()
-                        setclipboard(topmost_obj:GetFullName())
-                    end)
-                end
-            else
-                local time_str = get_time_string()
-                local log_entry = string.format("[%s] Coordinates Click:\n  - No elements found at clicked position.", time_str)
-                
-                table.insert(click_history, 1, log_entry)
-                if #click_history > max_history then
-                    table.remove(click_history)
-                end
-                update_history_display(Color3.fromRGB(150, 150, 150))
-                
-                status_lbl.Text = "Status: Click registered but no element found."
-                status_lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-            end
-        end
-    end)
-    table.insert(connections, click_conn)
-
-    -- Clean up connections when UI is destroyed
-    gui.Destroying:Connect(function()
-        for _, conn in ipairs(connections) do
-            pcall(function() conn:Disconnect() end)
-        end
-    end)
+close_btn.Activated:Connect(function()
+    gui:Destroy()
 end)
 
-if not success then
-    warn("Noir Debugger Startup Error: " .. tostring(err))
-    print("Noir Debugger Startup Error: " .. tostring(err))
-end
+-- Text Area (MultiLine Output Box)
+local text_box = Instance.new("TextBox")
+text_box.Size = UDim2.new(1, -20, 0, 175)
+text_box.Position = UDim2.new(0, 10, 0, 32)
+text_box.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+text_box.Text = "Scanning inventory fish & prices..."
+text_box.TextColor3 = Color3.fromRGB(0, 230, 255)
+text_box.TextSize = 9
+text_box.Font = Enum.Font.Code
+text_box.MultiLine = true
+text_box.ClearTextOnFocus = false
+text_box.TextEditable = false
+text_box.TextXAlignment = Enum.TextXAlignment.Left
+text_box.TextYAlignment = Enum.TextYAlignment.Top
+text_box.Parent = frame
+
+local text_c = Instance.new("UICorner")
+text_c.CornerRadius = UDim.new(0, 4)
+text_c.Parent = text_box
+
+-- Copy Button
+local copy_btn = Instance.new("TextButton")
+copy_btn.Size = UDim2.new(1, -20, 0, 35)
+copy_btn.Position = UDim2.new(0, 10, 0, 215)
+copy_btn.BackgroundColor3 = Color3.fromRGB(255, 0, 255)
+copy_btn.Text = "COPY FISH PRICES TO CLIPBOARD"
+copy_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+copy_btn.TextSize = 11
+copy_btn.Font = Enum.Font.SourceSansBold
+copy_btn.Parent = frame
+
+local copy_c = Instance.new("UICorner")
+copy_c.CornerRadius = UDim.new(0, 5)
+copy_c.Parent = copy_btn
+
+copy_btn.Activated:Connect(function()
+    if setclipboard then
+        setclipboard(text_box.Text)
+        copy_btn.Text = "COPIED SUCCESSFULLY!"
+    else
+        copy_btn.Text = "FAILED (Select text inside box manually)"
+    end
+    task.wait(2)
+    copy_btn.Text = "COPY FISH PRICES TO CLIPBOARD"
+end)
+
+-- Main Logic: Fetch Inventory Fish & Price Information
+task.spawn(function()
+    local lines = {}
+    table.insert(lines, "=== FISH PRICE DEBUG REPORT ===")
+    
+    local replion_mod, item_utility, vendor_utility
+    pcall(function()
+        replion_mod = require(replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"))
+    end)
+    pcall(function()
+        item_utility = require(replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility"))
+    end)
+    pcall(function()
+        vendor_utility = require(replicated_storage:WaitForChild("Shared"):WaitForChild("VendorUtility"))
+    end)
+
+    local player_data
+    pcall(function()
+        player_data = replion_mod and replion_mod.Client:WaitReplion("Data")
+    end)
+
+    if not player_data then
+        table.insert(lines, "Error: Player data (Replion) could not be loaded!")
+        text_box.Text = table.concat(lines, "\n")
+        return
+    end
+
+    local inventory = player_data:Get("Inventory")
+    local items = inventory and inventory.Items or {}
+
+    local fish_count = 0
+    local total_value = 0
+
+    for idx, item in ipairs(items) do
+        if item and item.Id then
+            local data
+            pcall(function()
+                data = item_utility and item_utility:GetItemData(item.Id)
+            end)
+
+            local item_type = data and data.Data and data.Data.Type
+            if item_type == "Fish" then
+                fish_count = fish_count + 1
+                local fish_name = (data and data.Data and data.Data.Name) or "Unknown Fish"
+
+                -- Test Price Resolution Methods
+                local v_price = nil
+                pcall(function() v_price = vendor_utility:GetSellPrice(item) end)
+                if not v_price then
+                    pcall(function() v_price = vendor_utility.GetSellPrice(item) end)
+                end
+
+                local base_price = data and data.Data and (data.Data.SellPrice or data.Data.Price) or 0
+                local final_price = v_price or base_price or 0
+
+                total_value = total_value + final_price
+
+                -- Comprehensive Mutation & Variant Detection
+                local mutation_detected = nil
+
+                if item.Mutation and item.Mutation ~= "" and item.Mutation ~= "None" then
+                    mutation_detected = tostring(item.Mutation)
+                elseif item.Variant and item.Variant ~= "" and item.Variant ~= "None" then
+                    mutation_detected = tostring(item.Variant)
+                elseif item.VariantId and item.VariantId ~= "" then
+                    mutation_detected = "VariantId: " .. tostring(item.VariantId)
+                elseif item.Mutations and type(item.Mutations) == "table" and #item.Mutations > 0 then
+                    mutation_detected = table.concat(item.Mutations, ", ")
+                end
+
+                local is_shiny = (item.Shiny == true or item.Shiny == 1 or (item.Shiny and tostring(item.Shiny):lower() ~= "false")) and " [Shiny]" or ""
+                local is_big = (item.Big == true or item.Big == 1 or (item.Big and tostring(item.Big):lower() ~= "false")) and " [Big]" or ""
+                local is_sparkling = (item.Sparkling == true or item.Sparkling == 1) and " [Sparkling]" or ""
+                local fav = item.Favorited and " [Fav]" or ""
+                local weight = item.Weight and string.format(" (Weight: %.1fkg)", tonumber(item.Weight) or 0) or ""
+
+                -- Full Keys Dump for Deep Inspection
+                local item_dump_str = ""
+                local dump_ok, dump_res = pcall(function()
+                    local http = game:GetService("HttpService")
+                    return http:JSONEncode(item)
+                end)
+                if dump_ok and dump_res then
+                    item_dump_str = " | RAW: " .. dump_res
+                else
+                    local k_list = {}
+                    for k, v in pairs(item) do
+                        table_insert(k_list, tostring(k) .. "=" .. tostring(v))
+                    end
+                    item_dump_str = " | KEYS: {" .. table_concat(k_list, ", ") .. "}"
+                end
+
+                local mut_str = mutation_detected or "None"
+
+                table.insert(lines, string.format("[%d] %s%s%s%s%s%s | Price: %d (Base: %d) | Mut: %s%s", 
+                    fish_count, fish_name, is_shiny, is_big, is_sparkling, fav, weight, final_price, base_price, mut_str, item_dump_str))
+            end
+        end
+    end
+
+    table.insert(lines, "==============================")
+    table.insert(lines, string.format("TOTAL FISH: %d | TOTAL ESTIMATED VALUE: %d coins", fish_count, total_value))
+
+    text_box.Text = table.concat(lines, "\n")
+end)
