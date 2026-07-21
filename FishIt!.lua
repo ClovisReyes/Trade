@@ -1116,7 +1116,7 @@ local function try_trade_fish()
     local player_data_items = inventory and inventory.Items or {}
     
     local items_to_trade = {}
-    local limit = config.quantity > 0 and (config.quantity - total_sent) or 999999
+    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
     for _, fish_item in ipairs(player_data_items) do
         if #items_to_trade >= limit then
             break
@@ -1164,12 +1164,23 @@ local function try_trade_fish()
     for _, item in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
-        local fish_data = item_utility:GetItemData(item.Id)
-        local add_success, add_err = trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
+        local add_success = false
+        for attempt = 1, 3 do
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
+            end)
+            if ok and res then
+                add_success = true
+                break
+            end
+            task_wait(0.1)
+        end
+
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
+        task_wait(0.08)
     end
 
     if #added_items > 0 and local_player:GetAttribute("IsTrading") then
@@ -1267,7 +1278,7 @@ local function try_trade_rarity()
     local player_data_items = inventory and inventory.Items or {}
     
     local items_to_trade = {}
-    local limit = config.quantity > 0 and (config.quantity - total_sent) or 999999
+    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
     for _, fish_item in ipairs(player_data_items) do
         if #items_to_trade >= limit then
             break
@@ -1320,12 +1331,23 @@ local function try_trade_rarity()
     for _, item in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
-        local fish_data = item_utility:GetItemData(item.Id)
-        local add_success, add_err = trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
+        local add_success = false
+        for attempt = 1, 3 do
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
+            end)
+            if ok and res then
+                add_success = true
+                break
+            end
+            task_wait(0.1)
+        end
+
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
+        task_wait(0.08)
     end
 
     if #added_items > 0 and local_player:GetAttribute("IsTrading") then
@@ -1423,7 +1445,7 @@ local function try_trade_enchant()
     local player_data_items = inventory and inventory.Items or {}
     
     local items_to_trade = {}
-    local limit = config.quantity > 0 and (config.quantity - total_sent) or 999999
+    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
     for _, item in ipairs(player_data_items) do
         if #items_to_trade >= limit then
             break
@@ -1473,11 +1495,23 @@ local function try_trade_enchant()
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
         local item_data = item_utility:GetItemData(item.Id)
-        local add_success, add_err = trade_remotes.AddItem:InvokeServer(item_data.Data.Type or "Items", item.UUID)
+        local add_success = false
+        for attempt = 1, 3 do
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer(item_data.Data.Type or "Items", item.UUID)
+            end)
+            if ok and res then
+                add_success = true
+                break
+            end
+            task_wait(0.1)
+        end
+
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
+        task_wait(0.08)
     end
 
     if #added_items > 0 and local_player:GetAttribute("IsTrading") then
@@ -1679,12 +1713,24 @@ local function try_trade_by_coin()
     for _, fish in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
         
-        local add_success, add_err = trade_remotes.AddItem:InvokeServer("Fish", fish.UUID)
+        local add_success = false
+        for attempt = 1, 3 do
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer("Fish", fish.UUID)
+            end)
+            if ok and res then
+                add_success = true
+                break
+            end
+            task_wait(0.1)
+        end
+
         if add_success then
             table_insert(cache.processed_trades, fish.UUID)
             table_insert(added_items, fish)
             added_coins = added_coins + (fish.SellPrice or 0)
         end
+        task_wait(0.08)
     end
 
     if #added_items > 0 and local_player:GetAttribute("IsTrading") then
