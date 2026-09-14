@@ -172,43 +172,21 @@ local function dismiss_trade_prompt()
             local blackout = prompt_gui:FindFirstChild("Blackout")
             local frame = prompt_gui:FindFirstChild("Frame")
 
-            -- Click decline on any active prompt buttons
+            -- Klik tombol decline jika ada prompt terbuka saat auto accept aktif
             for _, desc in ipairs(prompt_gui:GetDescendants()) do
                 if desc:IsA("GuiButton") and (desc.Name == "No" or desc.Name == "Cancel" or desc.Name == "Decline") then
                     click_gui_button(desc)
                 end
             end
 
-            -- Clean up any prompt containers inside Prompt ScreenGui
             for _, child in ipairs(prompt_gui:GetChildren()) do
                 if child.Name ~= "Blackout" and child.Name ~= "Frame" and child.Name ~= "UIListLayout" and child.Name ~= "UIGridLayout" then
                     pcall(function() child:Destroy() end)
                 end
             end
 
-            -- Clean up any trade prompt cards inside Frame
-            if frame then
-                for _, child in ipairs(frame:GetChildren()) do
-                    if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIGridLayout" and child.Name ~= "UIPadding" then
-                        local has_trade_text = false
-                        for _, desc in ipairs(child:GetDescendants()) do
-                            if desc:IsA("TextLabel") and desc.Text then
-                                local text = string_lower(desc.Text)
-                                if string_find(text, "trade", 1, true) then
-                                    has_trade_text = true
-                                    break
-                                end
-                            end
-                        end
-                        if has_trade_text or string_find(string_lower(child.Name), "trade", 1, true) then
-                            pcall(function() child:Destroy() end)
-                        end
-                    end
-                end
-                frame.Visible = false
-            end
-
             if blackout then blackout.Visible = false end
+            if frame then frame.Visible = false end
         end
     end)
 end
@@ -226,7 +204,6 @@ local function apply_prompt_visibility()
                 if frame then frame.Visible = false end
             else
                 prompt_gui.Enabled = true
-                -- Biarkan game yang mengatur Frame & Blackout saat ada offer baru, jangan paksa buka jika tidak ada offer
             end
         end
     end)
@@ -261,8 +238,10 @@ local function toggle_auto_accept(enable)
 
     config.auto_accept_enabled = enable
 
-    -- Bersihkan prompt lama agar tidak muncul sebagai ghost saat di-offkan
-    dismiss_trade_prompt()
+    if not enable then
+        dismiss_trade_prompt()
+    end
+
     apply_prompt_visibility()
 
     if status_label then
@@ -280,6 +259,10 @@ local function toggle_auto_accept(enable)
                 local prompt_gui = player_gui:FindFirstChild("Prompt")
                 if prompt_gui then
                     prompt_gui.Enabled = true
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then blackout.Visible = true end
+                    local frame = prompt_gui:FindFirstChild("Frame")
+                    if frame then frame.Visible = true end
                 end
             end)
             return
