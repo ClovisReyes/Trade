@@ -246,43 +246,64 @@ local function toggle_auto_accept(enable)
 
     config.auto_accept_enabled = enable
 
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            if blackout then
-                blackout.AnchorPoint = Vector2.new(0.5, 0.5)
-                if enable then
-                    blackout.Position = UDim2.new(10, 0, 10, 0)
-                    blackout.Visible = false
-                else
+    if not enable then
+        -- Toggle OFF: kembalikan semua ke default game, JANGAN sentuh Visible sama sekali
+        pcall(function()
+            local prompt_gui = player_gui:FindFirstChild("Prompt")
+            if prompt_gui then
+                prompt_gui.Enabled = true
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then
+                    blackout.AnchorPoint = Vector2.new(0.5, 0.5)
                     blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                    blackout.Visible = false -- Sembunyikan prompt lama saat toggle OFF, game akan mengaktifkannya saat ada offer baru
+                    -- JANGAN set Visible = false/true, biarkan game yang kontrol
+                end
+                -- Kembalikan Frame ke state default game
+                local frame = prompt_gui:FindFirstChild("Frame")
+                if frame then
+                    frame.BackgroundTransparency = 0.5 -- default game overlay
+                    frame.Active = true
+                    -- JANGAN set Visible, biarkan game yang kontrol
                 end
             end
-            local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then
-                frame.Visible = false
-                frame.BackgroundTransparency = 1
-                frame.Active = false
+        end)
+    else
+        -- Toggle ON: sembunyikan prompt
+        pcall(function()
+            local prompt_gui = player_gui:FindFirstChild("Prompt")
+            if prompt_gui then
+                prompt_gui.Enabled = false
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then
+                    blackout.Position = UDim2.new(10, 0, 10, 0)
+                    blackout.Visible = false
+                end
+                local frame = prompt_gui:FindFirstChild("Frame")
+                if frame then
+                    frame.Visible = false
+                    frame.BackgroundTransparency = 1
+                    frame.Active = false
+                end
             end
-            prompt_gui.Enabled = not enable
-        end
-    end)
+        end)
+    end
 
     if status_label then
-        status_label.Text = enable and "[v3.1] Status: Idle (Listening)" or "[v3.1] Status: Disabled"
+        status_label.Text = enable and "[v4.0] Status: Idle (Listening)" or "[v4.0] Status: Disabled"
     end
 
     if not trade_remotes then return end
 
-    -- 1. TradeOfferReceived Listener
+    -- Saat toggle OFF: JANGAN connect listener apapun, biarkan game handle sepenuhnya
+    if not enable then return end
+
+    -- 1. TradeOfferReceived Listener (HANYA saat ON)
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
         if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
         if not config.auto_accept_enabled then return end
 
         if status_label then
-            status_label.Text = "[v3.1] Status: Accepting Offer from " .. tostring(requester.Name or requester)
+            status_label.Text = "[v4.0] Status: Accepting Offer from " .. tostring(requester.Name or requester)
         end
 
         suppress_and_accept_prompt()
@@ -300,13 +321,11 @@ local function toggle_auto_accept(enable)
         end)
     end)
 
-    -- 2. TradeEnded Listener
+    -- 2. TradeEnded Listener (HANYA saat ON)
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
         if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
         close_trading_gui()
     end)
-
-    if not enable then return end
 
     -- 3. TradeStarted Listener
     auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
@@ -326,7 +345,7 @@ local function toggle_auto_accept(enable)
         end)
 
         if status_label then
-            status_label.Text = "[v3.1] Status: Trade Active! Showing GUI..."
+            status_label.Text = "[v4.0] Status: Trade Active! Showing GUI..."
         end
 
         pcall(function()
@@ -459,7 +478,7 @@ local function create_ui()
     title_lbl.Size = UDim2.new(1, -30, 1, 0)
     title_lbl.Position = UDim2.new(0, 8, 0, 0)
     title_lbl.BackgroundTransparency = 1
-    title_lbl.Text = "NØIR AutoAccept [v3.1]"
+    title_lbl.Text = "NØIR AutoAccept [v4.0]"
     title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
