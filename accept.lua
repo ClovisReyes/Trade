@@ -203,6 +203,8 @@ local function apply_prompt_visibility()
                 if frame then frame.Visible = false end
             else
                 prompt_gui.Enabled = true
+                if blackout then blackout.Visible = true end
+                if frame then frame.Visible = true end
             end
         end
     end)
@@ -230,25 +232,6 @@ local function close_trading_gui()
     end
 end
 
-local function set_game_trade_listeners(enable)
-    pcall(function()
-        local raw_remote = get_net_lookup()["TradeOfferReceived"]
-        if raw_remote and raw_remote:IsA("RemoteEvent") and getconnections then
-            for _, conn in ipairs(getconnections(raw_remote.OnClientEvent)) do
-                -- Jangan matikan koneksi handler auto accept kita sendiri
-                local is_our_conn = (auto_accept_conn and conn.Function == auto_accept_conn.Function)
-                if not is_our_conn then
-                    if enable then
-                        pcall(function() conn:Enable() end)
-                    else
-                        pcall(function() conn:Disable() end)
-                    end
-                end
-            end
-        end
-    end)
-end
-
 local function toggle_auto_accept(enable)
     if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
@@ -258,11 +241,9 @@ local function toggle_auto_accept(enable)
 
     if not enable then
         dismiss_trade_prompt()
-        apply_prompt_visibility()
-        set_game_trade_listeners(true) -- Aktifkan kembali prompt normal bawaan game
-    else
-        apply_prompt_visibility()
     end
+
+    apply_prompt_visibility()
 
     if status_label then
         status_label.Text = enable and "Status: Idle (Listening)" or "Status: Disabled"
@@ -275,6 +256,16 @@ local function toggle_auto_accept(enable)
         if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
 
         if not config.auto_accept_enabled then
+            pcall(function()
+                local prompt_gui = player_gui:FindFirstChild("Prompt")
+                if prompt_gui then
+                    prompt_gui.Enabled = true
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then blackout.Visible = true end
+                    local frame = prompt_gui:FindFirstChild("Frame")
+                    if frame then frame.Visible = true end
+                end
+            end)
             return
         end
 
@@ -288,12 +279,8 @@ local function toggle_auto_accept(enable)
         apply_prompt_visibility()
         task_wait(0.05)
         dismiss_trade_prompt()
+        apply_prompt_visibility()
     end)
-
-    -- Matikan listener game agar game tidak memunculkan prompt sama sekali saat ON
-    if enable then
-        set_game_trade_listeners(false)
-    end
 
     -- 2. TradeEnded Listener
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
@@ -410,8 +397,8 @@ local function create_ui()
 
     local main = Instance.new("Frame")
     main.Name = "MainFrame"
-    main.Size = UDim2.new(0, 210, 0, 140)
-    main.Position = UDim2.new(0.5, -105, 0.35, 0)
+    main.Size = UDim2.new(0, 200, 0, 105)
+    main.Position = UDim2.new(0.5, -100, 0.35, 0)
     main.BackgroundColor3 = BG_COLOR
     main.BackgroundTransparency = 0.2
     main.BorderSizePixel = 0
@@ -589,10 +576,6 @@ local function create_ui()
 
     create_toggle_row("Auto Accept Trade", config.auto_accept_enabled, function(active)
         toggle_auto_accept(active)
-    end)
-
-    create_toggle_row("Auto Confirm/Ready", config.auto_confirm, function(active)
-        config.auto_confirm = active
     end)
 
     status_label = Instance.new("TextLabel")
