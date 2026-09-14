@@ -1745,8 +1745,8 @@ local function create_ui()
     local BTN_BG_COLOR = Color3_fromRGB(46, 50, 58)     -- Terminal Button Gray
     local BTN_HOVER_COLOR = Color3_fromRGB(60, 66, 76)  -- Terminal Button Hover Gray
 
-    local font_face = Font.fromEnum(Enum.Font.Code)
-    local font_bold = Font.fromEnum(Enum.Font.Code)
+    local font_face = Font.fromEnum(Enum.Font.SourceSans)
+    local font_bold = Font.fromEnum(Enum.Font.SourceSans)
 
     local target_lbl
     local fish_dropdown_btn
@@ -2811,7 +2811,7 @@ local function create_ui()
     close_btn.Text = "X"
     close_btn.TextColor3 = MUTED_COLOR
     close_btn.TextSize = 11
-    close_btn.FontFace = Font.fromEnum(Enum.Font.GothamBold)
+    close_btn.FontFace = font_face
     close_btn.Active = true
     close_btn.Modal = true
     close_btn.ZIndex = 27
