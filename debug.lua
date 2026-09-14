@@ -1,5 +1,5 @@
 --[[
-    NOIR HUB - TRADE SUPER DEBUGGER [v6.4]
+    NOIR HUB - TRADE SUPER DEBUGGER [v6.5]
     Merekam 100% Seluruh Siklus & Aktivitas Trade:
     1. Offer: SendTradeOffer / TradeOfferReceived / Prompt GUI (Yes/No)
     2. Start: TradeStarted / IsTrading attribute / Partner Name
@@ -239,7 +239,7 @@ local function create_spy_gui()
     title.Size = UDim2.new(0.50, 0, 1, 0)
     title.Position = UDim2.new(0, 8, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "🕵️ Trade Super Debugger [v6.4]"
+    title.Text = "🕵️ Trade Super Debugger [v6.5]"
     title.TextColor3 = Color3.fromRGB(0, 255, 170)
     title.TextSize = 10
     title.Font = Enum.Font.SourceSansBold
@@ -571,24 +571,29 @@ connect_inbound("TradeEnded", function(...)
 end)
 
 -- ==============================================================================
--- 6. OUTGOING REMOTE SPY (namecall + Return Value Interception)
+-- 6. OUTGOING REMOTE SPY (Single Unified Hook, Zero Duplicates!)
 -- ==============================================================================
-local function process_outgoing_call(remote_obj, method, args)
-    local obj_name = tostring(remote_obj.Name)
-    local obj_lower = string.lower(obj_name)
-    local logical = discovered_hashes[obj_name] or discovered_objects[remote_obj]
+local function get_remote_identity(remote_obj)
+    if typeof(remote_obj) ~= "Instance" then return nil, nil end
+    local r_name = tostring(remote_obj.Name)
+    local logical = discovered_hashes[r_name] or discovered_objects[remote_obj]
 
-    local is_hash = string.sub(obj_name, 1, 3) == "RF/" or string.sub(obj_name, 1, 3) == "RE/"
-    local is_relevant = logical ~= nil or is_hash
-        or string.find(obj_lower, "trade", 1, true)
-        or string.find(obj_lower, "offer", 1, true)
-        or string.find(obj_lower, "item", 1, true)
-        or string.find(obj_lower, "ready", 1, true)
-        or string.find(obj_lower, "confirm", 1, true)
+    if logical then return logical, r_name end
 
-    if not is_relevant then return nil end
+    local is_hash = string.sub(r_name, 1, 3) == "RF/" or string.sub(r_name, 1, 3) == "RE/"
+    local r_lower = string.lower(r_name)
+    local is_trade = is_hash
+        or string.find(r_lower, "trade", 1, true)
+        or string.find(r_lower, "offer", 1, true)
+        or string.find(r_lower, "item", 1, true)
+        or string.find(r_lower, "ready", 1, true)
+        or string.find(r_lower, "confirm", 1, true)
 
-    local action_name = logical or obj_name
+    if is_trade then return r_name, r_name end
+    return nil, nil
+end
+
+local function format_outgoing_log(action_name, method, args)
     local tag = "REMOTE"
     local formatted_msg = ""
 
@@ -605,6 +610,10 @@ local function process_outgoing_call(remote_obj, method, args)
         local r_name = typeof(req) == "Instance" and req.Name or tostring(req)
         current_session.partner = r_name
         formatted_msg = string.format("🤝 [ACCEPT OFFER] Menerima tawaran trade dari: %s", r_name)
+
+    elseif action_name == "DeclineTradeOffer" then
+        tag = "TRADE"
+        formatted_msg = "❌ [DECLINE OFFER] Menolak tawaran trade!"
 
     elseif action_name == "AddItem" then
         tag = "ITEM"
@@ -646,17 +655,30 @@ local function process_outgoing_call(remote_obj, method, args)
     return tag, formatted_msg
 end
 
--- Hook __namecall
+-- Outgoing logging coordination (No throttling: records 100% of all spam & raw calls)
+local in_namecall = false
+
+local function log_outgoing(action_name, method, args)
+    local tag, msg = format_outgoing_log(action_name, method, args)
+    if tag and msg then
+        log_entry(tag, msg)
+    end
+end
+
+-- 1. Hook __namecall (Captures remote:InvokeServer(...) & remote:FireServer(...))
 if hookmetamethod then
     local old_namecall
     pcall(function()
         old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
             local method = getnamecallmethod()
             if (method == "InvokeServer" or method == "FireServer") and typeof(self) == "Instance" then
-                local args = { ... }
-                local tag, msg = process_outgoing_call(self, method, args)
-                if tag and msg then
-                    log_entry(tag, msg)
+                local logical, r_name = get_remote_identity(self)
+                if logical then
+                    in_namecall = true
+                    log_outgoing(logical, method, { ... })
+                    local res = { old_namecall(self, ...) }
+                    in_namecall = false
+                    return unpack(res)
                 end
             end
             return old_namecall(self, ...)
@@ -664,27 +686,53 @@ if hookmetamethod then
     end)
 end
 
--- Direct hookfunction on discovered RemoteFunctions (to capture return values!)
+-- 2. Hook RemoteFunction.InvokeServer EXACTLY ONCE (Captures Sleitnick direct calls & Return values!)
 if hookfunction then
-    for key, robj in pairs(discovered_remotes) do
-        if typeof(robj) == "Instance" and robj:IsA("RemoteFunction") then
-            pcall(function()
-                local old_invoke
-                old_invoke = hookfunction(robj.InvokeServer, function(self, ...)
-                    local args = { ... }
-                    local tag, msg = process_outgoing_call(self, "InvokeServer", args)
-                    if tag and msg and not hookmetamethod then
-                        log_entry(tag, msg)
-                    end
-                    local results = { old_invoke(self, ...) }
-                    if tag == "ITEM" or tag == "TRADE" then
-                        log_entry("REMOTE", string.format("↩️ [RETURN %s] -> %s", key, safe_serialize(results)))
-                    end
-                    return unpack(results)
-                end)
-            end)
-        end
-    end
+    pcall(function()
+        local dummy_rf = Instance.new("RemoteFunction")
+        local raw_invoke = dummy_rf.InvokeServer
+        dummy_rf:Destroy()
+
+        local old_invoke
+        old_invoke = hookfunction(raw_invoke, function(self, ...)
+            local logical, r_name = get_remote_identity(self)
+            local args = { ... }
+
+            -- If called directly without __namecall (e.g. remote.InvokeServer(remote, ...))
+            if logical and not in_namecall then
+                log_outgoing(logical, "InvokeServer", args)
+            end
+
+            local results = { old_invoke(self, ...) }
+
+            -- Log every return value raw without throttling so external script behavior is 100% visible
+            if logical then
+                local ret_str = safe_serialize(results)
+                log_entry("REMOTE", string.format("↩️ [RETURN %s] -> %s", logical, ret_str))
+            end
+
+            return unpack(results)
+        end)
+    end)
+
+    -- Hook RemoteEvent.FireServer EXACTLY ONCE
+    pcall(function()
+        local dummy_re = Instance.new("RemoteEvent")
+        local raw_fire = dummy_re.FireServer
+        dummy_re:Destroy()
+
+        local old_fire
+        old_fire = hookfunction(raw_fire, function(self, ...)
+            local logical, r_name = get_remote_identity(self)
+            local args = { ... }
+
+            if logical and not in_namecall then
+                log_outgoing(logical, "FireServer", args)
+            end
+
+            return old_fire(self, ...)
+        end)
+    end)
 end
 
 -- ==============================================================================
