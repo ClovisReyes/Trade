@@ -1,10 +1,11 @@
 --[[
-    NOIR HUB - AUTO ACCEPT TRADE [v7.0]
-    Arsitektur 100% Direct-Remote (Bypass GUI 100%):
-    1. Instant Accept: Menangkap event TradeOfferReceived & langsung panggil AcceptTradeOffer (8ms).
-    2. Server-Driven Polling: SetReady dipanggil tiap 0.4s (12x attempt -> 5s backoff).
-    3. Auto Confirm: Begitu server merespon Ready [true], langsung panggil ConfirmTrade.
-    4. Tanpa Deteksi Slot / Tanpa Klik GUI / Anti-BAC & Ringkas (~160 baris).
+    NOIR HUB - AUTO ACCEPT TRADE [v7.1]
+    Dual-Engine Hybrid (Direct-Remote + Prompt GUI Auto-Clicker):
+    1. Prompt Auto-Clicker: Mendeteksi pop-up "Trade request from..." dan klik YES seketika (<5ms).
+    2. Direct-Remote Accept: Mendengarkan event TradeOfferReceived (baik nama asli maupun Hash RE/) dan panggil AcceptTradeOffer.
+    3. Trade Window Enabler: Memastikan jendela "! Trading" langsung Enabled & Visible di layar.
+    4. Server-Driven Ready & Confirm: Polling SetReady tiap 0.4s (12x attempt -> 5s backoff) & instant Confirm.
+    5. Clean Draggable Mini-UI dengan Toggle ON/OFF.
 ]]
 
 local cloneref = cloneref or function(r) return r end
@@ -28,94 +29,247 @@ local main_gui = nil
 local conns = {}
 local trade_thread = nil
 
--- ==============================================================================
--- 1. REMOTE DISCOVERY (sleitnick_net direct & hash resolver)
--- ==============================================================================
-local remotes = {}
-pcall(function()
-    local net = rep:WaitForChild("Packages", 5)._Index["sleitnick_net@0.2.0"].net
-    local children = net:GetChildren()
-    local target_names = {
-        "TradeOfferReceived",
-        "AcceptTradeOffer",
-        "SetReady",
-        "ConfirmTrade",
-        "TradeStarted",
-        "TradeEnded"
-    }
+local function update_status(text, color)
+    if status_lbl and status_lbl.Parent then
+        status_lbl.Text = "[v7.1] " .. tostring(text)
+        if color then status_lbl.TextColor3 = color end
+    end
+end
 
-    for i, child in ipairs(children) do
-        for _, name in ipairs(target_names) do
-            if string.find(child.Name, name, 1, true) then
-                if child:IsA("RemoteEvent") or child:IsA("RemoteFunction") then
-                    remotes[name] = child
-                else
+-- ==============================================================================
+-- 1. HELPER: ROBUST GUI BUTTON CLICKER (Executor Safe)
+-- ==============================================================================
+local function click_gui_button(btn)
+    if not btn or not btn:IsA("GuiButton") then return end
+    pcall(function()
+        btn.Active = true
+        if firesignal then
+            pcall(firesignal, btn.Activated)
+            pcall(firesignal, btn.MouseButton1Click)
+            pcall(firesignal, btn.MouseButton1Down)
+            pcall(firesignal, btn.MouseButton1Up)
+        end
+        if getconnections then
+            for _, sig in ipairs({btn.Activated, btn.MouseButton1Click, btn.MouseButton1Down, btn.MouseButton1Up}) do
+                pcall(function()
+                    for _, conn in ipairs(getconnections(sig)) do
+                        if type(conn.Fire) == "function" then
+                            pcall(function() conn:Fire() end)
+                        elseif type(conn.fire) == "function" then
+                            pcall(function() conn:fire() end)
+                        end
+                        if type(conn.Function) == "function" then
+                            pcall(conn.Function)
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+-- ==============================================================================
+-- 2. REMOTE RESOLVER & HASH DICTIONARY (Identik dengan Debug Logger)
+-- ==============================================================================
+local trade_remote_names = {
+    SendTradeOffer     = true,
+    AcceptTradeOffer   = true,
+    TradeOfferReceived = true,
+    TradeStarted       = true,
+    TradeEnded         = true,
+    SetReady           = true,
+    ConfirmTrade       = true,
+}
+
+local discovered_remotes = {}
+
+local function resolve_all_remotes()
+    pcall(function()
+        local net_folder = nil
+        pcall(function()
+            net_folder = rep.Packages._Index["sleitnick_net@0.2.0"].net
+        end)
+        if not net_folder then
+            pcall(function()
+                for _, d in ipairs(rep:GetDescendants()) do
+                    if d.Name == "net" and d.Parent and string.find(string.lower(d.Parent.Name), "sleitnick", 1, true) then
+                        net_folder = d
+                        break
+                    end
+                end
+            end)
+        end
+
+        if not net_folder then return end
+
+        local children = net_folder:GetChildren()
+        for i, child in ipairs(children) do
+            for key, _ in pairs(trade_remote_names) do
+                if string.find(child.Name, key, 1, true) then
+                    discovered_remotes[key] = child
+
+                    -- Sibling hash lookup (RF/ or RE/)
                     for j = i + 1, math.min(i + 4, #children) do
                         local next_c = children[j]
-                        if string.sub(next_c.Name, 1, 3) == "RF/" or string.sub(next_c.Name, 1, 3) == "RE/" then
-                            remotes[name] = next_c
+                        local n_name = next_c.Name
+                        if string.sub(n_name, 1, 3) == "RF/" or string.sub(n_name, 1, 3) == "RE/" then
+                            discovered_remotes[key .. "_hash"] = next_c
                             break
                         end
                     end
                 end
             end
         end
+    end)
+end
+
+resolve_all_remotes()
+
+local function call_remote(key, ...)
+    local target = discovered_remotes[key .. "_hash"] or discovered_remotes[key]
+    if not target then return false, "Remote not found: " .. tostring(key) end
+
+    if target:IsA("RemoteFunction") then
+        return target:InvokeServer(...)
+    elseif target:IsA("RemoteEvent") then
+        target:FireServer(...)
+        return true
+    end
+    return false, "Invalid remote instance"
+end
+
+local function connect_inbound(key, callback)
+    pcall(function()
+        local r = discovered_remotes[key]
+        if r and r:IsA("RemoteEvent") then
+            table.insert(conns, r.OnClientEvent:Connect(callback))
+        end
+        local r_hash = discovered_remotes[key .. "_hash"]
+        if r_hash and r_hash:IsA("RemoteEvent") and r_hash ~= r then
+            table.insert(conns, r_hash.OnClientEvent:Connect(callback))
+        end
+    end)
+end
+
+-- ==============================================================================
+-- 3. PROMPT AUTO-CLICKER (Buka Jendela Trade & Konfirmasi Otomatis)
+-- ==============================================================================
+local function ensure_trade_window_open()
+    pcall(function()
+        local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
+        if t_gui then
+            t_gui.Enabled = true
+            local container = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container") or t_gui:FindFirstChild("Main")
+            if container then container.Visible = true end
+        end
+    end)
+end
+
+local function check_and_accept_prompt()
+    if not config.enabled then return end
+    pcall(function()
+        local prompt_gui = pgui:FindFirstChild("Prompt")
+        if not prompt_gui then return end
+
+        local blackout = prompt_gui:FindFirstChild("Blackout")
+        if not blackout then return end
+
+        local label = blackout:FindFirstChild("Label")
+        local text = label and label.Text or ""
+        local lower = string.lower(text)
+
+        local is_trade = string.find(lower, "trade", 1, true)
+            or string.find(lower, "accept", 1, true)
+            or string.find(lower, "request", 1, true)
+            or string.find(lower, "offer", 1, true)
+
+        if is_trade or prompt_gui.Enabled then
+            local options = blackout:FindFirstChild("Options")
+            local yes_btn = options and options:FindFirstChild("Yes")
+
+            if yes_btn then
+                update_status("Accepting Trade Offer...", Color3.fromRGB(255, 200, 0))
+                click_gui_button(yes_btn)
+
+                task.spawn(function()
+                    task.wait(0.05)
+                    prompt_gui.Enabled = false
+                    ensure_trade_window_open()
+                end)
+            end
+        end
+    end)
+end
+
+-- Pantau GUI Prompt secara real-time
+pcall(function()
+    local prompt_gui = pgui:FindFirstChild("Prompt") or pgui:WaitForChild("Prompt", 5)
+    if prompt_gui then
+        table.insert(conns, prompt_gui:GetPropertyChangedSignal("Enabled"):Connect(function()
+            if prompt_gui.Enabled and config.enabled then
+                check_and_accept_prompt()
+            end
+        end))
+
+        local blackout = prompt_gui:FindFirstChild("Blackout")
+        if blackout then
+            local label = blackout:FindFirstChild("Label")
+            if label then
+                table.insert(conns, label:GetPropertyChangedSignal("Text"):Connect(function()
+                    if config.enabled then check_and_accept_prompt() end
+                end))
+            end
+        end
     end
 end)
 
-local function call_remote(remote, ...)
-    if not remote then return false, "No remote" end
-    if remote:IsA("RemoteFunction") then
-        return remote:InvokeServer(...)
-    elseif remote:IsA("RemoteEvent") then
-        remote:FireServer(...)
-        return true
-    end
-    return false, "Invalid remote"
-end
-
-local function update_status(text, color)
-    if status_lbl and status_lbl.Parent then
-        status_lbl.Text = "[v7.0] " .. tostring(text)
-        if color then status_lbl.TextColor3 = color end
-    end
-end
+-- Langsung periksa apakah saat script di-execute pop-up sudah ada di layar
+check_and_accept_prompt()
 
 -- ==============================================================================
--- 2. CORE ENGINE (Pure Direct-Remote Reverse-Engineered System)
+-- 4. DIRECT-REMOTE INBOUND LISTENERS
 -- ==============================================================================
+connect_inbound("TradeOfferReceived", function(requester, ...)
+    if _G.NoirHub_AutoAccept_ScriptID ~= script_id or not config.enabled then return end
+    local req_name = typeof(requester) == "Instance" and requester.Name or tostring(requester)
+    update_status("Accepting: " .. req_name, Color3.fromRGB(255, 200, 0))
 
--- 1. Instant Offer Accept
-if remotes.TradeOfferReceived and remotes.TradeOfferReceived:IsA("RemoteEvent") then
-    table.insert(conns, remotes.TradeOfferReceived.OnClientEvent:Connect(function(req)
-        if _G.NoirHub_AutoAccept_ScriptID ~= script_id or not config.enabled then return end
-        local sender_name = typeof(req) == "Instance" and req.Name or tostring(req)
-        update_status("Accepting: " .. sender_name, Color3.fromRGB(255, 200, 0))
+    -- Panggil remote AcceptTradeOffer langsung
+    pcall(call_remote, "AcceptTradeOffer", requester)
 
-        -- Langsung panggil remote AcceptTradeOffer seketika
-        pcall(call_remote, remotes.AcceptTradeOffer, req)
+    -- Juga klik Yes pada prompt GUI untuk memastikan
+    check_and_accept_prompt()
+    task.delay(0.2, ensure_trade_window_open)
+end)
 
-        -- Sembunyikan dialog Prompt game agar layar bersih
-        pcall(function()
-            local p = pgui:FindFirstChild("Prompt")
-            if p then p.Enabled = false end
-        end)
-    end))
-end
-
--- 2. Polling Ready & Instant Confirm Loop
-local function on_trading_changed()
+-- ==============================================================================
+-- 5. TRADING SESSION (Polling SetReady 0.4s & Auto-Confirm)
+-- ==============================================================================
+local function on_trading_state_changed()
     if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
     local is_trading = lp:GetAttribute("IsTrading")
 
     if is_trading and config.enabled then
+        ensure_trade_window_open()
         if trade_thread then return end
+
         trade_thread = task.spawn(function()
             update_status("Trade Active! Polling Ready...", Color3.fromRGB(255, 170, 0))
             local attempts = 0
 
             while config.enabled and lp:GetAttribute("IsTrading") do
-                local ok, res = pcall(call_remote, remotes.SetReady, true)
+                -- 1. Panggil Remote SetReady
+                local ok, res = pcall(call_remote, "SetReady", true)
+
+                -- 2. Fallback: Klik tombol GUI Ready jika ada di window
+                pcall(function()
+                    local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading")
+                    if t_gui then
+                        local ready_btn = t_gui:FindFirstChild("Ready", true)
+                        if ready_btn then click_gui_button(ready_btn) end
+                    end
+                end)
+
                 if ok and res == true then
                     update_status("Ready OK! Confirming...", Color3.fromRGB(0, 229, 255))
                     break
@@ -131,10 +285,20 @@ local function on_trading_changed()
                 end
             end
 
-            -- Begitu status Ready diterima server, langsung kunci Confirm
+            -- Begitu Ready berhasil, langsung kunci Confirm
             if config.enabled and lp:GetAttribute("IsTrading") then
                 task.wait(0.5)
-                pcall(call_remote, remotes.ConfirmTrade)
+                pcall(call_remote, "ConfirmTrade")
+
+                -- Fallback klik tombol Confirm
+                pcall(function()
+                    local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading")
+                    if t_gui then
+                        local confirm_btn = t_gui:FindFirstChild("Confirm", true) or t_gui:FindFirstChild("Accept", true)
+                        if confirm_btn then click_gui_button(confirm_btn) end
+                    end
+                end)
+
                 update_status("Confirmed! Finalizing...", Color3.fromRGB(0, 255, 170))
             end
 
@@ -149,16 +313,23 @@ local function on_trading_changed()
     end
 end
 
-table.insert(conns, lp:GetAttributeChangedSignal("IsTrading"):Connect(on_trading_changed))
+table.insert(conns, lp:GetAttributeChangedSignal("IsTrading"):Connect(on_trading_state_changed))
 
-if remotes.TradeStarted and remotes.TradeStarted:IsA("RemoteEvent") then
-    table.insert(conns, remotes.TradeStarted.OnClientEvent:Connect(function()
-        task.defer(on_trading_changed)
-    end))
-end
+connect_inbound("TradeStarted", function(...)
+    ensure_trade_window_open()
+    task.defer(on_trading_state_changed)
+end)
+
+connect_inbound("TradeEnded", function(...)
+    if trade_thread then
+        task.cancel(trade_thread)
+        trade_thread = nil
+    end
+    update_status(config.enabled and "Listening..." or "Disabled", config.enabled and Color3.fromRGB(0, 255, 170) or Color3.fromRGB(150, 150, 150))
+end)
 
 -- ==============================================================================
--- 3. MINIMAL & SLEEK UI
+-- 6. MINIMAL & SLEEK DRAGGABLE UI
 -- ==============================================================================
 local function create_ui()
     local parent = (gethui and gethui()) or game:GetService("CoreGui") or pgui
@@ -185,7 +356,7 @@ local function create_ui()
     title.Size = UDim2.new(1, -10, 0, 22)
     title.Position = UDim2.new(0, 8, 0, 2)
     title.BackgroundTransparency = 1
-    title.Text = "⚡ NØIR AutoAccept [v7.0]"
+    title.Text = "⚡ NØIR AutoAccept [v7.1]"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.TextSize = 10
     title.Font = Enum.Font.SourceSansBold
@@ -256,7 +427,7 @@ local function create_ui()
     status_lbl.Size = UDim2.new(1, -16, 0, 22)
     status_lbl.Position = UDim2.new(0, 8, 0, 50)
     status_lbl.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-    status_lbl.Text = "[v7.0] Status: Listening..."
+    status_lbl.Text = "[v7.1] Status: Listening..."
     status_lbl.TextColor3 = Color3.fromRGB(0, 255, 170)
     status_lbl.TextSize = 8.5
     status_lbl.Font = Enum.Font.Code
@@ -265,12 +436,12 @@ local function create_ui()
 end
 
 -- ==============================================================================
--- 4. INITIALIZE & CLEANUP EXPORT
+-- 7. INITIALIZE & CLEANUP
 -- ==============================================================================
 create_ui()
 
 if lp:GetAttribute("IsTrading") then
-    on_trading_changed()
+    on_trading_state_changed()
 end
 
 _G.NoirHub_AutoAccept_Cleanup = function()
@@ -281,4 +452,4 @@ _G.NoirHub_AutoAccept_Cleanup = function()
     if main_gui then pcall(function() main_gui:Destroy() end) end
 end
 
-print("[NØIR Hub] Auto Accept [v7.0] Direct-Remote Engine initialized!")
+print("[NØIR Hub] Auto Accept [v7.1] Dual-Engine Loaded!")
