@@ -1,12 +1,18 @@
 --[[
-    NOIR HUB - AUTO ACCEPT TRADE [v7.2]
-    Dual-Engine Hybrid (Direct-Remote + Prompt Suppressor & Auto-Clicker):
-    1. Instant Off-Screen Prompt Suppressor: Memindahkan Blackout ke (10, 0, 10, 0) & klik YES seketika.
-       Dijamin pop-up TIDAK AKAN PERNAH menutupi layar lagi!
-    2. Direct-Remote Accept: Mendengarkan TradeOfferReceived (baik nama asli maupun Hash RE/) & panggil AcceptTradeOffer.
-    3. Trade Window Enabler: Membuka jendela "! Trading" dan Container agar terlihat jelas.
-    4. Auto Ready & Confirm: Polling SetReady tiap 0.4s (12x attempt -> 5s backoff) + auto-click tombol ACCEPT/Ready/Confirm.
-    5. Clean Draggable Mini-UI dengan Toggle ON/OFF.
+    NOIR HUB - AUTO ACCEPT TRADE [v7.4]
+    Sistem Bersih & Alami (100% Mengikuti Lifecycle Asli Game):
+    1. Instant Accept: Menangkap event TradeOfferReceived & langsung panggil AcceptTradeOffer.
+       Juga auto-klik tombol Yes pada dialog Prompt jika muncul & sembunyikan dari layar.
+    2. Zero GUI Interference pada Window Trade:
+       - Tidak memaksakan Enabled = true pada jendela "! Trading".
+       - Game akan membuka jendela trade secara alami saat offer diterima,
+         dan menutup jendela trade sendiri secara otomatis saat countdown selesai!
+    3. Server-Driven Polling Ready:
+       - Polling SetReady tiap 0.4s sampai server loloskan [true].
+       - Begitu lolos, panggil ConfirmTrade 1x, lalu biarkan countdown game berjalan alami sampai selesai.
+    4. Sempurna saat Toggle OFF:
+       - Posisi pop-up Prompt dikembalikan ke tengah layar (0.5, 0, 0.5, 0) & Enabled = true,
+         sehingga saat toggle OFF Anda bisa menerima tawaran manual tanpa bug pop-up hilang.
 ]]
 
 local cloneref = cloneref or function(r) return r end
@@ -32,13 +38,13 @@ local trade_thread = nil
 
 local function update_status(text, color)
     if status_lbl and status_lbl.Parent then
-        status_lbl.Text = "[v7.2] " .. tostring(text)
+        status_lbl.Text = "[v7.4] " .. tostring(text)
         if color then status_lbl.TextColor3 = color end
     end
 end
 
 -- ==============================================================================
--- 1. HELPER: ROBUST GUI BUTTON CLICKER (Mobile/PC Executor Safe)
+-- 1. HELPER: ROBUST GUI BUTTON CLICKER
 -- ==============================================================================
 local function click_gui_button(btn)
     if not btn or not btn:IsA("GuiButton") then return end
@@ -70,7 +76,7 @@ local function click_gui_button(btn)
 end
 
 -- ==============================================================================
--- 2. PROMPT SUPPRESSOR & WINDOW MANAGER (Menghilangkan Pop-up Total)
+-- 2. PROMPT MANAGEMENT (Sembunyikan saat ON, Kembalikan ke Tengah saat OFF)
 -- ==============================================================================
 local function hide_prompt()
     pcall(function()
@@ -88,13 +94,6 @@ local function hide_prompt()
             end
             prompt_gui.Enabled = false
         end
-
-        local modules = rep:FindFirstChild("Modules")
-        local gc = modules and modules:FindFirstChild("GuiControl") and require(modules.GuiControl)
-        if gc then
-            pcall(function() gc.Close("Prompt") end)
-            pcall(function() gc:Close("Prompt") end)
-        end
     end)
 end
 
@@ -106,32 +105,39 @@ local function restore_prompt_defaults()
             if blackout then
                 blackout.AnchorPoint = Vector2.new(0.5, 0.5)
                 blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                blackout.Visible = false
+                blackout.Visible = true
             end
-            prompt_gui.Enabled = false
-        end
-    end)
-end
-
-local function ensure_trade_window_open()
-    pcall(function()
-        local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
-        if t_gui then
-            t_gui.Enabled = true
-            local container = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container") or t_gui:FindFirstChild("Main")
-            if container then container.Visible = true end
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                frame.Visible = true
+                frame.Active = true
+            end
+            prompt_gui.Enabled = true
         end
     end)
 end
 
 local function check_and_accept_prompt()
-    if not config.enabled then return end
     pcall(function()
         local prompt_gui = pgui:FindFirstChild("Prompt")
         if not prompt_gui then return end
 
         local blackout = prompt_gui:FindFirstChild("Blackout")
         if not blackout then return end
+
+        if not config.enabled then
+            -- JIKA TOGGLE OFF: Pastikan pop-up 100% muncul normal di tengah layar!
+            blackout.AnchorPoint = Vector2.new(0.5, 0.5)
+            blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+            blackout.Visible = true
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                frame.Visible = true
+                frame.Active = true
+            end
+            prompt_gui.Enabled = true
+            return
+        end
 
         local label = blackout:FindFirstChild("Label")
         local text = label and label.Text or ""
@@ -147,17 +153,14 @@ local function check_and_accept_prompt()
             local yes_btn = options and options:FindFirstChild("Yes")
 
             if yes_btn then
-                -- 1. Pindahkan Blackout seketika ke luar layar agar tidak menghalangi!
+                -- Geser blackout ke luar layar & klik Yes
                 blackout.Position = UDim2.new(10, 0, 10, 0)
-                
-                -- 2. Klik YES virtual
                 click_gui_button(yes_btn)
                 update_status("Trade Accepted!", Color3.fromRGB(0, 255, 170))
 
                 task.spawn(function()
                     task.wait(0.04)
                     hide_prompt()
-                    ensure_trade_window_open()
                 end)
             end
         end
@@ -247,46 +250,35 @@ local function connect_inbound(key, callback)
     end)
 end
 
--- Inbound event listener untuk offer masuk
+-- Inbound listener untuk tawaran trade masuk
 connect_inbound("TradeOfferReceived", function(requester, ...)
-    if _G.NoirHub_AutoAccept_ScriptID ~= script_id or not config.enabled then return end
+    if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
+
+    if not config.enabled then
+        restore_prompt_defaults()
+        return
+    end
+
     local req_name = typeof(requester) == "Instance" and requester.Name or tostring(requester)
     update_status("Accepting: " .. req_name, Color3.fromRGB(255, 200, 0))
 
-    -- 1. Sembunyikan Prompt & Klik YES
+    -- 1. Klik YES & sembunyikan pop-up Prompt
     check_and_accept_prompt()
     hide_prompt()
 
     -- 2. Panggil remote AcceptTradeOffer langsung
     pcall(call_remote, "AcceptTradeOffer", requester)
-
-    task.delay(0.2, ensure_trade_window_open)
 end)
 
 -- ==============================================================================
--- 4. TRADING SESSION (Polling SetReady 0.4s + Click ACCEPT + Auto-Confirm)
+-- 4. TRADING SESSION (Polling SetReady 0.4s -> Confirm -> Countdown Alami)
 -- ==============================================================================
-local function click_trade_action_button()
-    pcall(function()
-        local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
-        if not t_gui then return end
-        -- Cari tombol aksi di panel trade (ACCEPT, Ready, Confirm)
-        for _, name in ipairs({"Accept", "accept", "ACCEPT", "Ready", "ready", "Confirm", "confirm"}) do
-            local btn = t_gui:FindFirstChild(name, true)
-            if btn and btn:IsA("GuiButton") then
-                click_gui_button(btn)
-            end
-        end
-    end)
-end
-
 local function on_trading_state_changed()
     if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
     local is_trading = lp:GetAttribute("IsTrading")
 
     if is_trading and config.enabled then
         hide_prompt()
-        ensure_trade_window_open()
         if trade_thread then return end
 
         trade_thread = task.spawn(function()
@@ -294,14 +286,10 @@ local function on_trading_state_changed()
             local attempts = 0
 
             while config.enabled and lp:GetAttribute("IsTrading") do
-                hide_prompt() -- Pastikan pop-up prompt tidak pernah muncul saat sesi trade
-                ensure_trade_window_open()
+                hide_prompt()
 
-                -- 1. Panggil Remote SetReady
+                -- Panggil Remote SetReady
                 local ok, res = pcall(call_remote, "SetReady", true)
-
-                -- 2. Klik tombol ACCEPT / Ready di GUI
-                click_trade_action_button()
 
                 if ok and res == true then
                     update_status("Ready OK! Confirming...", Color3.fromRGB(0, 229, 255))
@@ -318,17 +306,19 @@ local function on_trading_state_changed()
                 end
             end
 
-            -- Begitu Ready berhasil, langsung kunci Confirm
+            -- Begitu Ready berhasil, langsung panggil ConfirmTrade 1x
             if config.enabled and lp:GetAttribute("IsTrading") then
                 task.wait(0.5)
                 pcall(call_remote, "ConfirmTrade")
-                click_trade_action_button()
-                update_status("Confirmed! Finalizing...", Color3.fromRGB(0, 255, 170))
+                update_status("Confirmed! Waiting finish...", Color3.fromRGB(0, 255, 170))
+                -- Setelah Confirm, KITA TIDAK SENTUH APA-APA LAGI!
+                -- Biarkan countdown 3.. 2.. 1.. berjalan alami dan game akan menutup panel sendiri!
             end
 
             trade_thread = nil
         end)
     else
+        -- Sesi trade selesai: game otomatis menutup jendela ! Trading
         if trade_thread then
             task.cancel(trade_thread)
             trade_thread = nil
@@ -341,7 +331,6 @@ table.insert(conns, lp:GetAttributeChangedSignal("IsTrading"):Connect(on_trading
 
 connect_inbound("TradeStarted", function(...)
     hide_prompt()
-    ensure_trade_window_open()
     task.defer(on_trading_state_changed)
 end)
 
@@ -358,22 +347,18 @@ pcall(function()
     local prompt_gui = pgui:FindFirstChild("Prompt") or pgui:WaitForChild("Prompt", 5)
     if prompt_gui then
         table.insert(conns, prompt_gui:GetPropertyChangedSignal("Enabled"):Connect(function()
-            if prompt_gui.Enabled and config.enabled then
-                check_and_accept_prompt()
-            end
+            check_and_accept_prompt()
         end))
 
         local blackout = prompt_gui:FindFirstChild("Blackout")
         if blackout then
             table.insert(conns, blackout:GetPropertyChangedSignal("Visible"):Connect(function()
-                if blackout.Visible and config.enabled then
-                    check_and_accept_prompt()
-                end
+                check_and_accept_prompt()
             end))
             local label = blackout:FindFirstChild("Label")
             if label then
                 table.insert(conns, label:GetPropertyChangedSignal("Text"):Connect(function()
-                    if config.enabled then check_and_accept_prompt() end
+                    check_and_accept_prompt()
                 end))
             end
         end
@@ -408,7 +393,7 @@ local function create_ui()
     title.Size = UDim2.new(1, -10, 0, 22)
     title.Position = UDim2.new(0, 8, 0, 2)
     title.BackgroundTransparency = 1
-    title.Text = "⚡ NØIR AutoAccept [v7.2]"
+    title.Text = "⚡ NØIR AutoAccept [v7.4]"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.TextSize = 10
     title.Font = Enum.Font.SourceSansBold
@@ -468,11 +453,13 @@ local function create_ui()
         ts:Create(knob, TweenInfo.new(0.12), { Position = config.enabled and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6) }):Play()
         ts:Create(cap, TweenInfo.new(0.12), { BackgroundColor3 = config.enabled and Color3.fromRGB(255, 0, 255) or Color3.fromRGB(50, 50, 50) }):Play()
         update_status(config.enabled and "Listening..." or "Disabled", config.enabled and Color3.fromRGB(0, 255, 170) or Color3.fromRGB(150, 150, 150))
+        
         if not config.enabled then
             if trade_thread then
                 task.cancel(trade_thread)
                 trade_thread = nil
             end
+            -- Kembalikan posisi pop-up tepat ke tengah layar untuk mode manual!
             restore_prompt_defaults()
         else
             check_and_accept_prompt()
@@ -484,7 +471,7 @@ local function create_ui()
     status_lbl.Size = UDim2.new(1, -16, 0, 22)
     status_lbl.Position = UDim2.new(0, 8, 0, 50)
     status_lbl.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-    status_lbl.Text = "[v7.2] Status: Listening..."
+    status_lbl.Text = "[v7.4] Status: Listening..."
     status_lbl.TextColor3 = Color3.fromRGB(0, 255, 170)
     status_lbl.TextSize = 8.5
     status_lbl.Font = Enum.Font.Code
@@ -497,8 +484,11 @@ end
 -- ==============================================================================
 create_ui()
 
--- Bersihkan pop-up seketika saat dieksekusi
-check_and_accept_prompt()
+if config.enabled then
+    check_and_accept_prompt()
+else
+    restore_prompt_defaults()
+end
 
 if lp:GetAttribute("IsTrading") then
     hide_prompt()
@@ -514,4 +504,4 @@ _G.NoirHub_AutoAccept_Cleanup = function()
     restore_prompt_defaults()
 end
 
-print("[NØIR Hub] Auto Accept [v7.2] Ready & Clean!")
+print("[NØIR Hub] Auto Accept [v7.4] Clean Engine Initialized!")
