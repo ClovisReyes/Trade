@@ -1,3 +1,41 @@
+-- ==============================================================================
+-- KEENAN HUB: FISH IT - AUTO TRADE ENGINE & GUI [TERMINAL EDITION]
+-- ==============================================================================
+-- DAFTAR ISI / TABLE OF CONTENTS:
+-- [SECTION 01] SERVICES & ENGINE DEPENDENCIES     : Setup service Roblox, Replion data & Utility
+-- [SECTION 02] NETWORK REMOTE WRAPPERS (NET)      : Mapping remote Sleitnick Net & wrapper proxy
+-- [SECTION 03] CONFIG & CACHE STATE               : Tabel config, cache, persistensi JSON
+-- [SECTION 04] INVENTORY & ITEM HELPERS           : Query jumlah item, batu enchant & helper click
+-- [SECTION 05] TARGET PLAYER SELECTION            : Pencarian & fuzzy matching nama target player
+-- [SECTION 06] FISH ATTRIBUTES & FILTERS          : Deteksi mutasi, shiny, sparkling, evaluasi filter
+-- [SECTION 07] ROUND-ROBIN ITEM SELECTION         : Algoritma pembagian seimbang item (Rarity & Name)
+-- [SECTION 08] TRADE PROTOCOL & SESSION ENGINE    : Handler trade session, wait, ready, confirm
+-- [SECTION 09] TRADING ENGINE 1: TRADE BY NAME    : Logika eksekusi trade jenis ikan tertentu
+-- [SECTION 10] TRADING ENGINE 2: TRADE BY RARITY  : Logika eksekusi trade berdasarkan rarity tier
+-- [SECTION 11] TRADING ENGINE 3: TRADE ENCHANTS   : Logika eksekusi trade batu enchant
+-- [SECTION 12] TRADING ENGINE 4: TRADE BY COIN    : Logika eksekusi trade kalkulasi target nilai koin
+-- [SECTION 13] AUTO TRADE TASK RUNNER             : Background runner loop (run_auto_trade_loop)
+-- [SECTION 14] GUI ROOT & WINDOW SETUP            : ScreenGui, MainFrame, dragging, player panel
+-- [SECTION 15] UI WIDGET BUILDERS                 : Builder accordion, dropdown, input text, toggle
+-- [SECTION 16] UI ACCORDION 1: TRADE BY NAME      : Komponen panel kontrol Trade By Name
+-- [SECTION 17] UI ACCORDION 2: TRADE ENCHANTS     : Komponen panel kontrol Trade Enchant Stone
+-- [SECTION 18] UI ACCORDION 3: TRADE BY RARITY    : Komponen panel kontrol Trade By Rarity
+-- [SECTION 19] UI ACCORDION 4: TRADE BY COIN      : Komponen panel kontrol Trade By Coin
+-- [SECTION 20] REAL-TIME UI STATUS UPDATE LOOP    : Loop update status visual, label, dan statistik
+-- [SECTION 21] SCRIPT INITIALIZATION & CLEANUP    : Eksekusi UI, inventory logger & cleanup handler
+-- ==============================================================================
+
+-- ==============================================================================
+-- [CUSTOM LOGO SETTING]
+-- Masukkan Asset ID Roblox untuk logo floating di bawah ini.
+-- Format bisa berupa: "rbxassetid://<ID>" atau cukup nomor ID-nya saja: "123456789"
+-- Jika dikosongkan (""), logo floating otomatis menampilkan inisial "K" warna kuning terminal.
+-- ==============================================================================
+local CUSTOM_LOGO_ASSET_ID = "rbxassetid://134706593444053"
+
+-- ==============================================================================
+-- [SECTION 01] SERVICES & ENGINE DEPENDENCIES
+-- ==============================================================================
 local ipairs        = ipairs
 local pairs         = pairs
 local tostring      = tostring
@@ -20,15 +58,16 @@ local string_match  = string.match
 
 local task_wait     = task.wait
 local task_spawn    = task.spawn
-local task_delay    = task.delay
-local task_defer    = task.defer
 
+if _G.KeenanHub_AutoTrade_Cleanup then
+    pcall(_G.KeenanHub_AutoTrade_Cleanup)
+end
 if _G.NoirHub_AutoTrade_Cleanup then
     pcall(_G.NoirHub_AutoTrade_Cleanup)
 end
 
 local script_id = os_clock()
-_G.NoirHub_AutoTrade_ScriptID = script_id
+_G.KeenanHub_AutoTrade_ScriptID = script_id
 
 local cloneref = cloneref or function(ref) return ref end
 
@@ -39,133 +78,6 @@ local user_input_service    = cloneref(game:GetService("UserInputService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
 local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
 local http_service          = cloneref(game:GetService("HttpService"))
-local lighting              = cloneref(game:GetService("Lighting"))
-
-local GuiControl = nil
-local function get_gui_control()
-    if GuiControl then return GuiControl end
-    pcall(function()
-        local rep = game:GetService("ReplicatedStorage")
-        local modules = rep:FindFirstChild("Modules") or rep:WaitForChild("Modules", 3)
-        if modules and modules:FindFirstChild("GuiControl") then
-            GuiControl = require(modules.GuiControl)
-        end
-    end)
-    return GuiControl
-end
-get_gui_control()
-
-local function kill_all_blackouts()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then
-                frame.Visible = false
-                frame.BackgroundTransparency = 1
-                frame.Active = false
-            end
-        end
-    end)
-
-    pcall(function()
-        local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
-        if psb then
-            psb.Enabled = false
-            for _, d in ipairs(psb:GetDescendants()) do
-                if d:IsA("Frame") or d:IsA("ImageLabel") then
-                    d.Visible = false
-                    d.BackgroundTransparency = 1
-                    d.Active = false
-                end
-            end
-        end
-    end)
-
-    pcall(function()
-        for _, gui in ipairs(player_gui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "NoirHub_AutoTrade" and gui.Name ~= "KeenanTrade" and gui.Name ~= "KeenanTradeDebugger" then
-                local g_lower = string_lower(gui.Name)
-                if string_find(g_lower, "blackout", 1, true) or string_find(g_lower, "fade", 1, true) then
-                    gui.Enabled = false
-                end
-            end
-        end
-    end)
-
-    pcall(function()
-        for _, parent in ipairs({lighting, workspace.CurrentCamera}) do
-            if parent then
-                for _, child in ipairs(parent:GetChildren()) do
-                    if child:IsA("BlurEffect") or child.Name == "Blur" then
-                        child.Enabled = false
-                    elseif child:IsA("ColorCorrectionEffect") then
-                        if child.Brightness < 0 or string_find(string_lower(child.Name), "blur", 1, true) or string_find(string_lower(child.Name), "dim", 1, true) or string_find(string_lower(child.Name), "blackout", 1, true) then
-                            child.Enabled = false
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end
-
-local function restore_hud()
-    local gc = get_gui_control()
-    if gc then
-        pcall(function() gc.RestoreHUD() end)
-        pcall(function() gc:RestoreHUD() end)
-        pcall(function() gc.SetHUDVisibility(true) end)
-        pcall(function() gc:SetHUDVisibility(true) end)
-        pcall(function() gc.Unlock() end)
-        pcall(function() gc:Unlock() end)
-        if config and config.auto_accept_enabled then
-            pcall(function() gc.Close("Prompt") end)
-            pcall(function() gc:Close("Prompt") end)
-        end
-    end
-
-    pcall(function()
-        for _, gui_name in ipairs({"HUD", "! HUD", "MainHUD", "GameHUD", "TopBar", "CoreHUD"}) do
-            local h = player_gui:FindFirstChild(gui_name)
-            if h and h:IsA("ScreenGui") then
-                h.Enabled = true
-            end
-        end
-    end)
-
-    kill_all_blackouts()
-
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then
-                frame.Visible = false
-                frame.BackgroundTransparency = 1
-                frame.Active = false
-            end
-
-            if config and config.auto_accept_enabled then
-                if blackout then
-                    local label = blackout:FindFirstChild("Label")
-                    local text = label and label.Text or ""
-                    local lower = string_lower(text)
-                    if string_find(lower, "trade", 1, true) or string_find(lower, "accept", 1, true) or string_find(lower, "request", 1, true) or (tick() - last_trade_offer_time < 4) then
-                        blackout.Position = UDim2.new(10, 0, 10, 0)
-                        blackout.Visible = false
-                        prompt_gui.Enabled = false
-                    end
-                end
-                if not auto_accept_active then
-                    prompt_gui.Enabled = false
-                end
-            end
-        end
-    end)
-end
-restore_hud()
 
 local variables = {
     items                   = replicated_storage:WaitForChild("Items"),
@@ -191,15 +103,17 @@ end)
 local item_utility = require(variables.item_utility)
 local vendor_utility = require(variables.vendor_utility)
 
+-- ==============================================================================
+-- [SECTION 02] NETWORK REMOTE WRAPPERS (NET)
+-- Framework Remote berbasis Sleitnick Net package (@0.2.0)
+-- Wrapper proxy otomatis memilih InvokeServer/FireServer berdasarkan tipe Remote.
+-- ==============================================================================
 local remote_map = {
     SendTradeOffer     = "SendTradeOffer",
     AddItem            = "AddItem",
     SetReady           = "SetReady",
     ConfirmTrade       = "ConfirmTrade",
-    TradeOfferReceived = "TradeOfferReceived",
     TradeEnded         = "TradeEnded",
-    TradeStarted       = "TradeStarted",
-    AcceptTradeOffer   = "AcceptTradeOffer",
 }
 
 local _net_lookup = nil
@@ -208,10 +122,18 @@ local function get_net_lookup()
     _net_lookup = {}
 
     local net_folder = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
-    for _, child in ipairs(net_folder:GetChildren()) do
+    local children = net_folder:GetChildren()
+
+    for i, v in ipairs(children) do
         for _, logical_name in pairs(remote_map) do
-            if string_find(child.Name, logical_name, 1, true) then
-                _net_lookup[logical_name] = child
+            if string_find(v.Name, logical_name, 1, true) then
+                for j = i + 1, #children do
+                    local next_obj = children[j]
+                    if string_match(next_obj.Name, "^RF/") or string_match(next_obj.Name, "^RE/") then
+                        _net_lookup[logical_name] = next_obj
+                        break
+                    end
+                end
                 break
             end
         end
@@ -261,9 +183,13 @@ local remotes = setmetatable({}, {
 
 local trade_remotes = remotes
 
+-- ==============================================================================
+-- [SECTION 03] CONFIG & CACHE STATE
+-- Konfigurasi runtime aktif, cache harga ikan, tracking riwayat trade,
+-- serta fungsi penyimpanan dan pemuatan konfigurasi ke JSON (save_config / load_config).
+-- ==============================================================================
 local config = {
     enabled             = false,
-    auto_accept_enabled = false,
     trade_favorited     = false,
     quantity            = 0,
     target_coin_amount  = 0,
@@ -347,22 +273,25 @@ local function save_config()
             temp_config.trade_rarity_enabled = false
 
             local data = http_service:JSONEncode(temp_config)
-            writefile("NoirHub_AutoTrade_Config.json", data)
+            writefile("Keenan_AutoTrade_Config.json", data)
         end
     end)
 end
 
 local function log_debug(msg)
     print(tostring(msg))
-    if _G.NoirTradeDebugLog then
-        pcall(_G.NoirTradeDebugLog, tostring(msg))
+    if _G.KeenanTradeDebugLog then
+        pcall(_G.KeenanTradeDebugLog, tostring(msg))
     end
 end
 
 local function load_config()
     pcall(function()
         if isfile and readfile and http_service then
-            local filename = "NoirHub_AutoTrade_Config.json"
+            local filename = "Keenan_AutoTrade_Config.json"
+            if not isfile(filename) and isfile("NoirHub_AutoTrade_Config.json") then
+                filename = "NoirHub_AutoTrade_Config.json"
+            end
             if isfile(filename) then
                 local data = readfile(filename)
                 local loaded = http_service:JSONDecode(data)
@@ -403,547 +332,22 @@ if active_modes > 1 then
     save_config()
 end
 
-local auto_accept_conn = nil
-local auto_accept_trade_started_conn = nil
-local auto_accept_trade_ended_conn = nil
-local auto_accept_active = false
-
+-- ==============================================================================
+-- [SECTION 04] INVENTORY & ITEM HELPERS
+-- Utilitas interaksi GUI (virtual click) dan query data inventory Replion
+-- (penghitung jumlah item, batu enchant, dan parsing nama).
+-- ==============================================================================
 local function click_gui_button(btn)
     if not btn then return end
     pcall(function()
-        btn.Active = true
         if firesignal then
-            pcall(firesignal, btn.Activated)
-            pcall(firesignal, btn.MouseButton1Click)
-            pcall(firesignal, btn.MouseButton1Down)
-            pcall(firesignal, btn.MouseButton1Up)
-        end
-        if getconnections then
-            for _, sig in ipairs({btn.Activated, btn.MouseButton1Click, btn.MouseButton1Down, btn.MouseButton1Up}) do
-                pcall(function()
-                    for _, conn in ipairs(getconnections(sig)) do
-                        if type(conn.Fire) == "function" then
-                            pcall(function() conn:Fire() end)
-                        elseif type(conn.fire) == "function" then
-                            pcall(function() conn:fire() end)
-                        end
-                        if type(conn.Function) == "function" then
-                            pcall(conn.Function)
-                        end
-                    end
-                end)
+            firesignal(btn.MouseButton1Click)
+            firesignal(btn.Activated)
+        elseif getconnections then
+            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
+                conn:Fire()
             end
         end
-    end)
-end
-
-local prompt_watcher_conns = {}
-
-local function cleanup_prompt_watcher()
-    for _, c in ipairs(prompt_watcher_conns) do
-        pcall(function() c:Disconnect() end)
-    end
-    prompt_watcher_conns = {}
-end
-
-local last_trade_offer_time = 0
-
-local function restore_blackout_defaults()
-    kill_all_blackouts()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            if blackout then
-                blackout.AnchorPoint = Vector2.new(0.5, 0.5)
-                blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-            end
-            local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then
-                frame.Visible = false
-                frame.BackgroundTransparency = 1
-                frame.Active = false
-            end
-        end
-    end)
-end
-
-local function suppress_trade_prompt()
-    if not (config and config.auto_accept_enabled) then return end
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if not prompt_gui then return end
-        local blackout = prompt_gui:FindFirstChild("Blackout")
-        if not blackout then return end
-
-        local label = blackout:FindFirstChild("Label")
-        local text = label and label.Text or ""
-        local lower = string_lower(text)
-
-        local is_trade = string_find(lower, "trade", 1, true)
-            or string_find(lower, "accept", 1, true)
-            or string_find(lower, "request", 1, true)
-            or string_find(lower, "offer", 1, true)
-            or auto_accept_active
-            or (tick() - last_trade_offer_time < 4)
-
-        if is_trade then
-            -- 1. Move Blackout far off-screen so user doesn't see it, but KEEP Enabled=true & Visible=true so the click registers!
-            blackout.Position = UDim2.new(10, 0, 10, 0)
-
-            -- 2. Kill blackout dark overlay
-            local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then
-                frame.Visible = false
-                frame.BackgroundTransparency = 1
-                frame.Active = false
-            end
-            kill_all_blackouts()
-
-            -- 3. Click YES button while still active so PromptController confirms trade
-            local options = blackout:FindFirstChild("Options")
-            if options then
-                local yes_btn = options:FindFirstChild("Yes")
-                if yes_btn then
-                    click_gui_button(yes_btn)
-                    task_spawn(function()
-                        task_wait(0.05)
-                        blackout.Visible = false
-                        prompt_gui.Enabled = false
-                        local gc = get_gui_control()
-                        if gc then
-                            pcall(function() gc.Close("Prompt") end)
-                            pcall(function() gc:Close("Prompt") end)
-                        end
-                    end)
-                end
-            end
-        end
-    end)
-end
-
-local function dismiss_stuck_prompt()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if not prompt_gui then return end
-        local blackout = prompt_gui:FindFirstChild("Blackout")
-        if not blackout then return end
-        local label = blackout:FindFirstChild("Label")
-        local text = label and label.Text or ""
-        local lower = string_lower(text)
-        if string_find(lower, "trade", 1, true) or string_find(lower, "accept", 1, true) or string_find(lower, "request", 1, true) or string_find(lower, "offer", 1, true) then
-            local options = blackout:FindFirstChild("Options")
-            local yes_btn = options and options:FindFirstChild("Yes")
-            if yes_btn then
-                -- User request: "alih2 dipencet no mending dipencet yes saja"
-                click_gui_button(yes_btn)
-            end
-            task_spawn(function()
-                task_wait(0.05)
-                blackout.Visible = false
-                blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                prompt_gui.Enabled = false
-            end)
-            local gc = get_gui_control()
-            if gc then
-                pcall(function() gc.Close("Prompt") end)
-                pcall(function() gc:Close("Prompt") end)
-            end
-        end
-    end)
-    kill_all_blackouts()
-end
-
-local function wire_prompt_buttons(blackout, prompt_gui)
-    if not blackout or not prompt_gui then return end
-    local options = blackout:FindFirstChild("Options")
-    if not options then return end
-
-    local function setup_btn(btn)
-        if not btn then return end
-        local function on_dismiss()
-            task_delay(0.1, function()
-                pcall(function()
-                    blackout.Visible = false
-                    prompt_gui.Enabled = false
-                end)
-            end)
-        end
-        table.insert(prompt_watcher_conns, btn.Activated:Connect(on_dismiss))
-        table.insert(prompt_watcher_conns, btn.MouseButton1Click:Connect(on_dismiss))
-        if btn.InputBegan then
-            table.insert(prompt_watcher_conns, btn.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    on_dismiss()
-                end
-            end))
-        end
-    end
-
-    setup_btn(options:FindFirstChild("Yes"))
-    setup_btn(options:FindFirstChild("No"))
-end
-
-local function init_prompt_watcher()
-    cleanup_prompt_watcher()
-    restore_blackout_defaults()
-    dismiss_stuck_prompt()
-
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt") or player_gui:WaitForChild("Prompt", 5)
-        if not prompt_gui then return end
-
-        local blackout = prompt_gui:FindFirstChild("Blackout") or prompt_gui:WaitForChild("Blackout", 5)
-        if blackout then
-            local label = blackout:FindFirstChild("Label")
-            if label then
-                table.insert(prompt_watcher_conns, label:GetPropertyChangedSignal("Text"):Connect(function()
-                    if config and config.auto_accept_enabled then
-                        suppress_trade_prompt()
-                    end
-                end))
-            end
-            wire_prompt_buttons(blackout, prompt_gui)
-        end
-
-        local frame = prompt_gui:FindFirstChild("Frame")
-        if frame then
-            frame.Visible = false
-            frame.BackgroundTransparency = 1
-            frame.Active = false
-            table.insert(prompt_watcher_conns, frame:GetPropertyChangedSignal("Visible"):Connect(function()
-                if frame.Visible then
-                    frame.Visible = false
-                    frame.BackgroundTransparency = 1
-                    frame.Active = false
-                end
-            end))
-            table.insert(prompt_watcher_conns, frame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
-                if frame.BackgroundTransparency < 1 then
-                    frame.BackgroundTransparency = 1
-                end
-            end))
-        end
-
-        table.insert(prompt_watcher_conns, prompt_gui.DescendantAdded:Connect(function(desc)
-            if desc:IsA("TextLabel") and desc.Name == "Label" and desc.Parent and desc.Parent.Name == "Blackout" then
-                table.insert(prompt_watcher_conns, desc:GetPropertyChangedSignal("Text"):Connect(function()
-                    if config and config.auto_accept_enabled then
-                        suppress_trade_prompt()
-                    end
-                end))
-                if config and config.auto_accept_enabled then
-                    suppress_trade_prompt()
-                end
-            elseif desc:IsA("GuiButton") and desc.Parent and desc.Parent.Name == "Options" then
-                local b = desc.Parent.Parent
-                if b and b.Name == "Blackout" then
-                    wire_prompt_buttons(b, prompt_gui)
-                end
-            end
-        end))
-
-        table.insert(prompt_watcher_conns, prompt_gui:GetPropertyChangedSignal("Enabled"):Connect(function()
-            if config and config.auto_accept_enabled then
-                if prompt_gui.Enabled then
-                    suppress_trade_prompt()
-                end
-            else
-                -- Auto Accept is OFF:
-                local f = prompt_gui:FindFirstChild("Frame")
-                if f then
-                    f.Visible = false
-                    f.BackgroundTransparency = 1
-                    f.Active = false
-                end
-                kill_all_blackouts()
-                if prompt_gui.Enabled then
-                    local b = prompt_gui:FindFirstChild("Blackout")
-                    if b then
-                        b.AnchorPoint = Vector2.new(0.5, 0.5)
-                        b.Position = UDim2.new(0.5, 0, 0.5, 0)
-                        b.Visible = true
-                        wire_prompt_buttons(b, prompt_gui)
-                    end
-                end
-            end
-        end))
-
-        -- If prompt_gui is already enabled right now, wire it up or suppress it immediately!
-        if prompt_gui.Enabled and blackout then
-            if config and config.auto_accept_enabled then
-                suppress_trade_prompt()
-            else
-                wire_prompt_buttons(blackout, prompt_gui)
-            end
-        end
-    end)
-end
-init_prompt_watcher()
-
-
-local function close_trading_gui()
-    auto_accept_active = false
-    pcall(function()
-        local gc = get_gui_control()
-        if gc then
-            pcall(function() gc.Close("! Trading") end)
-            pcall(function() gc:Close("! Trading") end)
-        end
-        local t_gui = player_gui:FindFirstChild("! Trading")
-        if t_gui then
-            t_gui.Enabled = false
-            local frame = t_gui:FindFirstChild("Frame")
-            if frame then frame.Visible = false end
-
-            for _, btn_name in ipairs({"Close", "Decline", "X"}) do
-                local btn = t_gui:FindFirstChild(btn_name, true)
-                if btn and btn:IsA("GuiButton") then
-                    click_gui_button(btn)
-                end
-            end
-        end
-    end)
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            prompt_gui.Enabled = false
-            local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then
-                frame.Visible = false
-                frame.BackgroundTransparency = 1
-                frame.Active = false
-            end
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            if blackout then
-                blackout.Visible = false
-                blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                blackout.AnchorPoint = Vector2.new(0.5, 0.5)
-            end
-        end
-        local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
-        if psb then psb.Enabled = false end
-    end)
-    kill_all_blackouts()
-    restore_hud()
-end
-
-local function toggle_auto_accept(enable)
-    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
-    if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
-    if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
-
-    config.auto_accept_enabled = enable
-    auto_accept_active = false
-
-    if not enable then
-        auto_accept_active = false
-        pcall(function()
-            local prompt_gui = player_gui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = false
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then
-                    blackout.Visible = false
-                    blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                    blackout.AnchorPoint = Vector2.new(0.5, 0.5)
-                end
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then
-                    frame.Visible = false
-                    frame.BackgroundTransparency = 1
-                    frame.Active = false
-                end
-            end
-            local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
-            if psb then psb.Enabled = false end
-        end)
-
-        kill_all_blackouts()
-        restore_hud()
-        return
-    end
-
-    if not trade_remotes then return end
-
-    auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
-        if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-        if not config.auto_accept_enabled then return end
-
-        last_trade_offer_time = tick()
-
-        -- Immediately hide prompt off-screen before it renders
-        suppress_trade_prompt()
-
-        -- Invoke server to accept trade offer
-        pcall(function()
-            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
-        end)
-        pcall(function()
-            trade_remotes.AcceptTradeOffer:InvokeServer(requester)
-        end)
-
-        task.defer(suppress_trade_prompt)
-        task.delay(0.05, suppress_trade_prompt)
-        task.delay(0.1, suppress_trade_prompt)
-
-        -- Background loop: ensure Yes button is clicked as soon as prompt options appear,
-        -- so the game's PromptController terminates and opens ! Trading cleanly
-        task_spawn(function()
-            for _ = 1, 20 do
-                if not config.auto_accept_enabled then break end
-                local p = player_gui:FindFirstChild("Prompt")
-                local b = p and p:FindFirstChild("Blackout")
-                if b then
-                    b.Position = UDim2.new(10, 0, 10, 0)
-                    local opt = b:FindFirstChild("Options")
-                    local y = opt and opt:FindFirstChild("Yes")
-                    if y then
-                        click_gui_button(y)
-                        task_spawn(function()
-                            task_wait(0.05)
-                            b.Visible = false
-                            p.Enabled = false
-                        end)
-                        break
-                    end
-                end
-                task_wait(0.05)
-            end
-        end)
-
-        -- Watch for IsTrading attribute becoming true and open ! Trading immediately
-        task_spawn(function()
-            for _ = 1, 30 do
-                if not config.auto_accept_enabled then break end
-                if local_player:GetAttribute("IsTrading") then
-                    pcall(function()
-                        local gc = get_gui_control()
-                        if gc then
-                            pcall(function() gc.Open("! Trading") end)
-                            pcall(function() gc:Open("! Trading") end)
-                            pcall(function() gc.Open("Trading") end)
-                            pcall(function() gc:Open("Trading") end)
-                        end
-                        local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
-                        if t_gui then
-                            t_gui.Enabled = true
-                            local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChildWhichIsA("Frame")
-                            if frame then frame.Visible = true end
-                        end
-                    end)
-                    break
-                end
-                task_wait(0.1)
-            end
-        end)
-    end)
-
-    auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
-        if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-        auto_accept_active = true
-
-        -- Kill any black screen from Prompt, PurchaseScreenBlackout, or Lighting
-        pcall(function()
-            local prompt_gui = player_gui:FindFirstChild("Prompt")
-            if prompt_gui then
-                prompt_gui.Enabled = false
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then
-                    frame.Visible = false
-                    frame.BackgroundTransparency = 1
-                    frame.Active = false
-                end
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then
-                    blackout.Visible = false
-                    blackout.Position = UDim2.new(10, 0, 10, 0)
-                end
-            end
-            local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
-            if psb then psb.Enabled = false end
-        end)
-        kill_all_blackouts()
-        restore_hud()
-
-        pcall(function()
-            local gc = get_gui_control()
-            if gc then
-                pcall(function() gc.Open("! Trading") end)
-                pcall(function() gc:Open("! Trading") end)
-                pcall(function() gc.Open("Trading") end)
-                pcall(function() gc:Open("Trading") end)
-            end
-            local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
-            if t_gui then
-                t_gui.Enabled = true
-                local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChildWhichIsA("Frame")
-                if frame then
-                    frame.Visible = true
-                end
-            end
-        end)
-
-        task_spawn(function()
-            task_wait(0.3)
-            if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
-
-            pcall(function()
-                trade_remotes.SetReady:InvokeServer(true)
-            end)
-
-            local start_time = tick()
-            while config.auto_accept_enabled and auto_accept_active and local_player:GetAttribute("IsTrading") and (tick() - start_time) < 60 do
-                pcall(function()
-                    local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
-                    if t_gui then
-                        t_gui.Enabled = true
-                        local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChildWhichIsA("Frame")
-                        if frame then frame.Visible = true end
-                    end
-                end)
-
-                pcall(function()
-                    trade_remotes.ConfirmTrade:InvokeServer()
-                end)
-                pcall(function()
-                    trade_remotes.SetReady:InvokeServer(true)
-                end)
-
-                pcall(function()
-                    local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
-                    if t_gui then
-                        for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
-                            local btn = t_gui:FindFirstChild(btn_name, true)
-                            if btn and btn:IsA("GuiButton") then
-                                click_gui_button(btn)
-                            end
-                        end
-                    end
-                end)
-
-                task_wait(0.4)
-            end
-
-            close_trading_gui()
-            kill_all_blackouts()
-            restore_hud()
-        end)
-    end)
-
-    auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
-        if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-        close_trading_gui()
-        kill_all_blackouts()
-        restore_hud()
-        task.delay(0.2, function()
-            kill_all_blackouts()
-            restore_hud()
-        end)
-        task.delay(0.5, function()
-            kill_all_blackouts()
-            restore_hud()
-        end)
     end)
 end
 
@@ -1039,6 +443,10 @@ local function load_game_data()
 end
 pcall(load_game_data)
 
+-- ==============================================================================
+-- [SECTION 05] TARGET PLAYER SELECTION
+-- Mencari instans Player target di Players service berdasarkan Name atau DisplayName.
+-- ==============================================================================
 local function find_target_player()
     if config.trade_with == "" then return nil end
     for _, player in ipairs(players:GetPlayers()) do
@@ -1049,6 +457,11 @@ local function find_target_player()
     return nil
 end
 
+-- ==============================================================================
+-- [SECTION 06] FISH ATTRIBUTES & FILTERS
+-- Pengecekan metadata item (Mutasi, Shiny, Big, Sparkling) serta evaluasi
+-- apakah suatu ikan lolos filter untuk dikirimkan (ByName / ByRarity).
+-- ==============================================================================
 local tier_mapping = {
     [1] = "common",
     [2] = "uncommon",
@@ -1209,6 +622,11 @@ local function should_trade_fish_by_rarity(item_data, inventory_item)
     return should_trade;
 end
 
+-- ==============================================================================
+-- [SECTION 07] ROUND-ROBIN ITEM SELECTION ALGORITHMS
+-- Algoritma seleksi item secara adil / bergantian per kategori (Rarity / Nama)
+-- agar kuantitas trade terdistribusi merata, serta pencatatan log inventory ke file.
+-- ==============================================================================
 local function collect_round_robin_rarity(player_data_items, selected_tiers, limit)
     local buckets = {}
     local bucket_keys = {}
@@ -1392,6 +810,11 @@ local function log_inventory_fish()
     end)
 end
 
+-- ==============================================================================
+-- [SECTION 08] TRADE PROTOCOL & SESSION ENGINE
+-- Pengendali siklus trade: pembatalan darurat (decline), deteksi penyelesaian
+-- trade via notifikasi/chat, pembaruan status, dan koordinasi pertukaran item.
+-- ==============================================================================
 local function decline_active_trade()
     pcall(function()
         local trading_gui = local_player.PlayerGui:FindFirstChild("! Trading")
@@ -1758,6 +1181,11 @@ local function update_mode_status(mode_name)
     end
 end
 
+-- ==============================================================================
+-- [SECTION 09] TRADING ENGINE 1: TRADE BY NAME
+-- Menjalankan sesi trade untuk jenis ikan spesifik yang dipilih pengguna,
+-- menyaring tier & mutasi, memasukkan item ke slot trade, lalu konfirmasi.
+-- ==============================================================================
 local function try_trade_fish()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -1897,6 +1325,11 @@ local function try_trade_fish()
     end
 end
 
+-- ==============================================================================
+-- [SECTION 10] TRADING ENGINE 2: TRADE BY RARITY
+-- Menjalankan sesi trade untuk ikan berdasarkan tingkat kelangkaan (Common s/d Forgotten)
+-- menggunakan algoritma round-robin bucket.
+-- ==============================================================================
 local function try_trade_rarity()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -2037,6 +1470,10 @@ local function try_trade_rarity()
     end
 end
 
+-- ==============================================================================
+-- [SECTION 11] TRADING ENGINE 3: TRADE ENCHANTS
+-- Menjalankan sesi trade untuk batu enchant / item enchant stone yang dipilih.
+-- ==============================================================================
 local function try_trade_enchant()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -2180,6 +1617,11 @@ local function try_trade_enchant()
     end
 end
 
+-- ==============================================================================
+-- [SECTION 12] TRADING ENGINE 4: TRADE BY COIN VALUE
+-- Komparator harga, seleksi greedy/knapsack ikan untuk mencapai target koin tertentu,
+-- dan eksekusi sesi trade otomatis.
+-- ==============================================================================
 local function coin_fish_comparator(a, b)
     if a.SpecialScore ~= b.SpecialScore then
         return a.SpecialScore > b.SpecialScore
@@ -2398,6 +1840,11 @@ local function try_trade_by_coin()
     end
 end
 
+-- ==============================================================================
+-- [SECTION 13] AUTO TRADE TASK RUNNER
+-- Task loop utama yang berjalan di background; memeriksa mode aktif dan
+-- menjalankan fungsi engine terkait secara periodik dengan jeda delay aman.
+-- ==============================================================================
 local function run_auto_trade_loop()
     if cache.loop_running then return end
     cache.loop_running = true
@@ -2405,7 +1852,7 @@ local function run_auto_trade_loop()
     log_inventory_fish()
 
     task_spawn(function()
-        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
             if config.enabled and config.trade_fish_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -2418,7 +1865,7 @@ local function run_auto_trade_loop()
     end)
 
     task_spawn(function()
-        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
             if config.enabled and config.trade_rarity_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -2431,7 +1878,7 @@ local function run_auto_trade_loop()
     end)
 
     task_spawn(function()
-        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
             if config.enabled and config.trade_enchants_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -2448,7 +1895,7 @@ local function run_auto_trade_loop()
     end)
 
     task_spawn(function()
-        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
             if config.enabled and config.trade_coins_enabled and config.target_coin_amount > 0 then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -2468,11 +1915,15 @@ pcall(function()
         trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
             cache.last_trade_time = tick()
             cache.active_trade = false
-            restore_hud()
         end)
     end
 end)
 
+-- ==============================================================================
+-- [SECTION 14] GUI ROOT & WINDOW SETUP
+-- Inisialisasi ScreenGui (dukungan gethui, CoreGui, PlayerGui), pembersihan GUI lama,
+-- penataan MainFrame, sistem dragging jendela, serta sidebar pilihan target player.
+-- ==============================================================================
 local function create_ui()
     local parent_gui = nil
     if gethui then
@@ -2490,81 +1941,11 @@ local function create_ui()
         parent_gui = local_player:WaitForChild("PlayerGui")
     end
 
-    local custom_logo_asset = nil
-    pcall(function()
-        local logo_file = "keenan_trade_logo_v2.png"
-        local get_asset = getcustomasset or getsynasset
-        if not get_asset then return end
-
-        local has_file = false
-        pcall(function()
-            if isfile and isfile(logo_file) then
-                if readfile and #readfile(logo_file) > 1000 then
-                    has_file = true
-                end
-            end
-        end)
-
-        if not has_file and writefile then
-            local b64_str = "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"
-            local function decode_b64(data)
-                if crypt and crypt.base64_decode then return crypt.base64_decode(data) end
-                if crypt and crypt.base64decode then return crypt.base64decode(data) end
-                if syn and syn.crypt and syn.crypt.base64 and syn.crypt.base64.decode then return syn.crypt.base64.decode(data) end
-                if base64_decode then return base64_decode(data) end
-                local b64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-                local lut = {}
-                for i = 1, 64 do lut[string.byte(b64_chars, i)] = i - 1 end
-                local clean = {}
-                for i = 1, #data do
-                    local b = string.byte(data, i)
-                    if lut[b] or b == 61 then
-                        table.insert(clean, b)
-                    end
-                end
-                local bytes = {}
-                local len = #clean
-                for i = 1, len, 4 do
-                    local c1 = lut[clean[i]] or 0
-                    local c2 = lut[clean[i + 1]] or 0
-                    local c3 = clean[i + 2] ~= 61 and lut[clean[i + 2]] or nil
-                    local c4 = clean[i + 3] ~= 61 and lut[clean[i + 3]] or nil
-
-                    local b1 = bit32 and bit32.bor(bit32.lshift(c1, 2), bit32.rshift(c2, 4)) or (c1 * 4 + math.floor(c2 / 16))
-                    table.insert(bytes, string.char(b1))
-
-                    if c3 ~= nil then
-                        local b2 = bit32 and bit32.bor(bit32.band(bit32.lshift(c2, 4), 255), bit32.rshift(c3, 2)) or ((c2 % 16) * 16 + math.floor(c3 / 4))
-                        table.insert(bytes, string.char(b2))
-                    end
-                    if c4 ~= nil then
-                        local b3 = bit32 and bit32.bor(bit32.band(bit32.lshift(c3, 6), 255), c4) or ((c3 % 4) * 64 + c4)
-                        table.insert(bytes, string.char(b3))
-                    end
-                end
-                return table.concat(bytes)
-            end
-
-            local raw_png = nil
-            pcall(function() raw_png = decode_b64(b64_str) end)
-            if raw_png and #raw_png > 1000 then
-                writefile(logo_file, raw_png)
-                has_file = true
-            end
-        end
-
-        if (has_file or (isfile and isfile(logo_file))) and get_asset then
-            pcall(function()
-                custom_logo_asset = get_asset(logo_file)
-            end)
-        end
-    end)
-
     local function clear_old_guis(container)
         if not container then return end
         pcall(function()
             for _, child in ipairs(container:GetChildren()) do
-                if child.Name == "KeenanTrade" or child.Name == "NoirHub_AutoTrade" or child.Name == "AutoTrade" then
+                if child.Name == "KeenanHub_AutoTrade" or child.Name == "NoirHub_AutoTrade" or child.Name == "AutoTrade" then
                     pcall(function() child:Destroy() end)
                 end
             end
@@ -2577,7 +1958,7 @@ local function create_ui()
     pcall(function() clear_old_guis(game:GetService("CoreGui")) end)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "KeenanTrade"
+    gui.Name = "KeenanHub_AutoTrade"
     gui.ResetOnSpawn = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.IgnoreGuiInset = true
@@ -2592,7 +1973,7 @@ local function create_ui()
     end
 
     task_spawn(function()
-        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
             task_wait(1)
             pcall(function()
                 if gui and gui.Parent then
@@ -2713,21 +2094,21 @@ local function create_ui()
     cache.loaded_fish = get_owned_fish_options()
     cache.loaded_enchants = get_owned_enchant_options()
 
-    local BG_COLOR = Color3.fromRGB(15, 15, 15)
-    local SIDEBAR_COLOR = Color3.fromRGB(10, 10, 10)
-    local ACCENT_COLOR = Color3.fromRGB(255, 0, 255)
-    local TEXT_COLOR = Color3.fromRGB(240, 240, 240)
-    local MUTED_COLOR = Color3.fromRGB(150, 150, 150)
-    local CARD_COLOR = Color3.fromRGB(22, 22, 22)
-    local TOGGLE_ON_COLOR = Color3.fromRGB(255, 0, 255)
-    local INPUT_BG_COLOR = Color3.fromRGB(28, 28, 28)
+    local BG_COLOR = Color3.fromRGB(28, 30, 34)         -- Solid Terminal Slate Gray
+    local SIDEBAR_COLOR = Color3.fromRGB(20, 22, 25)    -- Solid Terminal Charcoal Gray
+    local ACCENT_COLOR = Color3.fromRGB(250, 204, 21)   -- Keenan Yellow Accent (#FACC15)
+    local ACCENT_HOVER = Color3.fromRGB(253, 224, 71)   -- Light Yellow Hover
+    local TEXT_COLOR = Color3.fromRGB(235, 238, 242)    -- Terminal Off-White Text
+    local MUTED_COLOR = Color3.fromRGB(140, 146, 158)   -- Terminal Muted Gray Text
+    local CARD_COLOR = Color3.fromRGB(36, 39, 44)       -- Solid Terminal Card Gray
+    local TOGGLE_ON_COLOR = Color3.fromRGB(250, 204, 21)-- Terminal Active Yellow Toggle
+    local INPUT_BG_COLOR = Color3.fromRGB(18, 20, 23)   -- Solid Terminal Black/Dark Gray
+    local BORDER_COLOR = Color3.fromRGB(58, 63, 72)     -- Terminal Border Gray
+    local BTN_BG_COLOR = Color3.fromRGB(46, 50, 58)     -- Terminal Button Gray
+    local BTN_HOVER_COLOR = Color3.fromRGB(60, 66, 76)  -- Terminal Button Hover Gray
 
-    local font_face = Font.fromEnum(Enum.Font.SourceSans)
-    local font_bold = Font.fromEnum(Enum.Font.SourceSansBold)
-    pcall(function()
-        font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-        font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    end)
+    local font_face = Font.fromEnum(Enum.Font.Code)
+    local font_bold = Font.fromEnum(Enum.Font.Code)
 
     local ply_dropdown_btn
     local target_lbl
@@ -2756,19 +2137,19 @@ local function create_ui()
     main.Size = UDim2.new(0, 250, 0, 200)
     main.Position = UDim2.new(0.5, -178, 0.5, -100)
     main.BackgroundColor3 = BG_COLOR
-    main.BackgroundTransparency = 0.3
+    main.BackgroundTransparency = 0
     main.BorderSizePixel = 0
     main.Active = true
     main.ZIndex = 10
     main.Parent = gui
 
     local main_stroke = Instance.new("UIStroke")
-    main_stroke.Color = Color3.fromRGB(45, 45, 45)
+    main_stroke.Color = BORDER_COLOR
     main_stroke.Thickness = 1
     main_stroke.Parent = main
 
     local main_corner = Instance.new("UICorner")
-    main_corner.CornerRadius = UDim.new(0, 10)
+    main_corner.CornerRadius = UDim.new(0, 6)
     main_corner.Parent = main
 
     close_detector = Instance.new("TextButton")
@@ -2800,8 +2181,8 @@ local function create_ui()
     player_panel.Name = "PlayerSelectionPanel"
     player_panel.Size = UDim2.new(0, 100, 1, 0)
     player_panel.Position = UDim2.new(1, 5, 0, 0)
-    player_panel.BackgroundColor3 = BG_COLOR
-    player_panel.BackgroundTransparency = 0.3
+    player_panel.BackgroundColor3 = SIDEBAR_COLOR
+    player_panel.BackgroundTransparency = 0
     player_panel.BorderSizePixel = 0
     player_panel.Active = true
     player_panel.Visible = true
@@ -2809,20 +2190,20 @@ local function create_ui()
     player_panel.Parent = main
 
     local p_stroke = Instance.new("UIStroke")
-    p_stroke.Color = Color3.fromRGB(45, 45, 45)
+    p_stroke.Color = BORDER_COLOR
     p_stroke.Thickness = 1
     p_stroke.Parent = player_panel
 
     local p_corner = Instance.new("UICorner")
-    p_corner.CornerRadius = UDim.new(0, 10)
+    p_corner.CornerRadius = UDim.new(0, 6)
     p_corner.Parent = player_panel
 
     local ply_refresh = Instance.new("TextButton")
     ply_refresh.Size = UDim2.new(1, -20, 0, 26)
     ply_refresh.Position = UDim2.new(0, 10, 0, 10)
-    ply_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    ply_refresh.BackgroundColor3 = BTN_BG_COLOR
     ply_refresh.Text = "Refresh"
-    ply_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ply_refresh.TextColor3 = ACCENT_COLOR
     ply_refresh.TextSize = 9
     ply_refresh.FontFace = font_bold
     ply_refresh.Active = true
@@ -2830,23 +2211,28 @@ local function create_ui()
     ply_refresh.Parent = player_panel
 
     local ply_refresh_c = Instance.new("UICorner")
-    ply_refresh_c.CornerRadius = UDim.new(0, 5)
+    ply_refresh_c.CornerRadius = UDim.new(0, 4)
     ply_refresh_c.Parent = ply_refresh
 
+    local ply_refresh_stroke = Instance.new("UIStroke")
+    ply_refresh_stroke.Color = BORDER_COLOR
+    ply_refresh_stroke.Thickness = 1
+    ply_refresh_stroke.Parent = ply_refresh
+
     ply_refresh.MouseEnter:Connect(function()
-        ply_refresh.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+        ply_refresh.BackgroundColor3 = BTN_HOVER_COLOR
     end)
     ply_refresh.MouseLeave:Connect(function()
-        ply_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+        ply_refresh.BackgroundColor3 = BTN_BG_COLOR
     end)
 
     target_lbl = Instance.new("TextLabel")
     target_lbl.Size = UDim2.new(1, -12, 0, 20)
     target_lbl.Position = UDim2.new(0, 6, 0, 42)
-    target_lbl.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    target_lbl.BackgroundColor3 = INPUT_BG_COLOR
     target_lbl.BackgroundTransparency = 0
     target_lbl.Text = truncate_string(config.trade_with ~= "" and config.trade_with or "None", 10)
-    target_lbl.TextColor3 = Color3.fromRGB(255, 0, 255)
+    target_lbl.TextColor3 = ACCENT_COLOR
     target_lbl.TextSize = 9
     target_lbl.FontFace = font_bold
     target_lbl.TextXAlignment = Enum.TextXAlignment.Center
@@ -2858,7 +2244,7 @@ local function create_ui()
     target_lbl_corner.Parent = target_lbl
 
     local target_lbl_stroke = Instance.new("UIStroke")
-    target_lbl_stroke.Color = Color3.fromRGB(45, 45, 45)
+    target_lbl_stroke.Color = BORDER_COLOR
     target_lbl_stroke.Thickness = 1
     target_lbl_stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     target_lbl_stroke.Parent = target_lbl
@@ -2866,7 +2252,7 @@ local function create_ui()
     local p_sep = Instance.new("Frame")
     p_sep.Size = UDim2.new(1, 0, 0, 1)
     p_sep.Position = UDim2.new(0, 0, 0, 68)
-    p_sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    p_sep.BackgroundColor3 = BORDER_COLOR
     p_sep.BorderSizePixel = 0
     p_sep.ZIndex = 10
     p_sep.Parent = player_panel
@@ -2877,7 +2263,7 @@ local function create_ui()
     p_scroll.BackgroundTransparency = 1
     p_scroll.BorderSizePixel = 0
     p_scroll.ScrollBarThickness = 3
-    p_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    p_scroll.ScrollBarImageColor3 = BORDER_COLOR
     p_scroll.Active = true
     p_scroll.ZIndex = 10
     safe_set_scroll(p_scroll)
@@ -2903,7 +2289,7 @@ local function create_ui()
                 local opt_btn = Instance.new("TextButton")
                 opt_btn.Size = UDim2.new(1, -6, 0, 24)
                 opt_btn.BackgroundTransparency = is_selected and 0 or 1
-                opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                opt_btn.BackgroundColor3 = CARD_COLOR
                 opt_btn.Text = ""
                 opt_btn.Active = true
                 opt_btn.ZIndex = 12
@@ -2937,14 +2323,14 @@ local function create_ui()
                 opt_btn.MouseEnter:Connect(function()
                     if not is_selected then
                         opt_btn.BackgroundTransparency = 0
-                        opt_btn.BackgroundColor3 = Color3.fromRGB(35, 15, 35)
+                        opt_btn.BackgroundColor3 = BTN_HOVER_COLOR
                     end
                 end)
                 opt_btn.MouseLeave:Connect(function()
                     if not is_selected then
                         opt_btn.BackgroundTransparency = 1
                     else
-                        opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                        opt_btn.BackgroundColor3 = CARD_COLOR
                     end
                 end)
 
@@ -2979,8 +2365,8 @@ local function create_ui()
     item_panel.Name = "ItemSelectionPanel"
     item_panel.Size = UDim2.new(0, 150, 1, -34)
     item_panel.Position = UDim2.new(1, -160, 0, 28)
-    item_panel.BackgroundColor3 = BG_COLOR
-    item_panel.BackgroundTransparency = 0.3
+    item_panel.BackgroundColor3 = SIDEBAR_COLOR
+    item_panel.BackgroundTransparency = 0
     item_panel.BorderSizePixel = 0
     item_panel.Active = true
     item_panel.Visible = false
@@ -2988,12 +2374,12 @@ local function create_ui()
     item_panel.Parent = main
 
     local i_stroke = Instance.new("UIStroke")
-    i_stroke.Color = Color3.fromRGB(45, 45, 45)
+    i_stroke.Color = BORDER_COLOR
     i_stroke.Thickness = 1
     i_stroke.Parent = item_panel
 
     local i_corner = Instance.new("UICorner")
-    i_corner.CornerRadius = UDim.new(0, 10)
+    i_corner.CornerRadius = UDim.new(0, 6)
     i_corner.Parent = item_panel
 
     local item_search_box = Instance.new("TextBox")
@@ -3028,7 +2414,7 @@ local function create_ui()
     local i_sep = Instance.new("Frame")
     i_sep.Size = UDim2.new(1, 0, 0, 1)
     i_sep.Position = UDim2.new(0, 0, 0, 42)
-    i_sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    i_sep.BackgroundColor3 = BORDER_COLOR
     i_sep.BorderSizePixel = 0
     i_sep.ZIndex = 10
     i_sep.Parent = item_panel
@@ -3039,7 +2425,7 @@ local function create_ui()
     i_scroll.BackgroundTransparency = 1
     i_scroll.BorderSizePixel = 0
     i_scroll.ScrollBarThickness = 3
-    i_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    i_scroll.ScrollBarImageColor3 = BORDER_COLOR
     i_scroll.Active = true
     i_scroll.ZIndex = 10
     safe_set_scroll(i_scroll)
@@ -3075,7 +2461,7 @@ local function create_ui()
                     local opt_btn = Instance.new("TextButton")
                     opt_btn.Size = UDim2.new(1, -6, 0, 24)
                     opt_btn.BackgroundTransparency = is_selected and 0 or 1
-                    opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                    opt_btn.BackgroundColor3 = CARD_COLOR
                     opt_btn.Text = ""
                     opt_btn.Active = true
                     opt_btn.ZIndex = 12
@@ -3109,14 +2495,14 @@ local function create_ui()
                     opt_btn.MouseEnter:Connect(function()
                         if not is_selected then
                             opt_btn.BackgroundTransparency = 0
-                            opt_btn.BackgroundColor3 = Color3.fromRGB(35, 15, 35)
+                            opt_btn.BackgroundColor3 = BTN_HOVER_COLOR
                         end
                     end)
                     opt_btn.MouseLeave:Connect(function()
                         if not is_selected then
                             opt_btn.BackgroundTransparency = 1
                         else
-                            opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                            opt_btn.BackgroundColor3 = CARD_COLOR
                         end
                     end)
 
@@ -3173,8 +2559,8 @@ local function create_ui()
     enchant_panel.Name = "EnchantSelectionPanel"
     enchant_panel.Size = UDim2.new(0, 150, 1, -34)
     enchant_panel.Position = UDim2.new(1, -160, 0, 28)
-    enchant_panel.BackgroundColor3 = BG_COLOR
-    enchant_panel.BackgroundTransparency = 0.3
+    enchant_panel.BackgroundColor3 = SIDEBAR_COLOR
+    enchant_panel.BackgroundTransparency = 0
     enchant_panel.BorderSizePixel = 0
     enchant_panel.Active = true
     enchant_panel.Visible = false
@@ -3182,12 +2568,12 @@ local function create_ui()
     enchant_panel.Parent = main
 
     local en_stroke = Instance.new("UIStroke")
-    en_stroke.Color = Color3.fromRGB(45, 45, 45)
+    en_stroke.Color = BORDER_COLOR
     en_stroke.Thickness = 1
     en_stroke.Parent = enchant_panel
 
     local en_corner = Instance.new("UICorner")
-    en_corner.CornerRadius = UDim.new(0, 10)
+    en_corner.CornerRadius = UDim.new(0, 6)
     en_corner.Parent = enchant_panel
 
     local enchant_search_box = Instance.new("TextBox")
@@ -3222,7 +2608,7 @@ local function create_ui()
     local en_sep = Instance.new("Frame")
     en_sep.Size = UDim2.new(1, 0, 0, 1)
     en_sep.Position = UDim2.new(0, 0, 0, 42)
-    en_sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    en_sep.BackgroundColor3 = BORDER_COLOR
     en_sep.BorderSizePixel = 0
     en_sep.ZIndex = 10
     en_sep.Parent = enchant_panel
@@ -3233,7 +2619,7 @@ local function create_ui()
     en_scroll.BackgroundTransparency = 1
     en_scroll.BorderSizePixel = 0
     en_scroll.ScrollBarThickness = 3
-    en_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    en_scroll.ScrollBarImageColor3 = BORDER_COLOR
     en_scroll.Active = true
     en_scroll.ZIndex = 10
     safe_set_scroll(en_scroll)
@@ -3270,7 +2656,7 @@ local function create_ui()
                     local opt_btn = Instance.new("TextButton")
                     opt_btn.Size = UDim2.new(1, -6, 0, 24)
                     opt_btn.BackgroundTransparency = is_selected and 0 or 1
-                    opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                    opt_btn.BackgroundColor3 = CARD_COLOR
                     opt_btn.Text = ""
                     opt_btn.Active = true
                     opt_btn.ZIndex = 12
@@ -3304,14 +2690,14 @@ local function create_ui()
                     opt_btn.MouseEnter:Connect(function()
                         if not is_selected then
                             opt_btn.BackgroundTransparency = 0
-                            opt_btn.BackgroundColor3 = Color3.fromRGB(35, 15, 35)
+                            opt_btn.BackgroundColor3 = BTN_HOVER_COLOR
                         end
                     end)
                     opt_btn.MouseLeave:Connect(function()
                         if not is_selected then
                             opt_btn.BackgroundTransparency = 1
                         else
-                            opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                            opt_btn.BackgroundColor3 = CARD_COLOR
                         end
                     end)
 
@@ -3368,8 +2754,8 @@ local function create_ui()
     rarity_panel.Name = "RaritySelectionPanel"
     rarity_panel.Size = UDim2.new(0, 150, 1, -34)
     rarity_panel.Position = UDim2.new(1, -160, 0, 28)
-    rarity_panel.BackgroundColor3 = BG_COLOR
-    rarity_panel.BackgroundTransparency = 0.3
+    rarity_panel.BackgroundColor3 = SIDEBAR_COLOR
+    rarity_panel.BackgroundTransparency = 0
     rarity_panel.BorderSizePixel = 0
     rarity_panel.Active = true
     rarity_panel.Visible = false
@@ -3377,12 +2763,12 @@ local function create_ui()
     rarity_panel.Parent = main
 
     local r_stroke = Instance.new("UIStroke")
-    r_stroke.Color = Color3.fromRGB(45, 45, 45)
+    r_stroke.Color = BORDER_COLOR
     r_stroke.Thickness = 1
     r_stroke.Parent = rarity_panel
 
     local r_corner = Instance.new("UICorner")
-    r_corner.CornerRadius = UDim.new(0, 10)
+    r_corner.CornerRadius = UDim.new(0, 6)
     r_corner.Parent = rarity_panel
 
     local r_title = Instance.new("TextLabel")
@@ -3400,7 +2786,7 @@ local function create_ui()
     local r_sep = Instance.new("Frame")
     r_sep.Size = UDim2.new(1, 0, 0, 1)
     r_sep.Position = UDim2.new(0, 0, 0, 42)
-    r_sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    r_sep.BackgroundColor3 = BORDER_COLOR
     r_sep.BorderSizePixel = 0
     r_sep.ZIndex = 10
     r_sep.Parent = rarity_panel
@@ -3411,7 +2797,7 @@ local function create_ui()
     r_scroll.BackgroundTransparency = 1
     r_scroll.BorderSizePixel = 0
     r_scroll.ScrollBarThickness = 3
-    r_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    r_scroll.ScrollBarImageColor3 = BORDER_COLOR
     r_scroll.Active = true
     r_scroll.ZIndex = 10
     safe_set_scroll(r_scroll)
@@ -3443,7 +2829,7 @@ local function create_ui()
                 local opt_btn = Instance.new("TextButton")
                 opt_btn.Size = UDim2.new(1, -6, 0, 24)
                 opt_btn.BackgroundTransparency = is_selected and 0 or 1
-                opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                opt_btn.BackgroundColor3 = CARD_COLOR
                 opt_btn.Text = ""
                 opt_btn.Active = true
                 opt_btn.ZIndex = 12
@@ -3477,14 +2863,14 @@ local function create_ui()
                 opt_btn.MouseEnter:Connect(function()
                     if not is_selected then
                         opt_btn.BackgroundTransparency = 0
-                        opt_btn.BackgroundColor3 = Color3.fromRGB(35, 15, 35)
+                        opt_btn.BackgroundColor3 = BTN_HOVER_COLOR
                     end
                 end)
                 opt_btn.MouseLeave:Connect(function()
                     if not is_selected then
                         opt_btn.BackgroundTransparency = 1
                     else
-                        opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                        opt_btn.BackgroundColor3 = CARD_COLOR
                     end
                 end)
 
@@ -3529,21 +2915,21 @@ local function create_ui()
     header.Name = "HeaderBar"
     header.Size = UDim2.new(1, 0, 0, 24)
     header.BackgroundColor3 = SIDEBAR_COLOR
-    header.BackgroundTransparency = 0.3
+    header.BackgroundTransparency = 0
     header.BorderSizePixel = 0
     header.Active = true
     header.ZIndex = 5
     header.Parent = main
 
     local header_corner = Instance.new("UICorner")
-    header_corner.CornerRadius = UDim.new(0, 10)
+    header_corner.CornerRadius = UDim.new(0, 6)
     header_corner.Parent = header
 
     local header_cover = Instance.new("Frame")
     header_cover.Size = UDim2.new(1, 0, 0, 6)
     header_cover.Position = UDim2.new(0, 0, 1, -6)
     header_cover.BackgroundColor3 = SIDEBAR_COLOR
-    header_cover.BackgroundTransparency = 0.3
+    header_cover.BackgroundTransparency = 0
     header_cover.BorderSizePixel = 0
     header_cover.ZIndex = 5
     header_cover.Parent = header
@@ -3551,7 +2937,7 @@ local function create_ui()
     local header_div = Instance.new("Frame")
     header_div.Size = UDim2.new(1, 0, 0, 1)
     header_div.Position = UDim2.new(0, 0, 1, 0)
-    header_div.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    header_div.BackgroundColor3 = BORDER_COLOR
     header_div.BorderSizePixel = 0
     header_div.ZIndex = 5
     header_div.Parent = header
@@ -3560,8 +2946,8 @@ local function create_ui()
     title_lbl.Size = UDim2.new(1, -40, 1, 0)
     title_lbl.Position = UDim2.new(0, 10, 0, 0)
     title_lbl.BackgroundTransparency = 1
-    title_lbl.Text = "Keenan Trade Script"
-    title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title_lbl.Text = "[K] KEENAN // TERMINAL TRADE"
+    title_lbl.TextColor3 = ACCENT_COLOR
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
     title_lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -3588,12 +2974,23 @@ local function create_ui()
             main.Position = UDim2.new(start_pos.X.Scale, start_pos.X.Offset + delta.X, start_pos.Y.Scale, start_pos.Y.Offset + delta.Y)
         end
     end)
+
+    local formatted_logo_id = ""
+    if CUSTOM_LOGO_ASSET_ID and CUSTOM_LOGO_ASSET_ID ~= "" and CUSTOM_LOGO_ASSET_ID ~= "0" and CUSTOM_LOGO_ASSET_ID ~= 0 then
+        local id_str = tostring(CUSTOM_LOGO_ASSET_ID)
+        if string_find(id_str, "://", 1, true) then
+            formatted_logo_id = id_str
+        else
+            formatted_logo_id = "rbxassetid://" .. id_str
+        end
+    end
+
     local floating_btn = Instance.new("TextButton")
     floating_btn.Name = "FloatingRestore"
-    floating_btn.Size = UDim2.new(0, 38, 0, 38)
-    floating_btn.Position = UDim2.new(0, 15, 0.5, -19)
-    floating_btn.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-    floating_btn.BackgroundTransparency = 0.3
+    floating_btn.Size = UDim2.new(0, 42, 0, 42)
+    floating_btn.Position = UDim2.new(0, 15, 0.5, -21)
+    floating_btn.BackgroundColor3 = SIDEBAR_COLOR
+    floating_btn.BackgroundTransparency = 0
     floating_btn.Text = ""
     floating_btn.Active = true
     floating_btn.Modal = true
@@ -3602,7 +2999,7 @@ local function create_ui()
     floating_btn.Parent = gui
 
     local float_corner = Instance.new("UICorner")
-    float_corner.CornerRadius = UDim.new(0, 9)
+    float_corner.CornerRadius = UDim.new(0, 6)
     float_corner.Parent = floating_btn
 
     local float_stroke = Instance.new("UIStroke")
@@ -3610,62 +3007,67 @@ local function create_ui()
     float_stroke.Thickness = 1.5
     float_stroke.Parent = floating_btn
 
-    local float_gradient = Instance.new("UIGradient")
-    float_gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 12, 28)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 16))
-    })
-    float_gradient.Rotation = 45
-    float_gradient.Parent = floating_btn
-
     local icon_img = Instance.new("ImageLabel")
-    icon_img.Size = UDim2.new(0, 26, 0, 26)
-    icon_img.Position = UDim2.new(0.5, -13, 0.5, -13)
+    icon_img.Name = "FloatingLogoImg"
+    icon_img.Size = UDim2.new(1, -8, 1, -8)
+    icon_img.Position = UDim2.new(0, 4, 0, 4)
     icon_img.BackgroundTransparency = 1
-    icon_img.ZIndex = 21
+    icon_img.Image = formatted_logo_id
     icon_img.ScaleType = Enum.ScaleType.Fit
-    icon_img.Visible = false
+    icon_img.ZIndex = 21
+    icon_img.Visible = (formatted_logo_id ~= "")
     icon_img.Parent = floating_btn
 
     local icon_lbl = Instance.new("TextLabel")
+    icon_lbl.Name = "FloatingFallback"
     icon_lbl.Size = UDim2.new(1, 0, 1, 0)
     icon_lbl.Position = UDim2.new(0, 0, 0, 0)
     icon_lbl.BackgroundTransparency = 1
     icon_lbl.Text = "K"
-    icon_lbl.TextColor3 = Color3.fromRGB(255, 235, 50)
+    icon_lbl.TextColor3 = ACCENT_COLOR
     icon_lbl.TextSize = 22
     icon_lbl.FontFace = font_bold
     icon_lbl.ZIndex = 21
-    icon_lbl.Visible = false
+    icon_lbl.Visible = (formatted_logo_id == "")
     icon_lbl.Parent = floating_btn
 
-    if custom_logo_asset then
-        icon_img.Image = custom_logo_asset
-        icon_img.Visible = true
-        icon_lbl.Visible = false
-    else
-        icon_img.Visible = false
-        icon_lbl.Visible = true
-    end
+    local f_dragging, f_drag_start, f_start_pos
+    floating_btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            f_dragging, f_drag_start, f_start_pos = false, input.Position, floating_btn.Position
+            local conn1, conn2
+            conn1 = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    if conn1 then conn1:Disconnect() end
+                    if conn2 then conn2:Disconnect() end
+                end
+            end)
+            conn2 = user_input_service.InputChanged:Connect(function(move_input)
+                if move_input.UserInputType == Enum.UserInputType.MouseMovement or move_input.UserInputType == Enum.UserInputType.Touch then
+                    local delta = move_input.Position - f_drag_start
+                    if delta.Magnitude > 5 then
+                        f_dragging = true
+                        floating_btn.Position = UDim2.new(f_start_pos.X.Scale, f_start_pos.X.Offset + delta.X, f_start_pos.Y.Scale, f_start_pos.Y.Offset + delta.Y)
+                    end
+                end
+            end)
+        end
+    end)
 
     floating_btn.MouseEnter:Connect(function()
         float_stroke.Thickness = 2
-        float_stroke.Color = Color3.fromRGB(255, 255, 255)
-        if icon_lbl.Visible then
-            icon_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-        end
+        float_stroke.Color = ACCENT_HOVER
     end)
     floating_btn.MouseLeave:Connect(function()
         float_stroke.Thickness = 1.5
         float_stroke.Color = ACCENT_COLOR
-        if icon_lbl.Visible then
-            icon_lbl.TextColor3 = Color3.fromRGB(255, 235, 50)
-        end
     end)
 
     floating_btn.MouseButton1Click:Connect(function()
-        main.Visible = true
-        floating_btn.Visible = false
+        if not f_dragging then
+            main.Visible = true
+            floating_btn.Visible = false
+        end
     end)
 
     local min_btn = Instance.new("TextButton")
@@ -3684,7 +3086,7 @@ local function create_ui()
     min_btn.Parent = header
 
     min_btn.MouseEnter:Connect(function()
-        min_btn.TextColor3 = Color3.fromRGB(255, 0, 255)
+        min_btn.TextColor3 = ACCENT_COLOR
     end)
     min_btn.MouseLeave:Connect(function()
         min_btn.TextColor3 = MUTED_COLOR
@@ -3711,7 +3113,7 @@ local function create_ui()
     settings_panel.BackgroundTransparency = 1
     settings_panel.BorderSizePixel = 0
     settings_panel.ScrollBarThickness = 3
-    settings_panel.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    settings_panel.ScrollBarImageColor3 = BORDER_COLOR
     settings_panel.Active = true
     safe_set_scroll(settings_panel)
     settings_panel.Parent = container
@@ -3727,18 +3129,23 @@ local function create_ui()
     settings_layout.Padding = UDim.new(0, 6)
     settings_layout.Parent = settings_panel
 
+    -- ==========================================================================
+    -- [SECTION 15] UI WIDGET BUILDERS
+    -- Helper pembuat komponen antarmuka kustom (Accordion, Dropdown list,
+    -- Text input box, dan Toggle switch dengan animasi tween).
+    -- ==========================================================================
     local function create_accordion(parent, title_text)
         local item_frame = Instance.new("Frame")
         item_frame.Size = UDim2.new(1, 0, 0, 26)
         item_frame.BackgroundColor3 = CARD_COLOR
-        item_frame.BackgroundTransparency = 0.3
+        item_frame.BackgroundTransparency = 0
         item_frame.BorderSizePixel = 0
         item_frame.ClipsDescendants = true
         item_frame.Active = false
         item_frame.Parent = parent
 
         local accordion_stroke = Instance.new("UIStroke")
-        accordion_stroke.Color = Color3.fromRGB(35, 35, 35)
+        accordion_stroke.Color = BORDER_COLOR
         accordion_stroke.Thickness = 1
         accordion_stroke.Parent = item_frame
 
@@ -3829,7 +3236,7 @@ local function create_ui()
         drop_btn_c.Parent = drop_btn
 
         local d_stroke = Instance.new("UIStroke")
-        d_stroke.Color = Color3.fromRGB(45, 45, 45)
+        d_stroke.Color = BORDER_COLOR
         d_stroke.Thickness = 1
         d_stroke.Parent = drop_btn
 
@@ -3873,7 +3280,7 @@ local function create_ui()
 
         local list_frame = Instance.new("Frame")
         list_frame.Size = UDim2.new(0, 160, 0, 130)
-        list_frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        list_frame.BackgroundColor3 = SIDEBAR_COLOR
         list_frame.BorderSizePixel = 0
         list_frame.Visible = false
         list_frame.ZIndex = 999
@@ -3881,7 +3288,7 @@ local function create_ui()
         list_frame.Parent = gui
 
         local list_stroke = Instance.new("UIStroke")
-        list_stroke.Color = Color3.fromRGB(50, 50, 50)
+        list_stroke.Color = BORDER_COLOR
         list_stroke.Thickness = 1
         list_stroke.Parent = list_frame
 
@@ -4018,7 +3425,7 @@ local function create_ui()
         box_c.Parent = box
 
         local box_stroke = Instance.new("UIStroke")
-        box_stroke.Color = Color3.fromRGB(45, 45, 45)
+        box_stroke.Color = BORDER_COLOR
         box_stroke.Thickness = 1
         box_stroke.Parent = box
 
@@ -4054,7 +3461,7 @@ local function create_ui()
         local capsule = Instance.new("TextButton")
         capsule.Size = UDim2.new(0, 32, 0, 16)
         capsule.Position = UDim2.new(1, -32, 0.5, -8)
-        capsule.BackgroundColor3 = default and TOGGLE_ON_COLOR or Color3.fromRGB(45, 45, 45)
+        capsule.BackgroundColor3 = default and TOGGLE_ON_COLOR or Color3.fromRGB(40, 44, 50)
         capsule.Text = ""
         capsule.AutoButtonColor = false
         capsule.Active = true
@@ -4065,7 +3472,7 @@ local function create_ui()
         cap_c.Parent = capsule
 
         local cap_stroke = Instance.new("UIStroke")
-        cap_stroke.Color = Color3.fromRGB(35, 35, 35)
+        cap_stroke.Color = BORDER_COLOR
         cap_stroke.Thickness = 1
         cap_stroke.Parent = capsule
 
@@ -4083,7 +3490,7 @@ local function create_ui()
         local active = default
         local function update_visual(state, instant)
             local target_pos = state and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
-            local target_color = state and TOGGLE_ON_COLOR or Color3.fromRGB(45, 45, 45)
+            local target_color = state and TOGGLE_ON_COLOR or Color3.fromRGB(40, 44, 50)
             if instant then
                 knob.Position = target_pos
                 capsule.BackgroundColor3 = target_color
@@ -4113,7 +3520,6 @@ local function create_ui()
         }
     end
 
-    local auto_accept_toggle_ctrl
     local byname_toggle_ctrl
     local enchant_toggle_ctrl
     local rarity_toggle_ctrl
@@ -4139,6 +3545,11 @@ local function create_ui()
         save_config()
     end
 
+    -- ==========================================================================
+    -- [SECTION 16] UI ACCORDION 1: TRADE BY NAME
+    -- Panel GUI untuk memilih target ikan spesifik, filter Tier, filter Mutasi,
+    -- input kuantitas pengiriman, status box, dan tombol aktivasi mode By Name.
+    -- ==========================================================================
     local byname_content, byname_toggle = create_accordion(settings_panel, "Trade By Name")
     local status_box = Instance.new("Frame")
     status_box.Name = "1_StatusBox"
@@ -4146,7 +3557,7 @@ local function create_ui()
     status_box.Size = UDim2.new(1, 0, 0, 58)
     status_box.AutomaticSize = Enum.AutomaticSize.Y
     status_box.BackgroundColor3 = CARD_COLOR
-    status_box.BackgroundTransparency = 0.3
+    status_box.BackgroundTransparency = 0
     status_box.BorderSizePixel = 0
     status_box.Parent = byname_content
 
@@ -4160,7 +3571,7 @@ local function create_ui()
     status_box_c.Parent = status_box
 
     local status_box_stroke = Instance.new("UIStroke")
-    status_box_stroke.Color = Color3.fromRGB(35, 35, 35)
+    status_box_stroke.Color = BORDER_COLOR
     status_box_stroke.Thickness = 1
     status_box_stroke.Parent = status_box
 
@@ -4235,7 +3646,7 @@ local function create_ui()
     fish_dropdown_c.Parent = fish_dropdown_btn
 
     local fish_dropdown_stroke = Instance.new("UIStroke")
-    fish_dropdown_stroke.Color = Color3.fromRGB(45, 45, 45)
+    fish_dropdown_stroke.Color = BORDER_COLOR
     fish_dropdown_stroke.Thickness = 1
     fish_dropdown_stroke.Parent = fish_dropdown_btn
 
@@ -4248,9 +3659,9 @@ local function create_ui()
     fish_chevron.Size = UDim2.new(0, 20, 1, 0)
     fish_chevron.Position = UDim2.new(1, -12, 0, 0)
     fish_chevron.BackgroundTransparency = 1
-    fish_chevron.Text = "♦"
-    fish_chevron.TextColor3 = Color3.fromRGB(192, 0, 192)
-    fish_chevron.TextSize = 8
+    fish_chevron.Text = "▼"
+    fish_chevron.TextColor3 = ACCENT_COLOR
+    fish_chevron.TextSize = 7
     fish_chevron.FontFace = font_face
     fish_chevron.TextXAlignment = Enum.TextXAlignment.Right
     fish_chevron.Parent = fish_dropdown_btn
@@ -4300,7 +3711,7 @@ local function create_ui()
     qty_c.Parent = qty_box
 
     local qty_stroke = Instance.new("UIStroke")
-    qty_stroke.Color = Color3.fromRGB(45, 45, 45)
+    qty_stroke.Color = BORDER_COLOR
     qty_stroke.Thickness = 1
     qty_stroke.Parent = qty_box
 
@@ -4316,9 +3727,9 @@ local function create_ui()
     refresh_btn.Name = "4_RefreshButton"
     refresh_btn.LayoutOrder = 4
     refresh_btn.Size = UDim2.new(1, 0, 0, 26)
-    refresh_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    refresh_btn.BackgroundColor3 = BTN_BG_COLOR
     refresh_btn.Text = "Refresh Fish Items"
-    refresh_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    refresh_btn.TextColor3 = ACCENT_COLOR
     refresh_btn.TextSize = 9
     refresh_btn.FontFace = font_bold
     refresh_btn.Active = true
@@ -4328,11 +3739,16 @@ local function create_ui()
     refresh_btn_c.CornerRadius = UDim.new(0, 5)
     refresh_btn_c.Parent = refresh_btn
 
+    local refresh_btn_stroke = Instance.new("UIStroke")
+    refresh_btn_stroke.Color = BORDER_COLOR
+    refresh_btn_stroke.Thickness = 1
+    refresh_btn_stroke.Parent = refresh_btn
+
     refresh_btn.MouseEnter:Connect(function()
-        refresh_btn.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+        refresh_btn.BackgroundColor3 = BTN_HOVER_COLOR
     end)
     refresh_btn.MouseLeave:Connect(function()
-        refresh_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+        refresh_btn.BackgroundColor3 = BTN_BG_COLOR
     end)
 
     refresh_btn.Activated:Connect(function()
@@ -4375,13 +3791,19 @@ local function create_ui()
     byname_fav_toggle.Frame.LayoutOrder = 6
     byname_fav_toggle.Frame.Name = "6_FavToggle"
 
-    local enchant_content, enchant_toggle = create_accordion(settings_panel, "Trade Enchant Stone")    local enchant_status_box = Instance.new("Frame")
+    -- ==========================================================================
+    -- [SECTION 17] UI ACCORDION 2: TRADE ENCHANTS
+    -- Panel GUI untuk memilih batu enchant stone, input batasan kuantitas,
+    -- status box, dan tombol aktivasi mode Enchant.
+    -- ==========================================================================
+    local enchant_content, enchant_toggle = create_accordion(settings_panel, "Trade Enchant Stone")
+    local enchant_status_box = Instance.new("Frame")
     enchant_status_box.Name = "1_StatusBox"
     enchant_status_box.LayoutOrder = 1
     enchant_status_box.Size = UDim2.new(1, 0, 0, 58)
     enchant_status_box.AutomaticSize = Enum.AutomaticSize.Y
     enchant_status_box.BackgroundColor3 = CARD_COLOR
-    enchant_status_box.BackgroundTransparency = 0.3
+    enchant_status_box.BackgroundTransparency = 0
     enchant_status_box.BorderSizePixel = 0
     enchant_status_box.Parent = enchant_content
 
@@ -4395,7 +3817,7 @@ local function create_ui()
     enchant_status_box_c.Parent = enchant_status_box
 
     local enchant_status_box_stroke = Instance.new("UIStroke")
-    enchant_status_box_stroke.Color = Color3.fromRGB(35, 35, 35)
+    enchant_status_box_stroke.Color = BORDER_COLOR
     enchant_status_box_stroke.Thickness = 1
     enchant_status_box_stroke.Parent = enchant_status_box
 
@@ -4470,7 +3892,7 @@ local function create_ui()
     enchant_dropdown_c.Parent = enchant_dropdown_btn
 
     local enchant_dropdown_stroke = Instance.new("UIStroke")
-    enchant_dropdown_stroke.Color = Color3.fromRGB(45, 45, 45)
+    enchant_dropdown_stroke.Color = BORDER_COLOR
     enchant_dropdown_stroke.Thickness = 1
     enchant_dropdown_stroke.Parent = enchant_dropdown_btn
 
@@ -4483,9 +3905,9 @@ local function create_ui()
     enchant_chevron.Size = UDim2.new(0, 20, 1, 0)
     enchant_chevron.Position = UDim2.new(1, -12, 0, 0)
     enchant_chevron.BackgroundTransparency = 1
-    enchant_chevron.Text = "♦"
-    enchant_chevron.TextColor3 = Color3.fromRGB(192, 0, 192)
-    enchant_chevron.TextSize = 8
+    enchant_chevron.Text = "▼"
+    enchant_chevron.TextColor3 = ACCENT_COLOR
+    enchant_chevron.TextSize = 7
     enchant_chevron.FontFace = font_face
     enchant_chevron.TextXAlignment = Enum.TextXAlignment.Right
     enchant_chevron.Parent = enchant_dropdown_btn
@@ -4535,7 +3957,7 @@ local function create_ui()
     es_qty_c.Parent = es_qty_box
 
     local es_qty_stroke = Instance.new("UIStroke")
-    es_qty_stroke.Color = Color3.fromRGB(45, 45, 45)
+    es_qty_stroke.Color = BORDER_COLOR
     es_qty_stroke.Thickness = 1
     es_qty_stroke.Parent = es_qty_box
 
@@ -4551,9 +3973,9 @@ local function create_ui()
     es_refresh.Name = "4_RefreshButton"
     es_refresh.LayoutOrder = 4
     es_refresh.Size = UDim2.new(1, 0, 0, 26)
-    es_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    es_refresh.BackgroundColor3 = BTN_BG_COLOR
     es_refresh.Text = "Check Enchant Stones"
-    es_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
+    es_refresh.TextColor3 = ACCENT_COLOR
     es_refresh.TextSize = 9
     es_refresh.FontFace = font_bold
     es_refresh.Active = true
@@ -4563,11 +3985,16 @@ local function create_ui()
     es_refresh_c.CornerRadius = UDim.new(0, 5)
     es_refresh_c.Parent = es_refresh
 
+    local es_refresh_stroke = Instance.new("UIStroke")
+    es_refresh_stroke.Color = BORDER_COLOR
+    es_refresh_stroke.Thickness = 1
+    es_refresh_stroke.Parent = es_refresh
+
     es_refresh.MouseEnter:Connect(function()
-        es_refresh.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+        es_refresh.BackgroundColor3 = BTN_HOVER_COLOR
     end)
     es_refresh.MouseLeave:Connect(function()
-        es_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+        es_refresh.BackgroundColor3 = BTN_BG_COLOR
     end)
 
     es_refresh.MouseButton1Click:Connect(function()
@@ -4628,6 +4055,11 @@ local function create_ui()
     enchant_toggle_ctrl.Frame.LayoutOrder = 5
     enchant_toggle_ctrl.Frame.Name = "5_StartTradeToggle"
 
+    -- ==========================================================================
+    -- [SECTION 18] UI ACCORDION 3: TRADE BY RARITY
+    -- Panel GUI untuk memilih tingkat kelangkaan ikan (Common s/d Forgotten),
+    -- filter mutasi, batasan kuantitas, dan tombol aktivasi mode By Rarity.
+    -- ==========================================================================
     local rarity_content, rarity_toggle = create_accordion(settings_panel, "Trade By Rarity")
     local rarity_status_box = Instance.new("Frame")
     rarity_status_box.Name = "1_StatusBox"
@@ -4635,7 +4067,7 @@ local function create_ui()
     rarity_status_box.Size = UDim2.new(1, 0, 0, 58)
     rarity_status_box.AutomaticSize = Enum.AutomaticSize.Y
     rarity_status_box.BackgroundColor3 = CARD_COLOR
-    rarity_status_box.BackgroundTransparency = 0.3
+    rarity_status_box.BackgroundTransparency = 0
     rarity_status_box.BorderSizePixel = 0
     rarity_status_box.Parent = rarity_content
 
@@ -4649,7 +4081,7 @@ local function create_ui()
     rarity_status_box_c.Parent = rarity_status_box
 
     local rarity_status_box_stroke = Instance.new("UIStroke")
-    rarity_status_box_stroke.Color = Color3.fromRGB(35, 35, 35)
+    rarity_status_box_stroke.Color = BORDER_COLOR
     rarity_status_box_stroke.Thickness = 1
     rarity_status_box_stroke.Parent = rarity_status_box
 
@@ -4724,7 +4156,7 @@ local function create_ui()
     rarity_dropdown_c.Parent = rarity_dropdown_btn
 
     local rarity_dropdown_stroke = Instance.new("UIStroke")
-    rarity_dropdown_stroke.Color = Color3.fromRGB(45, 45, 45)
+    rarity_dropdown_stroke.Color = BORDER_COLOR
     rarity_dropdown_stroke.Thickness = 1
     rarity_dropdown_stroke.Parent = rarity_dropdown_btn
 
@@ -4737,9 +4169,9 @@ local function create_ui()
     rarity_chevron.Size = UDim2.new(0, 20, 1, 0)
     rarity_chevron.Position = UDim2.new(1, -12, 0, 0)
     rarity_chevron.BackgroundTransparency = 1
-    rarity_chevron.Text = "♦"
-    rarity_chevron.TextColor3 = Color3.fromRGB(192, 0, 192)
-    rarity_chevron.TextSize = 8
+    rarity_chevron.Text = "▼"
+    rarity_chevron.TextColor3 = ACCENT_COLOR
+    rarity_chevron.TextSize = 7
     rarity_chevron.FontFace = font_face
     rarity_chevron.TextXAlignment = Enum.TextXAlignment.Right
     rarity_chevron.Parent = rarity_dropdown_btn
@@ -4789,7 +4221,7 @@ local function create_ui()
     r_qty_c.Parent = r_qty_box
 
     local r_qty_stroke = Instance.new("UIStroke")
-    r_qty_stroke.Color = Color3.fromRGB(45, 45, 45)
+    r_qty_stroke.Color = BORDER_COLOR
     r_qty_stroke.Thickness = 1
     r_qty_stroke.Parent = r_qty_box
 
@@ -4805,9 +4237,9 @@ local function create_ui()
     r_refresh.Name = "4_RefreshButton"
     r_refresh.LayoutOrder = 4
     r_refresh.Size = UDim2.new(1, 0, 0, 26)
-    r_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    r_refresh.BackgroundColor3 = BTN_BG_COLOR
     r_refresh.Text = "Refresh Fish Rarity"
-    r_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
+    r_refresh.TextColor3 = ACCENT_COLOR
     r_refresh.TextSize = 9
     r_refresh.FontFace = font_bold
     r_refresh.Active = true
@@ -4817,11 +4249,16 @@ local function create_ui()
     r_refresh_c.CornerRadius = UDim.new(0, 5)
     r_refresh_c.Parent = r_refresh
 
+    local r_refresh_stroke = Instance.new("UIStroke")
+    r_refresh_stroke.Color = BORDER_COLOR
+    r_refresh_stroke.Thickness = 1
+    r_refresh_stroke.Parent = r_refresh
+
     r_refresh.MouseEnter:Connect(function()
-        r_refresh.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+        r_refresh.BackgroundColor3 = BTN_HOVER_COLOR
     end)
     r_refresh.MouseLeave:Connect(function()
-        r_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+        r_refresh.BackgroundColor3 = BTN_BG_COLOR
     end)
 
     r_refresh.MouseButton1Click:Connect(function()
@@ -4860,6 +4297,11 @@ local function create_ui()
     rarity_fav_toggle.Frame.LayoutOrder = 6
     rarity_fav_toggle.Frame.Name = "6_FavToggle"
 
+    -- ==========================================================================
+    -- [SECTION 19] UI ACCORDION 4: TRADE BY COIN
+    -- Panel GUI untuk mengatur target perolehan koin, status kalkulasi harga ikan,
+    -- reset statistik koin, dan tombol aktivasi mode By Coin.
+    -- ==========================================================================
     local coin_content, coin_toggle = create_accordion(settings_panel, "Trade By Coin")
     local coin_status_box = Instance.new("Frame")
     coin_status_box.Name = "1_StatusBox"
@@ -4867,7 +4309,7 @@ local function create_ui()
     coin_status_box.Size = UDim2.new(1, 0, 0, 58)
     coin_status_box.AutomaticSize = Enum.AutomaticSize.Y
     coin_status_box.BackgroundColor3 = CARD_COLOR
-    coin_status_box.BackgroundTransparency = 0.3
+    coin_status_box.BackgroundTransparency = 0
     coin_status_box.BorderSizePixel = 0
     coin_status_box.Parent = coin_content
 
@@ -4881,7 +4323,7 @@ local function create_ui()
     coin_status_box_c.Parent = coin_status_box
 
     local coin_status_box_stroke = Instance.new("UIStroke")
-    coin_status_box_stroke.Color = Color3.fromRGB(35, 35, 35)
+    coin_status_box_stroke.Color = BORDER_COLOR
     coin_status_box_stroke.Thickness = 1
     coin_status_box_stroke.Parent = coin_status_box
 
@@ -4945,7 +4387,7 @@ local function create_ui()
     coin_box_c.Parent = coin_box
 
     local coin_box_stroke = Instance.new("UIStroke")
-    coin_box_stroke.Color = Color3.fromRGB(45, 45, 45)
+    coin_box_stroke.Color = BORDER_COLOR
     coin_box_stroke.Thickness = 1
     coin_box_stroke.Parent = coin_box
 
@@ -4994,9 +4436,9 @@ local function create_ui()
     coin_reset.Name = "5_ResetStatsButton"
     coin_reset.LayoutOrder = 5
     coin_reset.Size = UDim2.new(1, 0, 0, 26)
-    coin_reset.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    coin_reset.BackgroundColor3 = BTN_BG_COLOR
     coin_reset.Text = "Reset Stats By Coin"
-    coin_reset.TextColor3 = Color3.fromRGB(255, 255, 255)
+    coin_reset.TextColor3 = ACCENT_COLOR
     coin_reset.TextSize = 9
     coin_reset.FontFace = font_bold
     coin_reset.Active = true
@@ -5006,11 +4448,16 @@ local function create_ui()
     coin_reset_c.CornerRadius = UDim.new(0, 5)
     coin_reset_c.Parent = coin_reset
 
+    local coin_reset_stroke = Instance.new("UIStroke")
+    coin_reset_stroke.Color = BORDER_COLOR
+    coin_reset_stroke.Thickness = 1
+    coin_reset_stroke.Parent = coin_reset
+
     coin_reset.MouseEnter:Connect(function()
-        coin_reset.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+        coin_reset.BackgroundColor3 = BTN_HOVER_COLOR
     end)
     coin_reset.MouseLeave:Connect(function()
-        coin_reset.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+        coin_reset.BackgroundColor3 = BTN_BG_COLOR
     end)
 
     coin_reset.Activated:Connect(function()
@@ -5020,17 +4467,18 @@ local function create_ui()
         coin_reset.Text = "Reset Stats By Coin"
     end)
 
-    local auto_accept_content, auto_accept_toggle = create_accordion(settings_panel, "Auto Accept Trade")
-    auto_accept_toggle_ctrl = create_toggle(auto_accept_content, "Enable Auto Accept", config.auto_accept_enabled, function(state)
-        toggle_auto_accept(state)
-        save_config()
-    end)
+
 
     settings_panel.CanvasSize = UDim2.new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
     settings_layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         settings_panel.CanvasSize = UDim2.new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
     end)
 
+    -- ==========================================================================
+    -- [SECTION 20] REAL-TIME UI STATUS UPDATE LOOP
+    -- Coroutine background untuk menyinkronkan status visual teks, indikator
+    -- status aktif tiap mode, dan sinkronisasi state tombol toggle secara berkala.
+    -- ==========================================================================
     task_spawn(function()
         while gui.Parent do
 
@@ -5081,9 +4529,6 @@ local function create_ui()
                 end
             end
 
-            if auto_accept_toggle_ctrl then
-                auto_accept_toggle_ctrl.set_state(config.auto_accept_enabled)
-            end
             if byname_toggle_ctrl then
                 byname_toggle_ctrl.set_state(config.enabled and config.trade_fish_enabled)
             end
@@ -5102,6 +4547,11 @@ local function create_ui()
     end)
 end
 
+-- ==============================================================================
+-- [SECTION 21] SCRIPT INITIALIZATION & CLEANUP HANDLER
+-- Menjalankan pembuatan UI, dump log ikan di inventory, dan menyediakan
+-- handler pembersihan (_G.KeenanHub_AutoTrade_Cleanup) jika script di-reload.
+-- ==============================================================================
 local success, err = pcall(create_ui)
 if not success then
     local err_msg = "UI Creation Error: " .. tostring(err)
@@ -5109,26 +4559,23 @@ if not success then
     log_debug(err_msg)
 end
 pcall(log_inventory_fish)
-pcall(function() toggle_auto_accept(config.auto_accept_enabled) end)
 
-_G.NoirHub_AutoTrade_Cleanup = function()
+_G.KeenanHub_AutoTrade_Cleanup = function()
     if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end); trade_ended_conn = nil end
-    pcall(cleanup_prompt_watcher)
-    pcall(function() toggle_auto_accept(false) end)
-    pcall(restore_hud)
 
-    _G.NoirHub_AutoTrade_ScriptID = nil
+    _G.KeenanHub_AutoTrade_ScriptID = nil
 
     pcall(function()
         local core = gethui and gethui() or game:GetService("CoreGui")
-        local old = core:FindFirstChild("KeenanTrade") or core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
+        local old = core:FindFirstChild("KeenanHub_AutoTrade") or core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
         if old then old:Destroy() end
     end)
     pcall(function()
         local pgui = local_player:FindFirstChild("PlayerGui")
-        local old = pgui and (pgui:FindFirstChild("KeenanTrade") or pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
+        local old = pgui and (pgui:FindFirstChild("KeenanHub_AutoTrade") or pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
         if old then old:Destroy() end
     end)
 end
+_G.NoirHub_AutoTrade_Cleanup = _G.KeenanHub_AutoTrade_Cleanup
 
-print("AutoTrade UI and engine initialized successfully!")
+print("[KEENAN TERMINAL] AutoTrade UI and engine initialized successfully!")
