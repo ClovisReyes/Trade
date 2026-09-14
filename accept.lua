@@ -235,7 +235,7 @@ local function close_trading_gui()
         end
     end)
     if status_label then
-        status_label.Text = config.auto_accept_enabled and "[v4.1] Status: Idle (Listening)" or "[v4.1] Status: Disabled"
+        status_label.Text = config.auto_accept_enabled and "[v4.2] Status: Idle (Listening)" or "[v4.2] Status: Disabled"
     end
 end
 
@@ -247,25 +247,49 @@ local function toggle_auto_accept(enable)
     config.auto_accept_enabled = enable
 
     if not enable then
-        -- Toggle OFF: kembalikan semua ke default game, JANGAN sentuh Visible sama sekali
+        -- Toggle OFF: dismiss prompt lama, kembalikan ke default game
         pcall(function()
             local prompt_gui = player_gui:FindFirstChild("Prompt")
             if prompt_gui then
-                prompt_gui.Enabled = true
+                -- Step 1: Klik No/Decline pada prompt lama agar game dismiss secara internal
                 local blackout = prompt_gui:FindFirstChild("Blackout")
                 if blackout then
-                    blackout.AnchorPoint = Vector2.new(0.5, 0.5)
-                    blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                    blackout.Visible = true -- KEMBALIKAN ke true, karena saat ON kita set false
+                    local options = blackout:FindFirstChild("Options")
+                    if options then
+                        local no_btn = options:FindFirstChild("No") or options:FindFirstChild("Decline")
+                        if no_btn and no_btn:IsA("GuiButton") then
+                            click_gui_button(no_btn)
+                        end
+                    end
                 end
-                -- Kembalikan Frame ke state default game
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then
-                    frame.Visible = true -- KEMBALIKAN ke true
-                    frame.BackgroundTransparency = 0.5
-                    frame.Active = true
-                end
+
+                -- Step 2: Sembunyikan sejenak agar stale content tidak kelihatan
+                prompt_gui.Enabled = false
             end
+        end)
+
+        -- Step 3: Delay kecil agar game proses dismiss, lalu restore
+        task_spawn(function()
+            task_wait(0.15)
+            pcall(function()
+                local prompt_gui = player_gui:FindFirstChild("Prompt")
+                if prompt_gui then
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then
+                        blackout.AnchorPoint = Vector2.new(0.5, 0.5)
+                        blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+                        -- JANGAN set Visible = true, biarkan game yg set saat ada offer baru
+                    end
+                    local frame = prompt_gui:FindFirstChild("Frame")
+                    if frame then
+                        frame.BackgroundTransparency = 0.5
+                        frame.Active = true
+                        -- JANGAN set Visible = true
+                    end
+                    -- Re-enable ScreenGui agar game bisa tampilkan prompt baru
+                    prompt_gui.Enabled = true
+                end
+            end)
         end)
     else
         -- Toggle ON: sembunyikan prompt
@@ -289,7 +313,7 @@ local function toggle_auto_accept(enable)
     end
 
     if status_label then
-        status_label.Text = enable and "[v4.1] Status: Idle (Listening)" or "[v4.1] Status: Disabled"
+        status_label.Text = enable and "[v4.2] Status: Idle (Listening)" or "[v4.2] Status: Disabled"
     end
 
     if not trade_remotes then return end
@@ -303,7 +327,7 @@ local function toggle_auto_accept(enable)
         if not config.auto_accept_enabled then return end
 
         if status_label then
-            status_label.Text = "[v4.1] Status: Accepting Offer from " .. tostring(requester.Name or requester)
+            status_label.Text = "[v4.2] Status: Accepting Offer from " .. tostring(requester.Name or requester)
         end
 
         suppress_and_accept_prompt()
@@ -345,7 +369,7 @@ local function toggle_auto_accept(enable)
         end)
 
         if status_label then
-            status_label.Text = "[v4.1] Status: Trade Active! Showing GUI..."
+            status_label.Text = "[v4.2] Status: Trade Active! Showing GUI..."
         end
 
         pcall(function()
@@ -478,7 +502,7 @@ local function create_ui()
     title_lbl.Size = UDim2.new(1, -30, 1, 0)
     title_lbl.Position = UDim2.new(0, 8, 0, 0)
     title_lbl.BackgroundTransparency = 1
-    title_lbl.Text = "NØIR AutoAccept [v4.1]"
+    title_lbl.Text = "NØIR AutoAccept [v4.2]"
     title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
