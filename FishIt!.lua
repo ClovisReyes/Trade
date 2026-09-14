@@ -2758,10 +2758,10 @@ local function create_ui()
     min_btn.Position = UDim2_new(1, -66, 0.5, -9)
     min_btn.BackgroundTransparency = 1
     min_btn.BorderSizePixel = 0
-    min_btn.Text = "─"
+    min_btn.Text = "-"
     min_btn.TextColor3 = MUTED_COLOR
-    min_btn.TextSize = 11
-    min_btn.FontFace = font_bold
+    min_btn.TextSize = 13
+    min_btn.FontFace = Font.fromEnum(Enum.Font.GothamBold)
     min_btn.Active = true
     min_btn.Modal = true
     min_btn.ZIndex = 27
@@ -2789,20 +2789,68 @@ local function create_ui()
     restore_btn.Position = UDim2_new(1, -44, 0.5, -9)
     restore_btn.BackgroundTransparency = 1
     restore_btn.BorderSizePixel = 0
-    restore_btn.Text = "❐"
-    restore_btn.TextColor3 = MUTED_COLOR
-    restore_btn.TextSize = 10
-    restore_btn.FontFace = font_bold
+    restore_btn.Text = ""
     restore_btn.Active = true
     restore_btn.Modal = true
     restore_btn.ZIndex = 27
     restore_btn.Parent = header
 
+    local max_box = Instance_new("Frame")
+    max_box.Name = "MaxBox"
+    max_box.Size = UDim2_new(0, 9, 0, 9)
+    max_box.Position = UDim2_new(0.5, -4, 0.5, -4)
+    max_box.BackgroundTransparency = 1
+    max_box.BorderSizePixel = 0
+    max_box.ZIndex = 28
+    max_box.Parent = restore_btn
+
+    local max_box_stroke = Instance_new("UIStroke")
+    max_box_stroke.Color = MUTED_COLOR
+    max_box_stroke.Thickness = 1.2
+    max_box_stroke.Parent = max_box
+
+    local res_box_back = Instance_new("Frame")
+    res_box_back.Name = "ResBoxBack"
+    res_box_back.Size = UDim2_new(0, 7, 0, 7)
+    res_box_back.Position = UDim2_new(0.5, -2, 0.5, -5)
+    res_box_back.BackgroundTransparency = 1
+    res_box_back.BorderSizePixel = 0
+    res_box_back.ZIndex = 28
+    res_box_back.Visible = false
+    res_box_back.Parent = restore_btn
+
+    local res_stroke_back = Instance_new("UIStroke")
+    res_stroke_back.Color = MUTED_COLOR
+    res_stroke_back.Thickness = 1.2
+    res_stroke_back.Parent = res_box_back
+
+    local res_box_front = Instance_new("Frame")
+    res_box_front.Name = "ResBoxFront"
+    res_box_front.Size = UDim2_new(0, 7, 0, 7)
+    res_box_front.Position = UDim2_new(0.5, -5, 0.5, -2)
+    res_box_front.BackgroundColor3 = SIDEBAR_COLOR
+    res_box_front.BackgroundTransparency = 0
+    res_box_front.BorderSizePixel = 0
+    res_box_front.ZIndex = 29
+    res_box_front.Visible = false
+    res_box_front.Parent = restore_btn
+
+    local res_stroke_front = Instance_new("UIStroke")
+    res_stroke_front.Color = MUTED_COLOR
+    res_stroke_front.Thickness = 1.2
+    res_stroke_front.Parent = res_box_front
+
+    local function update_restore_icon_color(color)
+        max_box_stroke.Color = color
+        res_stroke_back.Color = color
+        res_stroke_front.Color = color
+    end
+
     restore_btn.MouseEnter:Connect(function()
-        restore_btn.TextColor3 = ACCENT_COLOR
+        update_restore_icon_color(ACCENT_COLOR)
     end)
     restore_btn.MouseLeave:Connect(function()
-        restore_btn.TextColor3 = MUTED_COLOR
+        update_restore_icon_color(MUTED_COLOR)
     end)
 
     restore_btn.MouseButton1Click:Connect(function()
@@ -2813,6 +2861,9 @@ local function create_ui()
             main.Position = UDim2_new(0, 10, top_y.Scale, top_y.Offset)
             main.Size = UDim2_new(1, -125, 1 - top_y.Scale, -top_y.Offset - 10)
             is_maximized = true
+            max_box.Visible = false
+            res_box_back.Visible = true
+            res_box_front.Visible = true
         else
             if saved_pos and saved_size then
                 main.Position = saved_pos
@@ -2822,6 +2873,9 @@ local function create_ui()
                 main.Size = UDim2_new(0, 250, 0, 200)
             end
             is_maximized = false
+            max_box.Visible = true
+            res_box_back.Visible = false
+            res_box_front.Visible = false
         end
     end)
 
@@ -2831,10 +2885,10 @@ local function create_ui()
     close_btn.Position = UDim2_new(1, -22, 0.5, -9)
     close_btn.BackgroundTransparency = 1
     close_btn.BorderSizePixel = 0
-    close_btn.Text = "✕"
+    close_btn.Text = "X"
     close_btn.TextColor3 = MUTED_COLOR
     close_btn.TextSize = 11
-    close_btn.FontFace = font_bold
+    close_btn.FontFace = Font.fromEnum(Enum.Font.GothamBold)
     close_btn.Active = true
     close_btn.Modal = true
     close_btn.ZIndex = 27
