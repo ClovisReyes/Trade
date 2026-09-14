@@ -256,14 +256,14 @@ local function toggle_auto_accept(enable)
                 if blackout then
                     blackout.AnchorPoint = Vector2.new(0.5, 0.5)
                     blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                    -- JANGAN set Visible = false/true, biarkan game yang kontrol
+                    blackout.Visible = true -- KEMBALIKAN ke true, karena saat ON kita set false
                 end
                 -- Kembalikan Frame ke state default game
                 local frame = prompt_gui:FindFirstChild("Frame")
                 if frame then
-                    frame.BackgroundTransparency = 0.5 -- default game overlay
+                    frame.Visible = true -- KEMBALIKAN ke true
+                    frame.BackgroundTransparency = 0.5
                     frame.Active = true
-                    -- JANGAN set Visible, biarkan game yang kontrol
                 end
             end
         end)
