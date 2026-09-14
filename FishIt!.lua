@@ -37,6 +37,53 @@ local user_input_service    = cloneref(game:GetService("UserInputService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
 local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
 local http_service          = cloneref(game:GetService("HttpService"))
+local lighting              = cloneref(game:GetService("Lighting"))
+
+local GuiControl = nil
+local function get_gui_control()
+    if GuiControl then return GuiControl end
+    pcall(function()
+        local rep = game:GetService("ReplicatedStorage")
+        local modules = rep:FindFirstChild("Modules") or rep:WaitForChild("Modules", 3)
+        if modules and modules:FindFirstChild("GuiControl") then
+            GuiControl = require(modules.GuiControl)
+        end
+    end)
+    return GuiControl
+end
+get_gui_control()
+
+local function restore_hud()
+    local gc = get_gui_control()
+    if gc then
+        pcall(function() gc.RestoreHUD() end)
+        pcall(function() gc:RestoreHUD() end)
+        pcall(function() gc.SetHUDVisibility(true) end)
+        pcall(function() gc:SetHUDVisibility(true) end)
+        pcall(function() gc.Unlock() end)
+        pcall(function() gc:Unlock() end)
+    end
+
+    pcall(function()
+        for _, child in ipairs(lighting:GetChildren()) do
+            if child:IsA("BlurEffect") or child.Name == "Blur" then
+                child.Enabled = false
+            end
+        end
+    end)
+
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            prompt_gui.Enabled = false
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            if blackout then blackout.Visible = true end
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then frame.Visible = true end
+        end
+    end)
+end
+restore_hud()
 
 local variables = {
     items                   = replicated_storage:WaitForChild("Items"),
@@ -301,66 +348,6 @@ local function click_gui_button(btn)
     end)
 end
 
-local function is_trade_prompt(prompt_gui)
-    if not prompt_gui then return false end
-    local is_trade = false
-    pcall(function()
-        for _, desc in ipairs(prompt_gui:GetDescendants()) do
-            if desc:IsA("TextLabel") and desc.Text then
-                local text = string_lower(desc.Text)
-                if string_find(text, "trade request", 1, true) or (string_find(text, "trade", 1, true) and string_find(text, "accept", 1, true)) then
-                    is_trade = true
-                    break
-                end
-            end
-        end
-    end)
-    return is_trade
-end
-
-local function dismiss_trade_prompt()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            local frame = prompt_gui:FindFirstChild("Frame")
-
-            for _, desc in ipairs(prompt_gui:GetDescendants()) do
-                if desc:IsA("GuiButton") and (desc.Name == "No" or desc.Name == "Cancel" or desc.Name == "Decline") then
-                    click_gui_button(desc)
-                end
-            end
-
-            for _, child in ipairs(prompt_gui:GetChildren()) do
-                if child.Name ~= "Blackout" and child.Name ~= "Frame" and child.Name ~= "UIListLayout" and child.Name ~= "UIGridLayout" then
-                    pcall(function() child:Destroy() end)
-                end
-            end
-
-            if blackout then blackout.Visible = false end
-            if frame then frame.Visible = false end
-        end
-    end)
-end
-
-local function apply_prompt_visibility()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            local frame = prompt_gui:FindFirstChild("Frame")
-
-            if config.auto_accept_enabled then
-                prompt_gui.Enabled = false
-                if blackout then blackout.Visible = false end
-                if frame then frame.Visible = false end
-            else
-                prompt_gui.Enabled = true
-            end
-        end
-    end)
-end
-
 local function close_trading_gui()
     auto_accept_active = false
     pcall(function()
@@ -378,6 +365,7 @@ local function close_trading_gui()
             end
         end
     end)
+    restore_hud()
 end
 
 local function toggle_auto_accept(enable)
@@ -386,52 +374,76 @@ local function toggle_auto_accept(enable)
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
 
     config.auto_accept_enabled = enable
+    auto_accept_active = false
 
     if not enable then
-        dismiss_trade_prompt()
+        auto_accept_active = false
+        restore_hud()
+        return
     end
-
-    apply_prompt_visibility()
 
     if not trade_remotes then return end
 
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-
-        if not config.auto_accept_enabled then
-            pcall(function()
-                local prompt_gui = player_gui:FindFirstChild("Prompt")
-                if prompt_gui then
-                    prompt_gui.Enabled = true
-                    local blackout = prompt_gui:FindFirstChild("Blackout")
-                    if blackout then blackout.Visible = true end
-                    local frame = prompt_gui:FindFirstChild("Frame")
-                    if frame then frame.Visible = true end
-                end
-            end)
-            return
-        end
+        if not config.auto_accept_enabled then return end
 
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
-        apply_prompt_visibility()
-        task_wait(0.05)
-        dismiss_trade_prompt()
-        apply_prompt_visibility()
+
+        pcall(function()
+            local prompt_gui = player_gui:FindFirstChild("Prompt")
+            if prompt_gui then
+                for _, desc in ipairs(prompt_gui:GetDescendants()) do
+                    if desc:IsA("TextLabel") and desc.Text then
+                        local text = string_lower(desc.Text)
+                        if string_find(text, "trade", 1, true) then
+                            local parent_frame = desc:FindFirstAncestorOfClass("Frame") or desc.Parent
+                            if parent_frame then
+                                for _, btn in ipairs(parent_frame:GetDescendants()) do
+                                    if btn:IsA("GuiButton") then
+                                        local btn_text = (btn:IsA("TextButton") and string_lower(btn.Text) or "")
+                                        local btn_name = string_lower(btn.Name)
+                                        if btn_name == "yes" or btn_name == "accept" or string_find(btn_text, "yes", 1, true) or string_find(btn_text, "accept", 1, true) then
+                                            click_gui_button(btn)
+                                        end
+                                    end
+                                end
+                                if parent_frame.Name ~= "Blackout" and parent_frame.Name ~= "Frame" then
+                                    pcall(function() parent_frame:Destroy() end)
+                                elseif parent_frame:IsA("GuiObject") then
+                                    parent_frame.Visible = false
+                                end
+                            end
+                        end
+                    end
+                end
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then blackout.Visible = false end
+            end
+        end)
     end)
 
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         close_trading_gui()
-        dismiss_trade_prompt()
+        restore_hud()
     end)
-
-    if not enable then return end
 
     auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
         if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         auto_accept_active = true
+
+        pcall(function()
+            local prompt_gui = player_gui:FindFirstChild("Prompt")
+            if prompt_gui then
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then blackout.Visible = false end
+                local frame = prompt_gui:FindFirstChild("Frame")
+                if frame then frame.Visible = false end
+            end
+        end)
 
         pcall(function()
             local t_gui = player_gui:FindFirstChild("! Trading")
@@ -486,6 +498,7 @@ local function toggle_auto_accept(enable)
             end
 
             close_trading_gui()
+            restore_hud()
         end)
     end)
 end
@@ -2011,6 +2024,7 @@ pcall(function()
         trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
             cache.last_trade_time = tick()
             cache.active_trade = false
+            restore_hud()
         end)
     end
 end)
@@ -2032,11 +2046,81 @@ local function create_ui()
         parent_gui = local_player:WaitForChild("PlayerGui")
     end
 
+    local custom_logo_asset = nil
+    pcall(function()
+        local logo_file = "keenan_trade_logo_v2.png"
+        local get_asset = getcustomasset or getsynasset
+        if not get_asset then return end
+
+        local has_file = false
+        pcall(function()
+            if isfile and isfile(logo_file) then
+                if readfile and #readfile(logo_file) > 1000 then
+                    has_file = true
+                end
+            end
+        end)
+
+        if not has_file and writefile then
+            local b64_str = "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"
+            local function decode_b64(data)
+                if crypt and crypt.base64_decode then return crypt.base64_decode(data) end
+                if crypt and crypt.base64decode then return crypt.base64decode(data) end
+                if syn and syn.crypt and syn.crypt.base64 and syn.crypt.base64.decode then return syn.crypt.base64.decode(data) end
+                if base64_decode then return base64_decode(data) end
+                local b64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+                local lut = {}
+                for i = 1, 64 do lut[string.byte(b64_chars, i)] = i - 1 end
+                local clean = {}
+                for i = 1, #data do
+                    local b = string.byte(data, i)
+                    if lut[b] or b == 61 then
+                        table.insert(clean, b)
+                    end
+                end
+                local bytes = {}
+                local len = #clean
+                for i = 1, len, 4 do
+                    local c1 = lut[clean[i]] or 0
+                    local c2 = lut[clean[i + 1]] or 0
+                    local c3 = clean[i + 2] ~= 61 and lut[clean[i + 2]] or nil
+                    local c4 = clean[i + 3] ~= 61 and lut[clean[i + 3]] or nil
+
+                    local b1 = bit32 and bit32.bor(bit32.lshift(c1, 2), bit32.rshift(c2, 4)) or (c1 * 4 + math.floor(c2 / 16))
+                    table.insert(bytes, string.char(b1))
+
+                    if c3 ~= nil then
+                        local b2 = bit32 and bit32.bor(bit32.band(bit32.lshift(c2, 4), 255), bit32.rshift(c3, 2)) or ((c2 % 16) * 16 + math.floor(c3 / 4))
+                        table.insert(bytes, string.char(b2))
+                    end
+                    if c4 ~= nil then
+                        local b3 = bit32 and bit32.bor(bit32.band(bit32.lshift(c3, 6), 255), c4) or ((c3 % 4) * 64 + c4)
+                        table.insert(bytes, string.char(b3))
+                    end
+                end
+                return table.concat(bytes)
+            end
+
+            local raw_png = nil
+            pcall(function() raw_png = decode_b64(b64_str) end)
+            if raw_png and #raw_png > 1000 then
+                writefile(logo_file, raw_png)
+                has_file = true
+            end
+        end
+
+        if (has_file or (isfile and isfile(logo_file))) and get_asset then
+            pcall(function()
+                custom_logo_asset = get_asset(logo_file)
+            end)
+        end
+    end)
+
     local function clear_old_guis(container)
         if not container then return end
         pcall(function()
             for _, child in ipairs(container:GetChildren()) do
-                if child.Name == "NoirHub_AutoTrade" or child.Name == "AutoTrade" then
+                if child.Name == "KeenanTrade" or child.Name == "NoirHub_AutoTrade" or child.Name == "AutoTrade" then
                     pcall(function() child:Destroy() end)
                 end
             end
@@ -2049,7 +2133,7 @@ local function create_ui()
     pcall(function() clear_old_guis(game:GetService("CoreGui")) end)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "AutoTrade"
+    gui.Name = "KeenanTrade"
     gui.ResetOnSpawn = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.IgnoreGuiInset = true
@@ -3032,7 +3116,7 @@ local function create_ui()
     title_lbl.Size = UDim2.new(1, -40, 1, 0)
     title_lbl.Position = UDim2.new(0, 10, 0, 0)
     title_lbl.BackgroundTransparency = 1
-    title_lbl.Text = "NØIR Hub"
+    title_lbl.Text = "Keenan Trade Script"
     title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
@@ -3090,24 +3174,49 @@ local function create_ui()
     float_gradient.Rotation = 45
     float_gradient.Parent = floating_btn
 
+    local icon_img = Instance.new("ImageLabel")
+    icon_img.Size = UDim2.new(0, 26, 0, 26)
+    icon_img.Position = UDim2.new(0.5, -13, 0.5, -13)
+    icon_img.BackgroundTransparency = 1
+    icon_img.ZIndex = 21
+    icon_img.ScaleType = Enum.ScaleType.Fit
+    icon_img.Visible = false
+    icon_img.Parent = floating_btn
+
     local icon_lbl = Instance.new("TextLabel")
     icon_lbl.Size = UDim2.new(1, 0, 1, 0)
     icon_lbl.Position = UDim2.new(0, 0, 0, 0)
     icon_lbl.BackgroundTransparency = 1
-    icon_lbl.Text = "N"
-    icon_lbl.TextColor3 = Color3.fromRGB(255, 0, 255)
+    icon_lbl.Text = "K"
+    icon_lbl.TextColor3 = Color3.fromRGB(255, 235, 50)
     icon_lbl.TextSize = 22
     icon_lbl.FontFace = font_bold
     icon_lbl.ZIndex = 21
+    icon_lbl.Visible = false
     icon_lbl.Parent = floating_btn
+
+    if custom_logo_asset then
+        icon_img.Image = custom_logo_asset
+        icon_img.Visible = true
+        icon_lbl.Visible = false
+    else
+        icon_img.Visible = false
+        icon_lbl.Visible = true
+    end
 
     floating_btn.MouseEnter:Connect(function()
         float_stroke.Thickness = 2
-        icon_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        float_stroke.Color = Color3.fromRGB(255, 255, 255)
+        if icon_lbl.Visible then
+            icon_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end
     end)
     floating_btn.MouseLeave:Connect(function()
         float_stroke.Thickness = 1.5
-        icon_lbl.TextColor3 = Color3.fromRGB(255, 0, 255)
+        float_stroke.Color = ACCENT_COLOR
+        if icon_lbl.Visible then
+            icon_lbl.TextColor3 = Color3.fromRGB(255, 235, 50)
+        end
     end)
 
     floating_btn.MouseButton1Click:Connect(function()
@@ -4561,17 +4670,18 @@ pcall(function() toggle_auto_accept(config.auto_accept_enabled) end)
 _G.NoirHub_AutoTrade_Cleanup = function()
     if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end); trade_ended_conn = nil end
     pcall(function() toggle_auto_accept(false) end)
+    pcall(restore_hud)
 
     _G.NoirHub_AutoTrade_ScriptID = nil
 
     pcall(function()
         local core = gethui and gethui() or game:GetService("CoreGui")
-        local old = core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
+        local old = core:FindFirstChild("KeenanTrade") or core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
         if old then old:Destroy() end
     end)
     pcall(function()
         local pgui = local_player:FindFirstChild("PlayerGui")
-        local old = pgui and (pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
+        local old = pgui and (pgui:FindFirstChild("KeenanTrade") or pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
         if old then old:Destroy() end
     end)
 end
