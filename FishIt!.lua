@@ -1,33 +1,4 @@
--- ==============================================================================
--- KEENAN HUB: FISH IT - AUTO TRADE ENGINE & GUI [TERMINAL EDITION]
--- ==============================================================================
--- DAFTAR ISI / TABLE OF CONTENTS:
--- [SECTION 01] SERVICES & ENGINE DEPENDENCIES     : Setup service Roblox, Replion data & Utility
--- [SECTION 02] NETWORK REMOTE WRAPPERS (NET)      : Mapping remote Sleitnick Net & wrapper proxy
--- [SECTION 03] CONFIG & CACHE STATE               : Tabel config, cache, persistensi JSON
--- [SECTION 04] INVENTORY & ITEM HELPERS           : Query batu enchant & helper click
--- [SECTION 05] TARGET PLAYER SELECTION            : Pencarian & fuzzy matching nama target player
--- [SECTION 06] FISH ATTRIBUTES & FILTERS          : Deteksi mutasi, shiny, big, evaluasi filter
--- [SECTION 07] ROUND-ROBIN ITEM SELECTION         : Algoritma pembagian seimbang item (Rarity & Name)
--- [SECTION 08] TRADE PROTOCOL & SESSION ENGINE    : Handler trade session, wait, ready, confirm
--- [SECTION 09] TRADING ENGINE 1: TRADE BY NAME    : Logika eksekusi trade jenis ikan tertentu
--- [SECTION 10] TRADING ENGINE 2: TRADE BY RARITY  : Logika eksekusi trade berdasarkan rarity tier
--- [SECTION 11] TRADING ENGINE 3: TRADE ENCHANTS   : Logika eksekusi trade batu enchant
--- [SECTION 12] AUTO TRADE TASK RUNNER             : Background runner loop (run_auto_trade_loop)
--- [SECTION 13] GUI ROOT & WINDOW SETUP            : ScreenGui, MainFrame, dragging, player panel
--- [SECTION 14] UI WIDGET BUILDERS                 : Builder accordion, dropdown, input text, toggle
--- [SECTION 15] UI ACCORDION 1: TRADE BY NAME      : Komponen panel kontrol Trade By Name
--- [SECTION 16] UI ACCORDION 2: TRADE ENCHANTS     : Komponen panel kontrol Trade Enchant Stone
--- [SECTION 17] UI ACCORDION 3: TRADE BY RARITY    : Komponen panel kontrol Trade By Rarity
--- [SECTION 18] REAL-TIME UI STATUS UPDATE LOOP    : Loop update status visual, label, dan statistik
--- [SECTION 19] SCRIPT INITIALIZATION & CLEANUP    : Eksekusi UI, inventory logger & cleanup handler
--- ==============================================================================
-
-
-
--- ==============================================================================
--- [SECTION 01] SERVICES & ENGINE DEPENDENCIES
--- ==============================================================================
+-- Keenan Trade Script
 local ipairs        = ipairs
 local pairs         = pairs
 local tostring      = tostring
@@ -109,21 +80,9 @@ local variables = {
 
 local success_replion, replion_mod = pcall(require, variables.replion)
 local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
-local inventory_change_conn = nil
-pcall(function()
-    if player_data and player_data.OnChange then
-        inventory_change_conn = player_data:OnChange("Inventory", function()
-        end)
-        track_conn(inventory_change_conn)
-    end
-end)
 local item_utility = require(variables.item_utility)
 
--- ==============================================================================
--- [SECTION 02] NETWORK REMOTE WRAPPERS (NET)
--- Framework Remote berbasis Sleitnick Net package (@0.2.0)
--- Wrapper proxy otomatis memilih InvokeServer/FireServer berdasarkan tipe Remote.
--- ==============================================================================
+-- Remotes
 local remote_map = {
     SendTradeOffer     = "SendTradeOffer",
     AddItem            = "AddItem",
@@ -199,11 +158,7 @@ local remotes = setmetatable({}, {
 
 local trade_remotes = remotes
 
--- ==============================================================================
--- [SECTION 03] CONFIG & CACHE STATE
--- Konfigurasi runtime aktif, tracking riwayat trade,
--- serta fungsi penyimpanan dan pemuatan konfigurasi ke JSON (save_config / load_config).
--- ==============================================================================
+-- Config & State
 local config = {
     enabled             = false,
     trade_favorited     = false,
@@ -312,11 +267,7 @@ if active_modes > 1 then
     save_config()
 end
 
--- ==============================================================================
--- [SECTION 04] INVENTORY & ITEM HELPERS
--- Utilitas interaksi GUI (virtual click) dan query data inventory Replion
--- (penghitung batu enchant dan parsing nama).
--- ==============================================================================
+-- Helpers
 local function click_gui_button(btn)
     if not btn then return end
     pcall(function()
@@ -396,10 +347,7 @@ local function load_game_data()
 end
 pcall(load_game_data)
 
--- ==============================================================================
--- [SECTION 05] TARGET PLAYER SELECTION
--- Mencari instans Player target di Players service berdasarkan Name atau DisplayName.
--- ==============================================================================
+-- Player Target
 local function find_target_player()
     if config.trade_with == "" then return nil end
     for _, player in ipairs(players:GetPlayers()) do
@@ -410,11 +358,7 @@ local function find_target_player()
     return nil
 end
 
--- ==============================================================================
--- [SECTION 06] FISH ATTRIBUTES & FILTERS
--- Pengecekan metadata item (Mutasi, Shiny, Big) serta evaluasi
--- apakah suatu ikan lolos filter untuk dikirimkan (ByName / ByRarity).
--- ==============================================================================
+-- Filters
 local tier_mapping = {
     [1] = "common",
     [2] = "uncommon",
@@ -568,11 +512,7 @@ local function should_trade_fish_by_rarity(item_data, inventory_item)
     return should_trade;
 end
 
--- ==============================================================================
--- [SECTION 07] ROUND-ROBIN ITEM SELECTION ALGORITHMS
--- Algoritma seleksi item secara adil / bergantian per kategori (Rarity / Nama)
--- agar kuantitas trade terdistribusi merata, serta pencatatan log inventory ke file.
--- ==============================================================================
+-- Round Robin Selection
 local function collect_round_robin_rarity(player_data_items, selected_tiers, limit)
     local buckets = {}
     local bucket_keys = {}
@@ -754,11 +694,7 @@ local function log_inventory_fish()
     end)
 end
 
--- ==============================================================================
--- [SECTION 08] TRADE PROTOCOL & SESSION ENGINE
--- Pengendali siklus trade: pembatalan darurat (decline), deteksi penyelesaian
--- trade via notifikasi/chat, pembaruan status, dan koordinasi pertukaran item.
--- ==============================================================================
+-- Trade Handlers
 local function decline_active_trade()
     pcall(function()
         local trading_gui = local_player.PlayerGui:FindFirstChild("! Trading")
@@ -1112,11 +1048,7 @@ local function update_mode_status(mode_name)
     end
 end
 
--- ==============================================================================
--- [SECTION 09] TRADING ENGINE 1: TRADE BY NAME
--- Menjalankan sesi trade untuk jenis ikan spesifik yang dipilih pengguna,
--- menyaring tier & mutasi, memasukkan item ke slot trade, lalu konfirmasi.
--- ==============================================================================
+-- Trade by Name
 local function try_trade_fish()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -1267,11 +1199,7 @@ local function try_trade_fish()
     end
 end
 
--- ==============================================================================
--- [SECTION 10] TRADING ENGINE 2: TRADE BY RARITY
--- Menjalankan sesi trade untuk ikan berdasarkan tingkat kelangkaan (Common s/d Forgotten)
--- menggunakan algoritma round-robin bucket.
--- ==============================================================================
+-- Trade by Rarity
 local function try_trade_rarity()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -1422,10 +1350,7 @@ local function try_trade_rarity()
     end
 end
 
--- ==============================================================================
--- [SECTION 11] TRADING ENGINE 3: TRADE ENCHANTS
--- Menjalankan sesi trade untuk batu enchant / item enchant stone yang dipilih.
--- ==============================================================================
+-- Trade Enchants
 local function try_trade_enchant()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -1579,11 +1504,7 @@ local function try_trade_enchant()
     end
 end
 
--- ==============================================================================
--- [SECTION 12] AUTO TRADE TASK RUNNER
--- Task loop utama yang berjalan di background; memeriksa mode aktif dan
--- menjalankan fungsi engine terkait secara periodik dengan jeda delay aman.
--- ==============================================================================
+-- Auto Trade Loop
 local function run_auto_trade_loop()
     if cache.loop_running then return end
     cache.loop_running = true
@@ -1645,11 +1566,7 @@ pcall(function()
     end
 end)
 
--- ==============================================================================
--- [SECTION 13] GUI ROOT & WINDOW SETUP
--- Inisialisasi ScreenGui (dukungan gethui, CoreGui, PlayerGui), pembersihan GUI lama,
--- penataan MainFrame, sistem dragging jendela, serta sidebar pilihan target player.
--- ==============================================================================
+-- UI Setup
 local function create_ui()
     local parent_gui = nil
     if gethui then
@@ -2758,20 +2675,26 @@ local function create_ui()
     min_btn.Position = UDim2_new(1, -66, 0.5, -9)
     min_btn.BackgroundTransparency = 1
     min_btn.BorderSizePixel = 0
-    min_btn.Text = "-"
-    min_btn.TextColor3 = MUTED_COLOR
-    min_btn.TextSize = 13
-    min_btn.FontFace = Font.fromEnum(Enum.Font.GothamBold)
+    min_btn.Text = ""
     min_btn.Active = true
     min_btn.Modal = true
     min_btn.ZIndex = 27
     min_btn.Parent = header
 
+    local min_line = Instance_new("Frame")
+    min_line.Name = "MinLine"
+    min_line.Size = UDim2_new(0, 9, 0, 1.5)
+    min_line.Position = UDim2_new(0.5, -4, 0.5, 0)
+    min_line.BackgroundColor3 = MUTED_COLOR
+    min_line.BorderSizePixel = 0
+    min_line.ZIndex = 28
+    min_line.Parent = min_btn
+
     min_btn.MouseEnter:Connect(function()
-        min_btn.TextColor3 = ACCENT_COLOR
+        min_line.BackgroundColor3 = ACCENT_COLOR
     end)
     min_btn.MouseLeave:Connect(function()
-        min_btn.TextColor3 = MUTED_COLOR
+        min_line.BackgroundColor3 = MUTED_COLOR
     end)
 
     min_btn.MouseButton1Click:Connect(function()
@@ -2939,11 +2862,7 @@ local function create_ui()
     settings_layout.Padding = UDim_new(0, 6)
     settings_layout.Parent = settings_panel
 
-    -- ==========================================================================
-    -- [SECTION 14] UI WIDGET BUILDERS
-    -- Helper pembuat komponen antarmuka kustom (Accordion, Dropdown list,
-    -- Text input box, dan Toggle switch dengan animasi tween).
-    -- ==========================================================================
+    -- UI Builders
     local function create_accordion(parent, title_text)
         local item_frame = Instance_new("Frame")
         item_frame.Size = UDim2_new(1, 0, 0, 26)
@@ -3350,11 +3269,7 @@ local function create_ui()
         save_config()
     end
 
-    -- ==========================================================================
-    -- [SECTION 15] UI ACCORDION 1: TRADE BY NAME
-    -- Panel GUI untuk memilih target ikan spesifik, filter Tier, filter Mutasi,
-    -- input kuantitas pengiriman, status box, dan tombol aktivasi mode By Name.
-    -- ==========================================================================
+    -- Panel: Trade By Name
     local byname_content, byname_toggle = create_accordion(settings_panel, "Trade By Name")
     local status_box = Instance_new("Frame")
     status_box.Name = "1_StatusBox"
@@ -3614,11 +3529,7 @@ local function create_ui()
     byname_fav_toggle.Frame.LayoutOrder = 6
     byname_fav_toggle.Frame.Name = "6_FavToggle"
 
-    -- ==========================================================================
-    -- [SECTION 16] UI ACCORDION 2: TRADE ENCHANTS
-    -- Panel GUI untuk memilih batu enchant stone, input batasan kuantitas,
-    -- status box, dan tombol aktivasi mode Enchant.
-    -- ==========================================================================
+    -- Panel: Trade Enchants
     local enchant_content, enchant_toggle = create_accordion(settings_panel, "Trade Enchant Stone")
     local enchant_status_box = Instance_new("Frame")
     enchant_status_box.Name = "1_StatusBox"
@@ -3896,11 +3807,7 @@ local function create_ui()
     enchant_toggle_ctrl.Frame.LayoutOrder = 5
     enchant_toggle_ctrl.Frame.Name = "5_StartTradeToggle"
 
-    -- ==========================================================================
-    -- [SECTION 17] UI ACCORDION 3: TRADE BY RARITY
-    -- Panel GUI untuk memilih tingkat kelangkaan ikan (Common s/d Forgotten),
-    -- filter mutasi, batasan kuantitas, dan tombol aktivasi mode By Rarity.
-    -- ==========================================================================
+    -- Panel: Trade By Rarity
     local rarity_content, rarity_toggle = create_accordion(settings_panel, "Trade By Rarity")
     local rarity_status_box = Instance_new("Frame")
     rarity_status_box.Name = "1_StatusBox"
@@ -4161,11 +4068,7 @@ local function create_ui()
         settings_panel.CanvasSize = UDim2_new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
     end)
 
-    -- ==========================================================================
-    -- [SECTION 18] REAL-TIME UI STATUS UPDATE LOOP
-    -- Coroutine background untuk menyinkronkan status visual teks, indikator
-    -- status aktif tiap mode, dan sinkronisasi state tombol toggle secara berkala.
-    -- ==========================================================================
+    -- Status Update Loop
     task_spawn(function()
         while is_running and gui and gui.Parent do
             if status_val_lbl then
@@ -4205,14 +4108,8 @@ local function create_ui()
     end)
 end
 
--- ==============================================================================
--- [SECTION 19] SCRIPT INITIALIZATION & CLEANUP HANDLER
--- Menjalankan pembuatan UI, dump log ikan di inventory, dan menyediakan
--- handler pembersihan lengkap (_G.KeenanHub_AutoTrade_Cleanup) untuk mematikan
--- semua listener, thread background, service hooks, dan elemen GUI tanpa sisa.
--- ==============================================================================
+-- Cleanup & Init
 local function cleanup_all()
-    -- 1. Matikan semua state konfigurasi dan loop trading
     is_running = false
     config.enabled = false
     config.trade_fish_enabled = false
@@ -4221,36 +4118,18 @@ local function cleanup_all()
     cache.is_trading_active = false
     cache.loop_running = false
 
-    -- 2. Batalkan sesi trade aktif jika sedang berjalan
     if decline_active_trade then
         pcall(decline_active_trade)
     end
 
-    -- 3. Invalidate script ID untuk menghentikan semua task_spawn background loop
     _G.KeenanHub_AutoTrade_ScriptID = nil
     script_id = nil
 
-    -- 4. Putus koneksi remote event Net TradeEnded
     if trade_ended_conn then
         pcall(function() trade_ended_conn:Disconnect() end)
         trade_ended_conn = nil
     end
 
-    -- 5. Putus listener Replion / PlayerData OnChange Inventory
-    if inventory_change_conn then
-        pcall(function()
-            if typeof(inventory_change_conn) == "RBXScriptConnection" or (type(inventory_change_conn) == "table" and inventory_change_conn.Disconnect) then
-                inventory_change_conn:Disconnect()
-            elseif type(inventory_change_conn) == "table" and inventory_change_conn.Destroy then
-                inventory_change_conn:Destroy()
-            elseif type(inventory_change_conn) == "function" then
-                inventory_change_conn()
-            end
-        end)
-        inventory_change_conn = nil
-    end
-
-    -- 6. Putus semua listener yang terdaftar di script_connections (UserInputService, GUI events, dll)
     for _, c in ipairs(script_connections) do
         pcall(function()
             if typeof(c) == "RBXScriptConnection" or (type(c) == "table" and c.Disconnect) then
@@ -4264,7 +4143,6 @@ local function cleanup_all()
     end
     script_connections = {}
 
-    -- 7. Hapus seluruh elemen GUI dari CoreGui, PlayerGui, dan gethui
     pcall(function()
         local core = gethui and gethui() or core_gui
         local old = core:FindFirstChild("KeenanHub_AutoTrade") or core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
@@ -4276,7 +4154,6 @@ local function cleanup_all()
         if old then old:Destroy() end
     end)
 
-    -- 8. Bersihkan tabel global _G
     _G.AutoTradeConfig = nil
     _G.AutoTradeCache = nil
     _G.run_auto_trade_loop = nil
