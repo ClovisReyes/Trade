@@ -5,24 +5,22 @@
 -- [SECTION 01] SERVICES & ENGINE DEPENDENCIES     : Setup service Roblox, Replion data & Utility
 -- [SECTION 02] NETWORK REMOTE WRAPPERS (NET)      : Mapping remote Sleitnick Net & wrapper proxy
 -- [SECTION 03] CONFIG & CACHE STATE               : Tabel config, cache, persistensi JSON
--- [SECTION 04] INVENTORY & ITEM HELPERS           : Query jumlah item, batu enchant & helper click
+-- [SECTION 04] INVENTORY & ITEM HELPERS           : Query batu enchant & helper click
 -- [SECTION 05] TARGET PLAYER SELECTION            : Pencarian & fuzzy matching nama target player
--- [SECTION 06] FISH ATTRIBUTES & FILTERS          : Deteksi mutasi, shiny, sparkling, evaluasi filter
+-- [SECTION 06] FISH ATTRIBUTES & FILTERS          : Deteksi mutasi, shiny, big, evaluasi filter
 -- [SECTION 07] ROUND-ROBIN ITEM SELECTION         : Algoritma pembagian seimbang item (Rarity & Name)
 -- [SECTION 08] TRADE PROTOCOL & SESSION ENGINE    : Handler trade session, wait, ready, confirm
 -- [SECTION 09] TRADING ENGINE 1: TRADE BY NAME    : Logika eksekusi trade jenis ikan tertentu
 -- [SECTION 10] TRADING ENGINE 2: TRADE BY RARITY  : Logika eksekusi trade berdasarkan rarity tier
 -- [SECTION 11] TRADING ENGINE 3: TRADE ENCHANTS   : Logika eksekusi trade batu enchant
--- [SECTION 12] TRADING ENGINE 4: TRADE BY COIN    : Logika eksekusi trade kalkulasi target nilai koin
--- [SECTION 13] AUTO TRADE TASK RUNNER             : Background runner loop (run_auto_trade_loop)
--- [SECTION 14] GUI ROOT & WINDOW SETUP            : ScreenGui, MainFrame, dragging, player panel
--- [SECTION 15] UI WIDGET BUILDERS                 : Builder accordion, dropdown, input text, toggle
--- [SECTION 16] UI ACCORDION 1: TRADE BY NAME      : Komponen panel kontrol Trade By Name
--- [SECTION 17] UI ACCORDION 2: TRADE ENCHANTS     : Komponen panel kontrol Trade Enchant Stone
--- [SECTION 18] UI ACCORDION 3: TRADE BY RARITY    : Komponen panel kontrol Trade By Rarity
--- [SECTION 19] UI ACCORDION 4: TRADE BY COIN      : Komponen panel kontrol Trade By Coin
--- [SECTION 20] REAL-TIME UI STATUS UPDATE LOOP    : Loop update status visual, label, dan statistik
--- [SECTION 21] SCRIPT INITIALIZATION & CLEANUP    : Eksekusi UI, inventory logger & cleanup handler
+-- [SECTION 12] AUTO TRADE TASK RUNNER             : Background runner loop (run_auto_trade_loop)
+-- [SECTION 13] GUI ROOT & WINDOW SETUP            : ScreenGui, MainFrame, dragging, player panel
+-- [SECTION 14] UI WIDGET BUILDERS                 : Builder accordion, dropdown, input text, toggle
+-- [SECTION 15] UI ACCORDION 1: TRADE BY NAME      : Komponen panel kontrol Trade By Name
+-- [SECTION 16] UI ACCORDION 2: TRADE ENCHANTS     : Komponen panel kontrol Trade Enchant Stone
+-- [SECTION 17] UI ACCORDION 3: TRADE BY RARITY    : Komponen panel kontrol Trade By Rarity
+-- [SECTION 18] REAL-TIME UI STATUS UPDATE LOOP    : Loop update status visual, label, dan statistik
+-- [SECTION 19] SCRIPT INITIALIZATION & CLEANUP    : Eksekusi UI, inventory logger & cleanup handler
 -- ==============================================================================
 
 
@@ -34,6 +32,8 @@ local ipairs        = ipairs
 local pairs         = pairs
 local tostring      = tostring
 local tonumber      = tonumber
+local type          = type
+local typeof        = typeof
 local pcall         = pcall
 local tick          = tick
 local os_clock      = os.clock
@@ -45,13 +45,29 @@ local table_sort    = table.sort
 local table_concat  = table.concat
 
 local string_lower  = string.lower
+local string_upper  = string.upper
+local string_sub    = string.sub
 local string_find   = string.find
 local string_gsub   = string.gsub
 local string_format = string.format
 local string_match  = string.match
 
+local math_max      = math.max
+local math_min      = math.min
+local math_floor    = math.floor
+local math_huge     = math.huge
+
 local task_wait     = task.wait
 local task_spawn    = task.spawn
+local task_delay    = task.delay
+local task_cancel   = task.cancel
+local task_defer    = task.defer
+
+local Color3_fromRGB = Color3.fromRGB
+local UDim2_new      = UDim2.new
+local UDim_new       = UDim.new
+local Instance_new   = Instance.new
+local TweenInfo_new  = TweenInfo.new
 
 if _G.KeenanHub_AutoTrade_Cleanup then
     pcall(_G.KeenanHub_AutoTrade_Cleanup)
@@ -60,8 +76,17 @@ if _G.NoirHub_AutoTrade_Cleanup then
     pcall(_G.NoirHub_AutoTrade_Cleanup)
 end
 
+local is_running = true
 local script_id = os_clock()
 _G.KeenanHub_AutoTrade_ScriptID = script_id
+
+local script_connections = {}
+local function track_conn(conn)
+    if conn then
+        table_insert(script_connections, conn)
+    end
+    return conn
+end
 
 local cloneref = cloneref or function(ref) return ref end
 
@@ -72,30 +97,27 @@ local user_input_service    = cloneref(game:GetService("UserInputService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
 local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
 local http_service          = cloneref(game:GetService("HttpService"))
+local text_chat_service     = pcall(function() return cloneref(game:GetService("TextChatService")) end) and cloneref(game:GetService("TextChatService")) or nil
+local core_gui              = pcall(function() return cloneref(game:GetService("CoreGui")) end) and cloneref(game:GetService("CoreGui")) or nil
 
 local variables = {
     items                   = replicated_storage:WaitForChild("Items"),
     variants                = replicated_storage:WaitForChild("Variants"),
     replion                 = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
-    item_utility            = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility"),
-    vendor_utility          = replicated_storage:WaitForChild("Shared"):WaitForChild("VendorUtility"),
-    player_stats_utility    = replicated_storage:WaitForChild("Shared"):WaitForChild("PlayerStatsUtility")
+    item_utility            = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility")
 }
 
 local success_replion, replion_mod = pcall(require, variables.replion)
 local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
+local inventory_change_conn = nil
 pcall(function()
     if player_data and player_data.OnChange then
-        player_data:OnChange("Inventory", function()
-            if cache and cache.price_cache then
-                cache.price_cache = {}
-                cache.metadata_cache = {}
-            end
+        inventory_change_conn = player_data:OnChange("Inventory", function()
         end)
+        track_conn(inventory_change_conn)
     end
 end)
 local item_utility = require(variables.item_utility)
-local vendor_utility = require(variables.vendor_utility)
 
 -- ==============================================================================
 -- [SECTION 02] NETWORK REMOTE WRAPPERS (NET)
@@ -115,7 +137,7 @@ local function get_net_lookup()
     if _net_lookup then return _net_lookup end
     _net_lookup = {}
 
-    local net_folder = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+    local net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"].net
     local children = net_folder:GetChildren()
 
     for i, v in ipairs(children) do
@@ -179,19 +201,17 @@ local trade_remotes = remotes
 
 -- ==============================================================================
 -- [SECTION 03] CONFIG & CACHE STATE
--- Konfigurasi runtime aktif, cache harga ikan, tracking riwayat trade,
+-- Konfigurasi runtime aktif, tracking riwayat trade,
 -- serta fungsi penyimpanan dan pemuatan konfigurasi ke JSON (save_config / load_config).
 -- ==============================================================================
 local config = {
     enabled             = false,
     trade_favorited     = false,
     quantity            = 0,
-    target_coin_amount  = 0,
     trade_with          = "",
 
     trade_fish_enabled  = false,
     trade_enchants_enabled = false,
-    trade_coins_enabled = false,
     trade_rarity_enabled = false,
 
     selected_fish       = {},
@@ -202,53 +222,25 @@ local config = {
 
 local cache = {
     processed_trades    = {},
-    price_cache         = {},
-    metadata_cache      = {},
-    current_item        = nil,
-    fish_list           = {},
     loaded_fish         = {},
     loaded_mutations    = {},
     loaded_enchants     = {},
-    start_time          = tick(),
-    total_caught_start  = 0,
-    caught_history      = {},
-    active_trade        = false,
+    loaded_tiers        = {},
+    is_trading_active   = false,
+    loop_running        = false,
+    last_trade_time     = nil,
     fish_status_text    = "Idle",
     fish_status_details = "",
     enchant_status_text = "Idle",
     enchant_status_details = "",
-    coin_status_text    = "Idle",
-    coin_status_details = "",
     rarity_status_text  = "Idle",
     rarity_status_details = "",
-    count_labels        = {},
-    last_trade_time     = nil,
     stats = {
         fish = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
         rarity = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
-        enchant = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
-        coin = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
+        enchant = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 }
     },
 }
-
-local function get_cached_sell_price(item)
-    if not item or not item.UUID then return 0 end
-    local cached = cache.price_cache[item.UUID]
-    if cached then return cached end
-
-    local sell_price = 0
-    pcall(function() sell_price = vendor_utility:GetSellPrice(item) end)
-    if not sell_price or sell_price <= 0 then
-        pcall(function() sell_price = vendor_utility.GetSellPrice(item) end)
-    end
-    if not sell_price or sell_price <= 0 then
-        local data = item.Id and item_utility:GetItemData(item.Id)
-        sell_price = (data and data.Data and (data.Data.SellPrice or data.Data.Price)) or 100
-    end
-
-    cache.price_cache[item.UUID] = sell_price
-    return sell_price
-end
 
 _G.AutoTradeConfig = config
 _G.AutoTradeCache = cache
@@ -263,7 +255,6 @@ local function save_config()
             temp_config.enabled = false
             temp_config.trade_fish_enabled = false
             temp_config.trade_enchants_enabled = false
-            temp_config.trade_coins_enabled = false
             temp_config.trade_rarity_enabled = false
 
             local data = http_service:JSONEncode(temp_config)
@@ -307,7 +298,6 @@ local active_modes = 0
 if config.trade_fish_enabled then active_modes = active_modes + 1 end
 if config.trade_enchants_enabled then active_modes = active_modes + 1 end
 if config.trade_rarity_enabled then active_modes = active_modes + 1 end
-if config.trade_coins_enabled then active_modes = active_modes + 1 end
 
 if active_modes > 1 then
     local found = false
@@ -318,10 +308,7 @@ if active_modes > 1 then
         if found then config.trade_enchants_enabled = false else found = true end
     end
     if config.trade_rarity_enabled then
-        if found then config.trade_rarity_enabled = false else found = true end
-    end
-    if config.trade_coins_enabled then
-        if found then config.trade_coins_enabled = false end
+        if found then config.trade_rarity_enabled = false end
     end
     save_config()
 end
@@ -329,7 +316,7 @@ end
 -- ==============================================================================
 -- [SECTION 04] INVENTORY & ITEM HELPERS
 -- Utilitas interaksi GUI (virtual click) dan query data inventory Replion
--- (penghitung jumlah item, batu enchant, dan parsing nama).
+-- (penghitung batu enchant dan parsing nama).
 -- ==============================================================================
 local function click_gui_button(btn)
     if not btn then return end
@@ -343,29 +330,6 @@ local function click_gui_button(btn)
             end
         end
     end)
-end
-
-local function get_item_count(item_name)
-    local count = 0
-    pcall(function()
-        if player_data then
-            local inventory = player_data:Get("Inventory")
-            local items = inventory and inventory.Items or {}
-            for _, item in ipairs(items) do
-                if item.Id then
-                    local data = item_utility:GetItemData(item.Id)
-                    if data and data.Data and (data.Data.Name == item_name or (item_name == "Ruby" and data.Data.Name == "Ruby Gemstone") or (item_name == "Ruby Gemstone" and data.Data.Name == "Ruby")) then
-                        count = count + (item.Amount or 1)
-                    end
-                end
-            end
-        end
-    end)
-    return count
-end
-
-local function get_runic_count()
-    return get_item_count("Runic Enchant Stone")
 end
 
 local function get_inventory_enchants(bypass_favorited)
@@ -393,7 +357,6 @@ local function get_inventory_enchants(bypass_favorited)
                     end
                 end
             end
-        else
         end
     end)
     if not success then
@@ -453,7 +416,7 @@ end
 
 -- ==============================================================================
 -- [SECTION 06] FISH ATTRIBUTES & FILTERS
--- Pengecekan metadata item (Mutasi, Shiny, Big, Sparkling) serta evaluasi
+-- Pengecekan metadata item (Mutasi, Shiny, Big) serta evaluasi
 -- apakah suatu ikan lolos filter untuk dikirimkan (ByName / ByRarity).
 -- ==============================================================================
 local tier_mapping = {
@@ -512,13 +475,6 @@ local function is_item_big(item)
     if type(item.Big) == "string" and string_lower(item.Big) == "true" then return true end
     local mut = string_lower(get_item_mutation(item))
     return string_find(mut, "big") ~= nil or string_find(mut, "giant") ~= nil
-end
-
-local function is_item_sparkling(item)
-    if not item then return false end
-    local meta = item.Metadata
-    if meta and (meta.Sparkling == true or meta.Sparkling == 1 or (type(meta.Sparkling) == "string" and string_lower(meta.Sparkling) == "true")) then return true end
-    return item.Sparkling == true or item.Sparkling == 1 or (type(item.Sparkling) == "string" and string_lower(item.Sparkling) == "true")
 end
 
 local function should_trade_fish(item_data, inventory_item)
@@ -864,30 +820,7 @@ local function verify_items_sent(added_items)
     return sent_count
 end
 
-local function verify_coins_sent(added_items)
-    if not player_data or not added_items or #added_items == 0 then
-        local sum = 0
-        for _, it in ipairs(added_items) do sum = sum + (it.SellPrice or 0) end
-        return sum, #added_items
-    end
-    local inventory = player_data:Get("Inventory")
-    local current_items = inventory and inventory.Items or {}
-    local current_uuids = {}
-    for _, item in ipairs(current_items) do
-        if item.UUID then
-            current_uuids[item.UUID] = true
-        end
-    end
-    local coins_sent = 0
-    local items_sent = 0
-    for _, item in ipairs(added_items) do
-        if not current_uuids[item.UUID] then
-            coins_sent = coins_sent + (item.SellPrice or 0)
-            items_sent = items_sent + 1
-        end
-    end
-    return coins_sent, items_sent
-end
+
 
 local function listen_for_trade_completion(on_completed)
     local completed = false
@@ -896,7 +829,7 @@ local function listen_for_trade_completion(on_completed)
     local function check_text(text)
         if not text or completed then return end
         local lower = string_lower(tostring(text))
-        if (lower:find("completed") or lower:find("complete") or lower:find("success") or lower:find("berhasil")) and (lower:find("trade") or lower:find("with")) then
+        if (string_find(lower, "completed", 1, true) or string_find(lower, "complete", 1, true) or string_find(lower, "success", 1, true) or string_find(lower, "berhasil", 1, true)) and (string_find(lower, "trade", 1, true) or string_find(lower, "with", 1, true)) then
             completed = true
             if on_completed then
                 pcall(on_completed)
@@ -905,9 +838,8 @@ local function listen_for_trade_completion(on_completed)
     end
 
     pcall(function()
-        local TextChatService = game:GetService("TextChatService")
-        if TextChatService then
-            local conn = TextChatService.MessageReceived:Connect(function(msg)
+        if text_chat_service then
+            local conn = text_chat_service.MessageReceived:Connect(function(msg)
                 if msg then check_text(msg.Text) end
             end)
             table_insert(connections, conn)
@@ -915,17 +847,18 @@ local function listen_for_trade_completion(on_completed)
     end)
 
     pcall(function()
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local chat_events = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-        if chat_events then
-            local msg_event = chat_events:FindFirstChild("OnMessageDoneFiltering")
-            if msg_event then
-                local conn = msg_event.OnClientEvent:Connect(function(data)
-                    if data and data.Message then
-                        check_text(data.Message)
-                    end
-                end)
-                table_insert(connections, conn)
+        if replicated_storage then
+            local chat_events = replicated_storage:FindFirstChild("DefaultChatSystemChatEvents")
+            if chat_events then
+                local msg_event = chat_events:FindFirstChild("OnMessageDoneFiltering")
+                if msg_event then
+                    local conn = msg_event.OnClientEvent:Connect(function(data)
+                        if data and data.Message then
+                            check_text(data.Message)
+                        end
+                    end)
+                    table_insert(connections, conn)
+                end
             end
         end
     end)
@@ -979,14 +912,14 @@ local function get_mode_display_name(mode_name)
         if #config.selected_tiers > 0 and config.selected_tiers[1] ~= "All" then
             local names = {}
             for _, tier in ipairs(config.selected_tiers) do
-                local t_name = tier_mapping[tier]
-                if t_name then table_insert(names, t_name:sub(1,1):upper() .. t_name:sub(2)) end
+                local t_name = (type(tier) == "number" and tier_mapping[tier]) or tostring(tier)
+                if t_name and t_name ~= "" then
+                    table_insert(names, (string_upper(string_sub(t_name, 1, 1)) .. string_sub(t_name, 2)))
+                end
             end
             if #names > 0 then return table_concat(names, "/") end
         end
         return "Rarity"
-    elseif mode_name == "coin" then
-        return "Coin"
     end
     return "Items"
 end
@@ -996,21 +929,8 @@ local function set_status_msg(mode_name, msg, details_override)
     if not s then return end
 
     local target = config.quantity
-    local progress_str
-    if mode_name == "coin" then
-        target = config.target_coin_amount
-        local current_coins = s.total_coins or 0
-        progress_str = (target == 0) and (current_coins .. "/∞") or (current_coins .. "/" .. target)
-    else
-        progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
-    end
-
-    local details
-    if mode_name == "coin" then
-        details = details_override or string.format("Coins Sent: %d/%d | Items Sent: %d | Attempts: %d | Failed: %d", s.total_coins or 0, target, s.total_items, s.attempts, s.failed)
-    else
-        details = details_override or string.format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
-    end
+    local progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
+    local details = details_override or string_format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
 
     if mode_name == "fish" then
         if msg then cache.fish_status_text = msg end
@@ -1029,12 +949,6 @@ local function set_status_msg(mode_name, msg, details_override)
         cache.enchant_status_details = details
         if enchant_status_val_lbl then
             enchant_status_val_lbl.Text = cache.enchant_status_details == "" and cache.enchant_status_text or (cache.enchant_status_text .. "\n" .. cache.enchant_status_details)
-        end
-    elseif mode_name == "coin" then
-        if msg then cache.coin_status_text = msg end
-        cache.coin_status_details = details
-        if coin_status_val_lbl then
-            coin_status_val_lbl.Text = cache.coin_status_details == "" and cache.coin_status_text or (cache.coin_status_text .. "\n" .. cache.coin_status_details)
         end
     end
 end
@@ -1121,7 +1035,7 @@ local function start_trade_session(target_player, mode)
         if cache.last_trade_time then
             local elapsed = tick() - cache.last_trade_time
             if elapsed < 5 then
-                set_status_msg(mode, nil, "Cooldown (" .. string.format("%.1fs", 5 - elapsed) .. ")")
+                set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 5 - elapsed) .. ")")
                 task_wait(5 - elapsed)
             end
         end
@@ -1168,46 +1082,20 @@ local function update_mode_status(mode_name)
     if not s then return end
 
     local target = config.quantity
-    local progress_str
-    if mode_name == "coin" then
-        target = config.target_coin_amount
-        local current_coins = s.total_coins or 0
-        progress_str = (target == 0) and (current_coins .. "/∞") or (current_coins .. "/" .. target)
-    else
-        progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
-    end
-
+    local progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
     local display_name = get_mode_display_name(mode_name)
     local text
-    if mode_name == "coin" then
-        local current_coins = s.total_coins or 0
-        if target > 0 and current_coins >= target then
-            text = string.format("Completed! %d/%d coins sent (%d items)", current_coins, target, s.total_items)
-        elseif (s.attempts or 0) == 0 and (s.success_trades or 0) == 0 then
-            text = string.format("Starting Trade: Coin (%s)", progress_str)
-        elseif (s.success_trades or 0) > 0 then
-            text = string.format("Active: Coin - %d coins sent (%s)", current_coins, progress_str)
-        else
-            text = string.format("Trading: Coin (%s)", progress_str)
-        end
+    if target > 0 and s.total_items >= target then
+        text = string_format("Completed! %d/%d items sent", s.total_items, target)
+    elseif (s.attempts or 0) == 0 and (s.success_trades or 0) == 0 then
+        text = string_format("Starting Trade: %s (%s)", display_name, progress_str)
+    elseif (s.success_trades or 0) > 0 then
+        text = string_format("Active: %s - %d items sent (%s)", display_name, s.total_items, progress_str)
     else
-        if target > 0 and s.total_items >= target then
-            text = string.format("Completed! %d/%d items sent", s.total_items, target)
-        elseif (s.attempts or 0) == 0 and (s.success_trades or 0) == 0 then
-            text = string.format("Starting Trade: %s (%s)", display_name, progress_str)
-        elseif (s.success_trades or 0) > 0 then
-            text = string.format("Active: %s - %d items sent (%s)", display_name, s.total_items, progress_str)
-        else
-            text = string.format("Trading: %s (%s)", display_name, progress_str)
-        end
+        text = string_format("Trading: %s (%s)", display_name, progress_str)
     end
 
-    local details
-    if mode_name == "coin" then
-        details = string.format("Coins Sent: %d/%d | Items Sent: %d | Attempts: %d | Failed: %d", s.total_coins or 0, target, s.total_items, s.attempts, s.failed)
-    else
-        details = string.format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
-    end
+    local details = string_format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
 
     if mode_name == "fish" then
         cache.fish_status_text = text
@@ -1226,12 +1114,6 @@ local function update_mode_status(mode_name)
         cache.enchant_status_details = details
         if enchant_status_val_lbl then
             enchant_status_val_lbl.Text = cache.enchant_status_details == "" and cache.enchant_status_text or (cache.enchant_status_text .. "\n" .. cache.enchant_status_details)
-        end
-    elseif mode_name == "coin" then
-        cache.coin_status_text = text
-        cache.coin_status_details = details
-        if coin_status_val_lbl then
-            coin_status_val_lbl.Text = cache.coin_status_details == "" and cache.coin_status_text or (cache.coin_status_text .. "\n" .. cache.coin_status_details)
         end
     end
 end
@@ -1268,7 +1150,7 @@ local function try_trade_fish()
     local player_data_items = inventory and inventory.Items or {}
 
     local items_to_trade = {}
-    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
+    local limit = math_min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
 
     local has_all_fish = table_find(config.selected_fish, "All") ~= nil
     if #config.selected_fish > 1 and not has_all_fish then
@@ -1423,7 +1305,7 @@ local function try_trade_rarity()
     local player_data_items = inventory and inventory.Items or {}
 
     local items_to_trade = {}
-    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
+    local limit = math_min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
 
     local has_all_tier = table_find(config.selected_tiers, "All") ~= nil
     if #config.selected_tiers > 1 and not has_all_tier then
@@ -1488,7 +1370,6 @@ local function try_trade_rarity()
             table_insert(added_items, item)
         end
         task_wait(0.03)
-        task_wait(0.08)
     end
 
     if #added_items > 0 and is_trade_active() then
@@ -1578,7 +1459,7 @@ local function try_trade_enchant()
     local player_data_items = inventory and inventory.Items or {}
 
     local items_to_trade = {}
-    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
+    local limit = math_min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
     for _, item in ipairs(player_data_items) do
         if #items_to_trade >= limit then
             break
@@ -1646,7 +1527,6 @@ local function try_trade_enchant()
             table_insert(added_items, item)
         end
         task_wait(0.03)
-        task_wait(0.08)
     end
 
     if #added_items > 0 and is_trade_active() then
@@ -1706,243 +1586,7 @@ local function try_trade_enchant()
 end
 
 -- ==============================================================================
--- [SECTION 12] TRADING ENGINE 4: TRADE BY COIN VALUE
--- Komparator harga, seleksi greedy/knapsack ikan untuk mencapai target koin tertentu,
--- dan eksekusi sesi trade otomatis.
--- ==============================================================================
-local function coin_fish_comparator(a, b)
-    if a.SpecialScore ~= b.SpecialScore then
-        return a.SpecialScore > b.SpecialScore
-    end
-    return a.SellPrice > b.SellPrice
-end
-
-local function choose_fishes_by_range(fish_list, target_amount, max_slots)
-    max_slots = max_slots or 20
-    table_sort(fish_list, coin_fish_comparator)
-
-    local selected_fishes = {}
-    local accumulated_amount = 0
-    local effective_target = (target_amount > 0) and (target_amount * 1.5) or 0
-
-    for _, fish in ipairs(fish_list) do
-        table_insert(selected_fishes, fish)
-        accumulated_amount = accumulated_amount + fish.SellPrice
-
-        if (effective_target > 0 and accumulated_amount >= effective_target) or #selected_fishes >= max_slots then
-            break
-        end
-    end
-
-    if target_amount == 0 and #selected_fishes < max_slots then
-        for _, fish in ipairs(fish_list) do
-            if #selected_fishes >= max_slots then break end
-            if not table_find(selected_fishes, fish) then
-                table_insert(selected_fishes, fish)
-            end
-        end
-    end
-
-    return selected_fishes
-end
-
-local function try_trade_by_coin()
-    cache.processed_trades = {}
-    local target_player = find_target_player()
-    if not target_player or not player_data then
-        local err_msg = "Error: Target player belum dipilih"
-        if config.trade_with ~= "" and player_data then
-            err_msg = "Error: Target player tidak ditemukan"
-        end
-        set_status_msg("coin", err_msg)
-        return
-    end
-
-    local current_coins = cache.stats.coin.total_coins or 0
-    local target_coins = config.target_coin_amount
-    local remaining_target = 0
-    if target_coins > 0 then
-        remaining_target = math.max(0, target_coins - current_coins)
-        if remaining_target <= 0 then
-            config.enabled = false
-            if coin_toggle_ctrl then
-                coin_toggle_ctrl.set_state(false)
-                config.trade_coins_enabled = false
-            end
-            save_config()
-            return
-        end
-    end
-
-    local inventory = player_data:Get("Inventory")
-    local player_data_items = inventory and inventory.Items or {}
-    local fish_list = {}
-    for _, item in ipairs(player_data_items) do
-        if item and item.Id then
-            local data = item_utility:GetItemData(item.Id)
-            if data and data.Data and data.Data.Type == "Fish" then
-                if not (item.Favorited and not config.trade_favorited) then
-                    local mut_name = get_item_mutation(item)
-                    local is_mutation = (mut_name ~= "None")
-                    local is_shiny = is_item_shiny(item)
-                    local is_big = is_item_big(item)
-                    local is_sparkling = is_item_sparkling(item)
-
-                    local special_score = 0
-                    if is_shiny then special_score = special_score + 2 end
-                    if is_mutation then special_score = special_score + 2 end
-                    if is_big then special_score = special_score + 2 end
-                    if is_sparkling then special_score = special_score + 1 end
-
-                    local sell_price = get_cached_sell_price(item)
-
-                    table_insert(fish_list, {
-                        UUID = item.UUID,
-                        Name = data.Data.Name,
-                        SellPrice = sell_price,
-                        SpecialScore = special_score
-                    })
-                end
-            end
-        end
-    end
-
-    if #fish_list == 0 then
-        set_status_msg("coin", "Error: Tidak ada lagi fish di inventory")
-        config.enabled = false
-        if coin_toggle_ctrl then
-            coin_toggle_ctrl.set_state(false)
-            config.trade_coins_enabled = false
-        end
-        save_config()
-        return
-    end
-
-    local selected = choose_fishes_by_range(fish_list, remaining_target, 20)
-
-    local items_to_trade = {}
-    local total_selected_value = 0
-    for _, fish in ipairs(selected) do
-        if not table_find(cache.processed_trades, fish.UUID) then
-            table_insert(items_to_trade, fish)
-            total_selected_value = total_selected_value + (fish.SellPrice or 0)
-        end
-    end
-
-    log_debug(string_format("[TradeByCoin] Target: %d | Remaining: %d | Total Fish Available: %d | Selected Fish Count: %d | Total Est. Value: %d coins",
-        target_coins, remaining_target, #fish_list, #items_to_trade, total_selected_value))
-
-    if #items_to_trade == 0 or #selected == 0 then
-        set_status_msg("coin", "Error: Tidak ada lagi fish di inventory")
-        config.enabled = false
-        if coin_toggle_ctrl then
-            coin_toggle_ctrl.set_state(false)
-            config.trade_coins_enabled = false
-        end
-        save_config()
-        return
-    end
-
-    cache.stats.coin.attempts = cache.stats.coin.attempts + 1
-    update_mode_status("coin")
-
-    local success, err = start_trade_session(target_player, "coin")
-    if not success then
-        cache.stats.coin.failed = cache.stats.coin.failed + 1
-        update_mode_status("coin")
-        return
-    end
-
-    local added_items = {}
-    local added_coins = 0
-    set_status_msg("coin", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
-    for idx, fish in ipairs(items_to_trade) do
-        if not config.enabled or not is_trade_active() then break end
-
-        local add_success = false
-        for attempt = 1, 2 do
-            local ok, res = pcall(function()
-                return trade_remotes.AddItem:InvokeServer("Fish", fish.UUID)
-            end)
-            if ok and res ~= false then
-                add_success = true
-                break
-            end
-            task_wait(0.04)
-        end
-
-        if add_success then
-            table_insert(cache.processed_trades, fish.UUID)
-            table_insert(added_items, fish)
-            added_coins = added_coins + (fish.SellPrice or 0)
-            log_debug(string_format("  [+] Added Slot %d/%d: %s (Price: %d, Score: %d)", idx, #items_to_trade, fish.Name, fish.SellPrice or 0, fish.SpecialScore or 0))
-        else
-            log_debug(string_format("  [-] Failed to add Slot %d/%d: %s (UUID: %s)", idx, #items_to_trade, fish.Name, fish.UUID))
-        end
-        task_wait(0.03)
-    end
-
-    if #added_items > 0 and is_trade_active() then
-        local trade_success = false
-        local function mark_success(coins, items)
-            if not trade_success then
-                trade_success = true
-                coins = coins or added_coins
-                items = items or #added_items
-                cache.stats.coin.success_trades = cache.stats.coin.success_trades + 1
-                cache.stats.coin.last_items = items
-                cache.stats.coin.total_items = cache.stats.coin.total_items + items
-                cache.stats.coin.total_coins = (cache.stats.coin.total_coins or 0) + coins
-                update_mode_status("coin")
-            end
-        end
-
-        local chat_listener = listen_for_trade_completion(function()
-            mark_success()
-        end)
-
-        pcall(function()
-            trade_remotes.SetReady:InvokeServer(true)
-        end)
-
-        wait_for_trade_end("coin", chat_listener)
-        task_wait(0.6)
-
-        local sent_coins, sent_items = verify_coins_sent(added_items)
-        local is_chat_done = (chat_listener and chat_listener.is_completed())
-
-        if sent_items > 0 or is_chat_done or (not is_trade_active() and #added_items > 0) then
-            local coins = (sent_items > 0) and sent_coins or added_coins
-            local items = (sent_items > 0) and sent_items or #added_items
-            mark_success(coins, items)
-        end
-
-        chat_listener.disconnect()
-
-        if trade_success then
-            cache.last_trade_time = tick()
-            if config.target_coin_amount > 0 and cache.stats.coin.total_coins >= config.target_coin_amount then
-                config.enabled = false
-                config.trade_coins_enabled = false
-                if coin_toggle_ctrl then
-                    coin_toggle_ctrl.set_state(false)
-                end
-                save_config()
-                set_status_msg("coin", string_format("Selesai! Target koin tercapai (%d/%d koin)", cache.stats.coin.total_coins, config.target_coin_amount))
-                return
-            end
-        else
-            cache.stats.coin.failed = cache.stats.coin.failed + 1
-            update_mode_status("coin")
-        end
-    else
-        cache.stats.coin.failed = cache.stats.coin.failed + 1
-        update_mode_status("coin")
-    end
-end
-
--- ==============================================================================
--- [SECTION 13] AUTO TRADE TASK RUNNER
+-- [SECTION 12] AUTO TRADE TASK RUNNER
 -- Task loop utama yang berjalan di background; memeriksa mode aktif dan
 -- menjalankan fungsi engine terkait secara periodik dengan jeda delay aman.
 -- ==============================================================================
@@ -1953,7 +1597,7 @@ local function run_auto_trade_loop()
     log_inventory_fish()
 
     task_spawn(function()
-        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
+        while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
             if config.enabled and config.trade_fish_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -1966,7 +1610,7 @@ local function run_auto_trade_loop()
     end)
 
     task_spawn(function()
-        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
+        while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
             if config.enabled and config.trade_rarity_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -1979,7 +1623,7 @@ local function run_auto_trade_loop()
     end)
 
     task_spawn(function()
-        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
+        while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
             if config.enabled and config.trade_enchants_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -1994,19 +1638,6 @@ local function run_auto_trade_loop()
             task_wait(3)
         end
     end)
-
-    task_spawn(function()
-        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
-            if config.enabled and config.trade_coins_enabled and config.target_coin_amount > 0 then
-                if not cache.is_trading_active then
-                    cache.is_trading_active = true
-                    pcall(try_trade_by_coin)
-                    cache.is_trading_active = false
-                end
-            end
-            task_wait(3)
-        end
-    end)
 end
 _G.run_auto_trade_loop = run_auto_trade_loop
 
@@ -2015,13 +1646,13 @@ pcall(function()
     if trade_remotes and trade_remotes.TradeEnded then
         trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
             cache.last_trade_time = tick()
-            cache.active_trade = false
         end)
+        track_conn(trade_ended_conn)
     end
 end)
 
 -- ==============================================================================
--- [SECTION 14] GUI ROOT & WINDOW SETUP
+-- [SECTION 13] GUI ROOT & WINDOW SETUP
 -- Inisialisasi ScreenGui (dukungan gethui, CoreGui, PlayerGui), pembersihan GUI lama,
 -- penataan MainFrame, sistem dragging jendela, serta sidebar pilihan target player.
 -- ==============================================================================
@@ -2030,12 +1661,12 @@ local function create_ui()
     if gethui then
         pcall(function() parent_gui = gethui() end)
     end
-    if not parent_gui then
+    if not parent_gui and core_gui then
         pcall(function()
-            local test_gui = Instance.new("ScreenGui")
-            test_gui.Parent = game:GetService("CoreGui")
+            local test_gui = Instance_new("ScreenGui")
+            test_gui.Parent = core_gui
             test_gui:Destroy()
-            parent_gui = game:GetService("CoreGui")
+            parent_gui = core_gui
         end)
     end
     if not parent_gui then
@@ -2056,9 +1687,9 @@ local function create_ui()
     clear_old_guis(parent_gui)
     clear_old_guis(local_player:FindFirstChild("PlayerGui"))
     if gethui then clear_old_guis(gethui()) end
-    pcall(function() clear_old_guis(game:GetService("CoreGui")) end)
+    if core_gui then clear_old_guis(core_gui) end
 
-    local gui = Instance.new("ScreenGui")
+    local gui = Instance_new("ScreenGui")
     gui.Name = "KeenanHub_AutoTrade"
     gui.ResetOnSpawn = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -2074,7 +1705,7 @@ local function create_ui()
     end
 
     task_spawn(function()
-        while _G.KeenanHub_AutoTrade_ScriptID == script_id do
+        while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
             task_wait(1)
             pcall(function()
                 if gui and gui.Parent then
@@ -2087,7 +1718,6 @@ local function create_ui()
 
     local byname_fav_toggle = nil
     local enchant_fav_toggle = nil
-    local coin_fav_toggle = nil
     local rarity_fav_toggle = nil
 
     local function sync_fav_toggles(active)
@@ -2095,7 +1725,6 @@ local function create_ui()
         save_config()
         if byname_fav_toggle then byname_fav_toggle.set_state(active) end
         if enchant_fav_toggle then enchant_fav_toggle.set_state(active) end
-        if coin_fav_toggle then coin_fav_toggle.set_state(active) end
         if rarity_fav_toggle then rarity_fav_toggle.set_state(active) end
 
         cache.loaded_fish = get_owned_fish_options()
@@ -2110,7 +1739,7 @@ local function create_ui()
     end
 
     local function sync_qty_boxes(val)
-        val = math.max(0, math.floor(tonumber(val) or 0))
+        val = math_max(0, math_floor(tonumber(val) or 0))
         config.quantity = val
         save_config()
         if qty_box and qty_box.Text ~= tostring(val) then qty_box.Text = tostring(val) end
@@ -2120,7 +1749,7 @@ local function create_ui()
 
     local function truncate_string(str, max_len)
         if #str > max_len then
-            return string.sub(str, 1, max_len - 2) .. ".."
+            return string_sub(str, 1, max_len - 2) .. ".."
         end
         return str
     end
@@ -2180,7 +1809,6 @@ local function create_ui()
                         end
                     end
                 end
-            else
             end
         end)
         if not success then
@@ -2196,23 +1824,22 @@ local function create_ui()
     cache.loaded_fish = get_owned_fish_options()
     cache.loaded_enchants = get_owned_enchant_options()
 
-    local BG_COLOR = Color3.fromRGB(28, 30, 34)         -- Solid Terminal Slate Gray
-    local SIDEBAR_COLOR = Color3.fromRGB(20, 22, 25)    -- Solid Terminal Charcoal Gray
-    local ACCENT_COLOR = Color3.fromRGB(250, 204, 21)   -- Keenan Yellow Accent (#FACC15)
-    local ACCENT_HOVER = Color3.fromRGB(253, 224, 71)   -- Light Yellow Hover
-    local TEXT_COLOR = Color3.fromRGB(235, 238, 242)    -- Terminal Off-White Text
-    local MUTED_COLOR = Color3.fromRGB(140, 146, 158)   -- Terminal Muted Gray Text
-    local CARD_COLOR = Color3.fromRGB(36, 39, 44)       -- Solid Terminal Card Gray
-    local TOGGLE_ON_COLOR = Color3.fromRGB(250, 204, 21)-- Terminal Active Yellow Toggle
-    local INPUT_BG_COLOR = Color3.fromRGB(18, 20, 23)   -- Solid Terminal Black/Dark Gray
-    local BORDER_COLOR = Color3.fromRGB(58, 63, 72)     -- Terminal Border Gray
-    local BTN_BG_COLOR = Color3.fromRGB(46, 50, 58)     -- Terminal Button Gray
-    local BTN_HOVER_COLOR = Color3.fromRGB(60, 66, 76)  -- Terminal Button Hover Gray
+    local BG_COLOR = Color3_fromRGB(28, 30, 34)         -- Solid Terminal Slate Gray
+    local SIDEBAR_COLOR = Color3_fromRGB(20, 22, 25)    -- Solid Terminal Charcoal Gray
+    local ACCENT_COLOR = Color3_fromRGB(250, 204, 21)   -- Keenan Yellow Accent (#FACC15)
+    local ACCENT_HOVER = Color3_fromRGB(253, 224, 71)   -- Light Yellow Hover
+    local TEXT_COLOR = Color3_fromRGB(235, 238, 242)    -- Terminal Off-White Text
+    local MUTED_COLOR = Color3_fromRGB(140, 146, 158)   -- Terminal Muted Gray Text
+    local CARD_COLOR = Color3_fromRGB(36, 39, 44)       -- Solid Terminal Card Gray
+    local TOGGLE_ON_COLOR = Color3_fromRGB(250, 204, 21)-- Terminal Active Yellow Toggle
+    local INPUT_BG_COLOR = Color3_fromRGB(18, 20, 23)   -- Solid Terminal Black/Dark Gray
+    local BORDER_COLOR = Color3_fromRGB(58, 63, 72)     -- Terminal Border Gray
+    local BTN_BG_COLOR = Color3_fromRGB(46, 50, 58)     -- Terminal Button Gray
+    local BTN_HOVER_COLOR = Color3_fromRGB(60, 66, 76)  -- Terminal Button Hover Gray
 
     local font_face = Font.fromEnum(Enum.Font.Code)
     local font_bold = Font.fromEnum(Enum.Font.Code)
 
-    local ply_dropdown_btn
     local target_lbl
     local fish_dropdown_btn
     local enchant_dropdown_btn
@@ -2225,19 +1852,17 @@ local function create_ui()
     local rarity_panel
     local status_val_lbl = nil
     local enchant_status_val_lbl = nil
-    local coin_status_val_lbl = nil
     local rarity_status_val_lbl = nil
-    local sb_status = nil
     local populate_items_panel
     local populate_enchants_panel
     local qty_box
     local es_qty_box
     local r_qty_box
 
-    local main = Instance.new("Frame")
+    local main = Instance_new("Frame")
     main.Name = "MainFrame"
-    main.Size = UDim2.new(0, 250, 0, 200)
-    main.Position = UDim2.new(0.5, -178, 0.5, -100)
+    main.Size = UDim2_new(0, 250, 0, 200)
+    main.Position = UDim2_new(0.5, -178, 0.5, -100)
     main.BackgroundColor3 = BG_COLOR
     main.BackgroundTransparency = 0
     main.BorderSizePixel = 0
@@ -2245,21 +1870,21 @@ local function create_ui()
     main.ZIndex = 10
     main.Parent = gui
 
-    local main_stroke = Instance.new("UIStroke")
+    local main_stroke = Instance_new("UIStroke")
     main_stroke.Color = BORDER_COLOR
     main_stroke.Thickness = 1
     main_stroke.Parent = main
 
-    local main_corner = Instance.new("UICorner")
-    main_corner.CornerRadius = UDim.new(0, 6)
+    local main_corner = Instance_new("UICorner")
+    main_corner.CornerRadius = UDim_new(0, 6)
     main_corner.Parent = main
 
-    close_detector = Instance.new("TextButton")
+    close_detector = Instance_new("TextButton")
     close_detector.Name = "CloseDetector"
-    close_detector.Size = UDim2.new(0, 5000, 0, 5000)
-    close_detector.Position = UDim2.new(0.5, -2500, 0.5, -2500)
+    close_detector.Size = UDim2_new(0, 5000, 0, 5000)
+    close_detector.Position = UDim2_new(0.5, -2500, 0.5, -2500)
     close_detector.BackgroundTransparency = 0.99
-    close_detector.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    close_detector.BackgroundColor3 = Color3_fromRGB(0, 0, 0)
     close_detector.Text = ""
     close_detector.ZIndex = 5
     close_detector.Active = true
@@ -2277,12 +1902,10 @@ local function create_ui()
             end
             close_detector.Visible = false
         end
-    end)
-
-    player_panel = Instance.new("Frame")
+    end)    player_panel = Instance_new("Frame")
     player_panel.Name = "PlayerSelectionPanel"
-    player_panel.Size = UDim2.new(0, 100, 1, 0)
-    player_panel.Position = UDim2.new(1, 5, 0, 0)
+    player_panel.Size = UDim2_new(0, 100, 1, 0)
+    player_panel.Position = UDim2_new(1, 5, 0, 0)
     player_panel.BackgroundColor3 = SIDEBAR_COLOR
     player_panel.BackgroundTransparency = 0
     player_panel.BorderSizePixel = 0
@@ -2291,18 +1914,18 @@ local function create_ui()
     player_panel.ZIndex = 10
     player_panel.Parent = main
 
-    local p_stroke = Instance.new("UIStroke")
+    local p_stroke = Instance_new("UIStroke")
     p_stroke.Color = BORDER_COLOR
     p_stroke.Thickness = 1
     p_stroke.Parent = player_panel
 
-    local p_corner = Instance.new("UICorner")
-    p_corner.CornerRadius = UDim.new(0, 6)
+    local p_corner = Instance_new("UICorner")
+    p_corner.CornerRadius = UDim_new(0, 6)
     p_corner.Parent = player_panel
 
-    local ply_refresh = Instance.new("TextButton")
-    ply_refresh.Size = UDim2.new(1, -20, 0, 26)
-    ply_refresh.Position = UDim2.new(0, 10, 0, 10)
+    local ply_refresh = Instance_new("TextButton")
+    ply_refresh.Size = UDim2_new(1, -20, 0, 26)
+    ply_refresh.Position = UDim2_new(0, 10, 0, 10)
     ply_refresh.BackgroundColor3 = BTN_BG_COLOR
     ply_refresh.Text = "Refresh"
     ply_refresh.TextColor3 = ACCENT_COLOR
@@ -2312,11 +1935,11 @@ local function create_ui()
     ply_refresh.ZIndex = 10
     ply_refresh.Parent = player_panel
 
-    local ply_refresh_c = Instance.new("UICorner")
-    ply_refresh_c.CornerRadius = UDim.new(0, 4)
+    local ply_refresh_c = Instance_new("UICorner")
+    ply_refresh_c.CornerRadius = UDim_new(0, 4)
     ply_refresh_c.Parent = ply_refresh
 
-    local ply_refresh_stroke = Instance.new("UIStroke")
+    local ply_refresh_stroke = Instance_new("UIStroke")
     ply_refresh_stroke.Color = BORDER_COLOR
     ply_refresh_stroke.Thickness = 1
     ply_refresh_stroke.Parent = ply_refresh
@@ -2328,9 +1951,9 @@ local function create_ui()
         ply_refresh.BackgroundColor3 = BTN_BG_COLOR
     end)
 
-    target_lbl = Instance.new("TextLabel")
-    target_lbl.Size = UDim2.new(1, -12, 0, 20)
-    target_lbl.Position = UDim2.new(0, 6, 0, 42)
+    target_lbl = Instance_new("TextLabel")
+    target_lbl.Size = UDim2_new(1, -12, 0, 20)
+    target_lbl.Position = UDim2_new(0, 6, 0, 42)
     target_lbl.BackgroundColor3 = INPUT_BG_COLOR
     target_lbl.BackgroundTransparency = 0
     target_lbl.Text = truncate_string(config.trade_with ~= "" and config.trade_with or "None", 10)
@@ -2341,27 +1964,27 @@ local function create_ui()
     target_lbl.ZIndex = 10
     target_lbl.Parent = player_panel
 
-    local target_lbl_corner = Instance.new("UICorner")
-    target_lbl_corner.CornerRadius = UDim.new(0, 4)
+    local target_lbl_corner = Instance_new("UICorner")
+    target_lbl_corner.CornerRadius = UDim_new(0, 4)
     target_lbl_corner.Parent = target_lbl
 
-    local target_lbl_stroke = Instance.new("UIStroke")
+    local target_lbl_stroke = Instance_new("UIStroke")
     target_lbl_stroke.Color = BORDER_COLOR
     target_lbl_stroke.Thickness = 1
     target_lbl_stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     target_lbl_stroke.Parent = target_lbl
 
-    local p_sep = Instance.new("Frame")
-    p_sep.Size = UDim2.new(1, 0, 0, 1)
-    p_sep.Position = UDim2.new(0, 0, 0, 68)
+    local p_sep = Instance_new("Frame")
+    p_sep.Size = UDim2_new(1, 0, 0, 1)
+    p_sep.Position = UDim2_new(0, 0, 0, 68)
     p_sep.BackgroundColor3 = BORDER_COLOR
     p_sep.BorderSizePixel = 0
     p_sep.ZIndex = 10
     p_sep.Parent = player_panel
 
-    local p_scroll = Instance.new("ScrollingFrame")
-    p_scroll.Size = UDim2.new(1, -12, 1, -78)
-    p_scroll.Position = UDim2.new(0, 6, 0, 73)
+    local p_scroll = Instance_new("ScrollingFrame")
+    p_scroll.Size = UDim2_new(1, -12, 1, -78)
+    p_scroll.Position = UDim2_new(0, 6, 0, 73)
     p_scroll.BackgroundTransparency = 1
     p_scroll.BorderSizePixel = 0
     p_scroll.ScrollBarThickness = 3
@@ -2369,11 +1992,11 @@ local function create_ui()
     p_scroll.Active = true
     p_scroll.ZIndex = 10
     safe_set_scroll(p_scroll)
-    p_scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    p_scroll.CanvasSize = UDim2_new(0, 0, 0, 0)
     p_scroll.Parent = player_panel
 
-    local p_layout = Instance.new("UIListLayout")
-    p_layout.Padding = UDim.new(0, 2)
+    local p_layout = Instance_new("UIListLayout")
+    p_layout.Padding = UDim_new(0, 2)
     p_layout.Parent = p_scroll
 
     local function populate_players_panel()
@@ -2388,8 +2011,8 @@ local function create_ui()
             for _, name in ipairs(player_list) do
                 match_count = match_count + 1
                 local is_selected = (config.trade_with == name)
-                local opt_btn = Instance.new("TextButton")
-                opt_btn.Size = UDim2.new(1, -6, 0, 24)
+                local opt_btn = Instance_new("TextButton")
+                opt_btn.Size = UDim2_new(1, -6, 0, 24)
                 opt_btn.BackgroundTransparency = is_selected and 0 or 1
                 opt_btn.BackgroundColor3 = CARD_COLOR
                 opt_btn.Text = ""
@@ -2397,13 +2020,13 @@ local function create_ui()
                 opt_btn.ZIndex = 12
                 opt_btn.Parent = p_scroll
 
-                local opt_corner = Instance.new("UICorner")
-                opt_corner.CornerRadius = UDim.new(0, 4)
+                local opt_corner = Instance_new("UICorner")
+                opt_corner.CornerRadius = UDim_new(0, 4)
                 opt_corner.Parent = opt_btn
 
-                local opt_lbl = Instance.new("TextLabel")
-                opt_lbl.Size = UDim2.new(1, -20, 1, 0)
-                opt_lbl.Position = UDim2.new(0, 15, 0, 0)
+                local opt_lbl = Instance_new("TextLabel")
+                opt_lbl.Size = UDim2_new(1, -20, 1, 0)
+                opt_lbl.Position = UDim2_new(0, 15, 0, 0)
                 opt_lbl.BackgroundTransparency = 1
                 opt_lbl.Text = truncate_string(name, 10)
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
@@ -2413,9 +2036,9 @@ local function create_ui()
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
 
-                local indicator = Instance.new("Frame")
-                indicator.Size = UDim2.new(0, 3, 0, 14)
-                indicator.Position = UDim2.new(0, 5, 0.5, -7)
+                local indicator = Instance_new("Frame")
+                indicator.Size = UDim2_new(0, 3, 0, 14)
+                indicator.Position = UDim2_new(0, 5, 0.5, -7)
                 indicator.BackgroundColor3 = ACCENT_COLOR
                 indicator.BorderSizePixel = 0
                 indicator.ZIndex = 14
@@ -2446,7 +2069,7 @@ local function create_ui()
                 end)
             end
 
-            p_scroll.CanvasSize = UDim2.new(0, 0, 0, match_count * 26 + 10)
+            p_scroll.CanvasSize = UDim2_new(0, 0, 0, match_count * 26 + 10)
         end)
         if not success then
             warn("populate_players_panel error: " .. tostring(err))
@@ -2463,10 +2086,10 @@ local function create_ui()
 
     populate_players_panel()
 
-    item_panel = Instance.new("Frame")
+    item_panel = Instance_new("Frame")
     item_panel.Name = "ItemSelectionPanel"
-    item_panel.Size = UDim2.new(0, 150, 1, -34)
-    item_panel.Position = UDim2.new(1, -160, 0, 28)
+    item_panel.Size = UDim2_new(0, 150, 1, -34)
+    item_panel.Position = UDim2_new(1, -160, 0, 28)
     item_panel.BackgroundColor3 = SIDEBAR_COLOR
     item_panel.BackgroundTransparency = 0
     item_panel.BorderSizePixel = 0
@@ -2475,18 +2098,18 @@ local function create_ui()
     item_panel.ZIndex = 10
     item_panel.Parent = main
 
-    local i_stroke = Instance.new("UIStroke")
+    local i_stroke = Instance_new("UIStroke")
     i_stroke.Color = BORDER_COLOR
     i_stroke.Thickness = 1
     i_stroke.Parent = item_panel
 
-    local i_corner = Instance.new("UICorner")
-    i_corner.CornerRadius = UDim.new(0, 6)
+    local i_corner = Instance_new("UICorner")
+    i_corner.CornerRadius = UDim_new(0, 6)
     i_corner.Parent = item_panel
 
-    local item_search_box = Instance.new("TextBox")
-    item_search_box.Size = UDim2.new(1, -20, 0, 24)
-    item_search_box.Position = UDim2.new(0, 10, 0, 10)
+    local item_search_box = Instance_new("TextBox")
+    item_search_box.Size = UDim2_new(1, -20, 0, 24)
+    item_search_box.Position = UDim2_new(0, 10, 0, 10)
     item_search_box.BackgroundColor3 = INPUT_BG_COLOR
     item_search_box.Text = ""
     item_search_box.PlaceholderText = "Search..."
@@ -2499,31 +2122,31 @@ local function create_ui()
     item_search_box.ZIndex = 10
     item_search_box.Parent = item_panel
 
-    local isb_c = Instance.new("UICorner")
-    isb_c.CornerRadius = UDim.new(0, 5)
+    local isb_c = Instance_new("UICorner")
+    isb_c.CornerRadius = UDim_new(0, 5)
     isb_c.Parent = item_search_box
 
-    local isb_stroke = Instance.new("UIStroke")
-    isb_stroke.Color = Color3.fromRGB(45, 45, 45)
+    local isb_stroke = Instance_new("UIStroke")
+    isb_stroke.Color = Color3_fromRGB(45, 45, 45)
     isb_stroke.Thickness = 1
     isb_stroke.Parent = item_search_box
 
-    local isb_padding = Instance.new("UIPadding")
-    isb_padding.PaddingLeft = UDim.new(0, 8)
-    isb_padding.PaddingRight = UDim.new(0, 8)
+    local isb_padding = Instance_new("UIPadding")
+    isb_padding.PaddingLeft = UDim_new(0, 8)
+    isb_padding.PaddingRight = UDim_new(0, 8)
     isb_padding.Parent = item_search_box
 
-    local i_sep = Instance.new("Frame")
-    i_sep.Size = UDim2.new(1, 0, 0, 1)
-    i_sep.Position = UDim2.new(0, 0, 0, 42)
+    local i_sep = Instance_new("Frame")
+    i_sep.Size = UDim2_new(1, 0, 0, 1)
+    i_sep.Position = UDim2_new(0, 0, 0, 42)
     i_sep.BackgroundColor3 = BORDER_COLOR
     i_sep.BorderSizePixel = 0
     i_sep.ZIndex = 10
     i_sep.Parent = item_panel
 
-    local i_scroll = Instance.new("ScrollingFrame")
-    i_scroll.Size = UDim2.new(1, -12, 1, -52)
-    i_scroll.Position = UDim2.new(0, 6, 0, 47)
+    local i_scroll = Instance_new("ScrollingFrame")
+    i_scroll.Size = UDim2_new(1, -12, 1, -52)
+    i_scroll.Position = UDim2_new(0, 6, 0, 47)
     i_scroll.BackgroundTransparency = 1
     i_scroll.BorderSizePixel = 0
     i_scroll.ScrollBarThickness = 3
@@ -2531,11 +2154,11 @@ local function create_ui()
     i_scroll.Active = true
     i_scroll.ZIndex = 10
     safe_set_scroll(i_scroll)
-    i_scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    i_scroll.CanvasSize = UDim2_new(0, 0, 0, 0)
     i_scroll.Parent = item_panel
 
-    local i_layout = Instance.new("UIListLayout")
-    i_layout.Padding = UDim.new(0, 2)
+    local i_layout = Instance_new("UIListLayout")
+    i_layout.Padding = UDim_new(0, 2)
     i_layout.Parent = i_scroll
 
     populate_items_panel = function(update_dropdown_btn)
@@ -2560,8 +2183,8 @@ local function create_ui()
                 if query == "" or string_find(string_lower(clean_opt), query) then
                     match_count = match_count + 1
                     local is_selected = table_find(config.selected_fish, clean_opt) ~= nil
-                    local opt_btn = Instance.new("TextButton")
-                    opt_btn.Size = UDim2.new(1, -6, 0, 24)
+                    local opt_btn = Instance_new("TextButton")
+                    opt_btn.Size = UDim2_new(1, -6, 0, 24)
                     opt_btn.BackgroundTransparency = is_selected and 0 or 1
                     opt_btn.BackgroundColor3 = CARD_COLOR
                     opt_btn.Text = ""
@@ -2569,13 +2192,13 @@ local function create_ui()
                     opt_btn.ZIndex = 12
                     opt_btn.Parent = i_scroll
 
-                    local opt_corner = Instance.new("UICorner")
-                    opt_corner.CornerRadius = UDim.new(0, 4)
+                    local opt_corner = Instance_new("UICorner")
+                    opt_corner.CornerRadius = UDim_new(0, 4)
                     opt_corner.Parent = opt_btn
 
-                    local opt_lbl = Instance.new("TextLabel")
-                    opt_lbl.Size = UDim2.new(1, -20, 1, 0)
-                    opt_lbl.Position = UDim2.new(0, 15, 0, 0)
+                    local opt_lbl = Instance_new("TextLabel")
+                    opt_lbl.Size = UDim2_new(1, -20, 1, 0)
+                    opt_lbl.Position = UDim2_new(0, 15, 0, 0)
                     opt_lbl.BackgroundTransparency = 1
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
@@ -2585,9 +2208,9 @@ local function create_ui()
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
 
-                    local indicator = Instance.new("Frame")
-                    indicator.Size = UDim2.new(0, 3, 0, 14)
-                    indicator.Position = UDim2.new(0, 5, 0.5, -7)
+                    local indicator = Instance_new("Frame")
+                    indicator.Size = UDim2_new(0, 3, 0, 14)
+                    indicator.Position = UDim2_new(0, 5, 0.5, -7)
                     indicator.BackgroundColor3 = ACCENT_COLOR
                     indicator.BorderSizePixel = 0
                     indicator.ZIndex = 14
@@ -2639,7 +2262,7 @@ local function create_ui()
                 end
             end
 
-            i_scroll.CanvasSize = UDim2.new(0, 0, 0, match_count * 26 + 10)
+            i_scroll.CanvasSize = UDim2_new(0, 0, 0, match_count * 26 + 10)
         end)
         if not success then
             warn("populate_items_panel error: " .. tostring(err))
@@ -2649,18 +2272,18 @@ local function create_ui()
 
     local item_search_thread = nil
     item_search_box:GetPropertyChangedSignal("Text"):Connect(function()
-        if item_search_thread then pcall(function() task.cancel(item_search_thread) end) end
-        item_search_thread = task.delay(0.12, function()
+        if item_search_thread then pcall(function() task_cancel(item_search_thread) end) end
+        item_search_thread = task_delay(0.12, function()
             if fish_dropdown_btn then
                 populate_items_panel(fish_dropdown_btn)
             end
         end)
     end)
 
-    enchant_panel = Instance.new("Frame")
+    enchant_panel = Instance_new("Frame")
     enchant_panel.Name = "EnchantSelectionPanel"
-    enchant_panel.Size = UDim2.new(0, 150, 1, -34)
-    enchant_panel.Position = UDim2.new(1, -160, 0, 28)
+    enchant_panel.Size = UDim2_new(0, 150, 1, -34)
+    enchant_panel.Position = UDim2_new(1, -160, 0, 28)
     enchant_panel.BackgroundColor3 = SIDEBAR_COLOR
     enchant_panel.BackgroundTransparency = 0
     enchant_panel.BorderSizePixel = 0
@@ -2669,18 +2292,18 @@ local function create_ui()
     enchant_panel.ZIndex = 10
     enchant_panel.Parent = main
 
-    local en_stroke = Instance.new("UIStroke")
+    local en_stroke = Instance_new("UIStroke")
     en_stroke.Color = BORDER_COLOR
     en_stroke.Thickness = 1
     en_stroke.Parent = enchant_panel
 
-    local en_corner = Instance.new("UICorner")
-    en_corner.CornerRadius = UDim.new(0, 6)
+    local en_corner = Instance_new("UICorner")
+    en_corner.CornerRadius = UDim_new(0, 6)
     en_corner.Parent = enchant_panel
 
-    local enchant_search_box = Instance.new("TextBox")
-    enchant_search_box.Size = UDim2.new(1, -20, 0, 24)
-    enchant_search_box.Position = UDim2.new(0, 10, 0, 10)
+    local enchant_search_box = Instance_new("TextBox")
+    enchant_search_box.Size = UDim2_new(1, -20, 0, 24)
+    enchant_search_box.Position = UDim2_new(0, 10, 0, 10)
     enchant_search_box.BackgroundColor3 = INPUT_BG_COLOR
     enchant_search_box.Text = ""
     enchant_search_box.PlaceholderText = "Search..."
@@ -2693,31 +2316,31 @@ local function create_ui()
     enchant_search_box.ZIndex = 10
     enchant_search_box.Parent = enchant_panel
 
-    local esb_c = Instance.new("UICorner")
-    esb_c.CornerRadius = UDim.new(0, 5)
+    local esb_c = Instance_new("UICorner")
+    esb_c.CornerRadius = UDim_new(0, 5)
     esb_c.Parent = enchant_search_box
 
-    local esb_stroke = Instance.new("UIStroke")
-    esb_stroke.Color = Color3.fromRGB(45, 45, 45)
+    local esb_stroke = Instance_new("UIStroke")
+    esb_stroke.Color = Color3_fromRGB(45, 45, 45)
     esb_stroke.Thickness = 1
     esb_stroke.Parent = enchant_search_box
 
-    local esb_padding = Instance.new("UIPadding")
-    esb_padding.PaddingLeft = UDim.new(0, 8)
-    esb_padding.PaddingRight = UDim.new(0, 8)
+    local esb_padding = Instance_new("UIPadding")
+    esb_padding.PaddingLeft = UDim_new(0, 8)
+    esb_padding.PaddingRight = UDim_new(0, 8)
     esb_padding.Parent = enchant_search_box
 
-    local en_sep = Instance.new("Frame")
-    en_sep.Size = UDim2.new(1, 0, 0, 1)
-    en_sep.Position = UDim2.new(0, 0, 0, 42)
+    local en_sep = Instance_new("Frame")
+    en_sep.Size = UDim2_new(1, 0, 0, 1)
+    en_sep.Position = UDim2_new(0, 0, 0, 42)
     en_sep.BackgroundColor3 = BORDER_COLOR
     en_sep.BorderSizePixel = 0
     en_sep.ZIndex = 10
     en_sep.Parent = enchant_panel
 
-    local en_scroll = Instance.new("ScrollingFrame")
-    en_scroll.Size = UDim2.new(1, -12, 1, -52)
-    en_scroll.Position = UDim2.new(0, 6, 0, 47)
+    local en_scroll = Instance_new("ScrollingFrame")
+    en_scroll.Size = UDim2_new(1, -12, 1, -52)
+    en_scroll.Position = UDim2_new(0, 6, 0, 47)
     en_scroll.BackgroundTransparency = 1
     en_scroll.BorderSizePixel = 0
     en_scroll.ScrollBarThickness = 3
@@ -2725,11 +2348,11 @@ local function create_ui()
     en_scroll.Active = true
     en_scroll.ZIndex = 10
     safe_set_scroll(en_scroll)
-    en_scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    en_scroll.CanvasSize = UDim2_new(0, 0, 0, 0)
     en_scroll.Parent = enchant_panel
 
-    local en_layout = Instance.new("UIListLayout")
-    en_layout.Padding = UDim.new(0, 2)
+    local en_layout = Instance_new("UIListLayout")
+    en_layout.Padding = UDim_new(0, 2)
     en_layout.Parent = en_scroll
 
     populate_enchants_panel = function(update_dropdown_btn)
@@ -2755,8 +2378,8 @@ local function create_ui()
                     match_count = match_count + 1
                     local is_selected = table_find(config.selected_items, clean_opt) ~= nil
 
-                    local opt_btn = Instance.new("TextButton")
-                    opt_btn.Size = UDim2.new(1, -6, 0, 24)
+                    local opt_btn = Instance_new("TextButton")
+                    opt_btn.Size = UDim2_new(1, -6, 0, 24)
                     opt_btn.BackgroundTransparency = is_selected and 0 or 1
                     opt_btn.BackgroundColor3 = CARD_COLOR
                     opt_btn.Text = ""
@@ -2764,13 +2387,13 @@ local function create_ui()
                     opt_btn.ZIndex = 12
                     opt_btn.Parent = en_scroll
 
-                    local opt_corner = Instance.new("UICorner")
-                    opt_corner.CornerRadius = UDim.new(0, 4)
+                    local opt_corner = Instance_new("UICorner")
+                    opt_corner.CornerRadius = UDim_new(0, 4)
                     opt_corner.Parent = opt_btn
 
-                    local opt_lbl = Instance.new("TextLabel")
-                    opt_lbl.Size = UDim2.new(1, -20, 1, 0)
-                    opt_lbl.Position = UDim2.new(0, 15, 0, 0)
+                    local opt_lbl = Instance_new("TextLabel")
+                    opt_lbl.Size = UDim2_new(1, -20, 1, 0)
+                    opt_lbl.Position = UDim2_new(0, 15, 0, 0)
                     opt_lbl.BackgroundTransparency = 1
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
@@ -2780,9 +2403,9 @@ local function create_ui()
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
 
-                    local indicator = Instance.new("Frame")
-                    indicator.Size = UDim2.new(0, 3, 0, 14)
-                    indicator.Position = UDim2.new(0, 5, 0.5, -7)
+                    local indicator = Instance_new("Frame")
+                    indicator.Size = UDim2_new(0, 3, 0, 14)
+                    indicator.Position = UDim2_new(0, 5, 0.5, -7)
                     indicator.BackgroundColor3 = ACCENT_COLOR
                     indicator.BorderSizePixel = 0
                     indicator.ZIndex = 14
@@ -2834,7 +2457,7 @@ local function create_ui()
                 end
             end
 
-            en_scroll.CanvasSize = UDim2.new(0, 0, 0, match_count * 26 + 10)
+            en_scroll.CanvasSize = UDim2_new(0, 0, 0, match_count * 26 + 10)
         end)
         if not success then
             warn("populate_enchants_panel error: " .. tostring(err))
@@ -2844,18 +2467,18 @@ local function create_ui()
 
     local enchant_search_thread = nil
     enchant_search_box:GetPropertyChangedSignal("Text"):Connect(function()
-        if enchant_search_thread then pcall(function() task.cancel(enchant_search_thread) end) end
-        enchant_search_thread = task.delay(0.12, function()
+        if enchant_search_thread then pcall(function() task_cancel(enchant_search_thread) end) end
+        enchant_search_thread = task_delay(0.12, function()
             if enchant_dropdown_btn then
                 populate_enchants_panel(enchant_dropdown_btn)
             end
         end)
     end)
 
-    rarity_panel = Instance.new("Frame")
+    rarity_panel = Instance_new("Frame")
     rarity_panel.Name = "RaritySelectionPanel"
-    rarity_panel.Size = UDim2.new(0, 150, 1, -34)
-    rarity_panel.Position = UDim2.new(1, -160, 0, 28)
+    rarity_panel.Size = UDim2_new(0, 150, 1, -34)
+    rarity_panel.Position = UDim2_new(1, -160, 0, 28)
     rarity_panel.BackgroundColor3 = SIDEBAR_COLOR
     rarity_panel.BackgroundTransparency = 0
     rarity_panel.BorderSizePixel = 0
@@ -2864,18 +2487,18 @@ local function create_ui()
     rarity_panel.ZIndex = 10
     rarity_panel.Parent = main
 
-    local r_stroke = Instance.new("UIStroke")
+    local r_stroke = Instance_new("UIStroke")
     r_stroke.Color = BORDER_COLOR
     r_stroke.Thickness = 1
     r_stroke.Parent = rarity_panel
 
-    local r_corner = Instance.new("UICorner")
-    r_corner.CornerRadius = UDim.new(0, 6)
+    local r_corner = Instance_new("UICorner")
+    r_corner.CornerRadius = UDim_new(0, 6)
     r_corner.Parent = rarity_panel
 
-    local r_title = Instance.new("TextLabel")
-    r_title.Size = UDim2.new(1, -20, 0, 24)
-    r_title.Position = UDim2.new(0, 10, 0, 10)
+    local r_title = Instance_new("TextLabel")
+    r_title.Size = UDim2_new(1, -20, 0, 24)
+    r_title.Position = UDim2_new(0, 10, 0, 10)
     r_title.BackgroundTransparency = 1
     r_title.Text = "Select Rarity"
     r_title.TextColor3 = ACCENT_COLOR
@@ -2885,17 +2508,17 @@ local function create_ui()
     r_title.ZIndex = 10
     r_title.Parent = rarity_panel
 
-    local r_sep = Instance.new("Frame")
-    r_sep.Size = UDim2.new(1, 0, 0, 1)
-    r_sep.Position = UDim2.new(0, 0, 0, 42)
+    local r_sep = Instance_new("Frame")
+    r_sep.Size = UDim2_new(1, 0, 0, 1)
+    r_sep.Position = UDim2_new(0, 0, 0, 42)
     r_sep.BackgroundColor3 = BORDER_COLOR
     r_sep.BorderSizePixel = 0
     r_sep.ZIndex = 10
     r_sep.Parent = rarity_panel
 
-    local r_scroll = Instance.new("ScrollingFrame")
-    r_scroll.Size = UDim2.new(1, -12, 1, -52)
-    r_scroll.Position = UDim2.new(0, 6, 0, 47)
+    local r_scroll = Instance_new("ScrollingFrame")
+    r_scroll.Size = UDim2_new(1, -12, 1, -52)
+    r_scroll.Position = UDim2_new(0, 6, 0, 47)
     r_scroll.BackgroundTransparency = 1
     r_scroll.BorderSizePixel = 0
     r_scroll.ScrollBarThickness = 3
@@ -2903,11 +2526,11 @@ local function create_ui()
     r_scroll.Active = true
     r_scroll.ZIndex = 10
     safe_set_scroll(r_scroll)
-    r_scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    r_scroll.CanvasSize = UDim2_new(0, 0, 0, 0)
     r_scroll.Parent = rarity_panel
 
-    local r_layout = Instance.new("UIListLayout")
-    r_layout.Padding = UDim.new(0, 2)
+    local r_layout = Instance_new("UIListLayout")
+    r_layout.Padding = UDim_new(0, 2)
     r_layout.Parent = r_scroll
 
     local function populate_rarity_panel(update_dropdown_btn)
@@ -2928,8 +2551,8 @@ local function create_ui()
             for _, opt in ipairs(options_list) do
                 match_count = match_count + 1
                 local is_selected = table_find(config.selected_tiers, opt) ~= nil
-                local opt_btn = Instance.new("TextButton")
-                opt_btn.Size = UDim2.new(1, -6, 0, 24)
+                local opt_btn = Instance_new("TextButton")
+                opt_btn.Size = UDim2_new(1, -6, 0, 24)
                 opt_btn.BackgroundTransparency = is_selected and 0 or 1
                 opt_btn.BackgroundColor3 = CARD_COLOR
                 opt_btn.Text = ""
@@ -2937,13 +2560,13 @@ local function create_ui()
                 opt_btn.ZIndex = 12
                 opt_btn.Parent = r_scroll
 
-                local opt_corner = Instance.new("UICorner")
-                opt_corner.CornerRadius = UDim.new(0, 4)
+                local opt_corner = Instance_new("UICorner")
+                opt_corner.CornerRadius = UDim_new(0, 4)
                 opt_corner.Parent = opt_btn
 
-                local opt_lbl = Instance.new("TextLabel")
-                opt_lbl.Size = UDim2.new(1, -20, 1, 0)
-                opt_lbl.Position = UDim2.new(0, 15, 0, 0)
+                local opt_lbl = Instance_new("TextLabel")
+                opt_lbl.Size = UDim2_new(1, -20, 1, 0)
+                opt_lbl.Position = UDim2_new(0, 15, 0, 0)
                 opt_lbl.BackgroundTransparency = 1
                 opt_lbl.Text = opt
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
@@ -2953,9 +2576,9 @@ local function create_ui()
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
 
-                local indicator = Instance.new("Frame")
-                indicator.Size = UDim2.new(0, 3, 0, 14)
-                indicator.Position = UDim2.new(0, 5, 0.5, -7)
+                local indicator = Instance_new("Frame")
+                indicator.Size = UDim2_new(0, 3, 0, 14)
+                indicator.Position = UDim2_new(0, 5, 0.5, -7)
                 indicator.BackgroundColor3 = ACCENT_COLOR
                 indicator.BorderSizePixel = 0
                 indicator.ZIndex = 14
@@ -3006,16 +2629,16 @@ local function create_ui()
                 end)
             end
 
-            r_scroll.CanvasSize = UDim2.new(0, 0, 0, match_count * 26 + 10)
+            r_scroll.CanvasSize = UDim2_new(0, 0, 0, match_count * 26 + 10)
         end)
         if not success then
             warn("populate_rarity_panel error: " .. tostring(err))
         end
     end
 
-    local header = Instance.new("Frame")
+    local header = Instance_new("Frame")
     header.Name = "HeaderBar"
-    header.Size = UDim2.new(1, 0, 0, 24)
+    header.Size = UDim2_new(1, 0, 0, 24)
     header.BackgroundColor3 = SIDEBAR_COLOR
     header.BackgroundTransparency = 0
     header.BorderSizePixel = 0
@@ -3023,30 +2646,30 @@ local function create_ui()
     header.ZIndex = 5
     header.Parent = main
 
-    local header_corner = Instance.new("UICorner")
-    header_corner.CornerRadius = UDim.new(0, 6)
+    local header_corner = Instance_new("UICorner")
+    header_corner.CornerRadius = UDim_new(0, 6)
     header_corner.Parent = header
 
-    local header_cover = Instance.new("Frame")
-    header_cover.Size = UDim2.new(1, 0, 0, 6)
-    header_cover.Position = UDim2.new(0, 0, 1, -6)
+    local header_cover = Instance_new("Frame")
+    header_cover.Size = UDim2_new(1, 0, 0, 6)
+    header_cover.Position = UDim2_new(0, 0, 1, -6)
     header_cover.BackgroundColor3 = SIDEBAR_COLOR
     header_cover.BackgroundTransparency = 0
     header_cover.BorderSizePixel = 0
     header_cover.ZIndex = 5
     header_cover.Parent = header
 
-    local header_div = Instance.new("Frame")
-    header_div.Size = UDim2.new(1, 0, 0, 1)
-    header_div.Position = UDim2.new(0, 0, 1, 0)
+    local header_div = Instance_new("Frame")
+    header_div.Size = UDim2_new(1, 0, 0, 1)
+    header_div.Position = UDim2_new(0, 0, 1, 0)
     header_div.BackgroundColor3 = BORDER_COLOR
     header_div.BorderSizePixel = 0
     header_div.ZIndex = 5
     header_div.Parent = header
 
-    local title_lbl = Instance.new("TextLabel")
-    title_lbl.Size = UDim2.new(1, -40, 1, 0)
-    title_lbl.Position = UDim2.new(0, 10, 0, 0)
+    local title_lbl = Instance_new("TextLabel")
+    title_lbl.Size = UDim2_new(1, -60, 1, 0)
+    title_lbl.Position = UDim2_new(0, 10, 0, 0)
     title_lbl.BackgroundTransparency = 1
     title_lbl.Text = "Keenan Trade Script"
     title_lbl.TextColor3 = ACCENT_COLOR
@@ -3070,17 +2693,11 @@ local function create_ui()
             drag_input = input
         end
     end)
-    user_input_service.InputChanged:Connect(function(input)
-        if input == drag_input and dragging then
-            local delta = input.Position - drag_start
-            main.Position = UDim2.new(start_pos.X.Scale, start_pos.X.Offset + delta.X, start_pos.Y.Scale, start_pos.Y.Offset + delta.Y)
-        end
-    end)
 
-    local floating_btn = Instance.new("TextButton")
+    local floating_btn = Instance_new("TextButton")
     floating_btn.Name = "FloatingRestore"
-    floating_btn.Size = UDim2.new(0, 42, 0, 42)
-    floating_btn.Position = UDim2.new(0, 15, 0.5, -21)
+    floating_btn.Size = UDim2_new(0, 42, 0, 42)
+    floating_btn.Position = UDim2_new(0, 15, 0.5, -21)
     floating_btn.BackgroundColor3 = SIDEBAR_COLOR
     floating_btn.BackgroundTransparency = 0
     floating_btn.Text = ""
@@ -3090,19 +2707,19 @@ local function create_ui()
     floating_btn.Visible = false
     floating_btn.Parent = gui
 
-    local float_corner = Instance.new("UICorner")
-    float_corner.CornerRadius = UDim.new(0, 6)
+    local float_corner = Instance_new("UICorner")
+    float_corner.CornerRadius = UDim_new(0, 6)
     float_corner.Parent = floating_btn
 
-    local float_stroke = Instance.new("UIStroke")
+    local float_stroke = Instance_new("UIStroke")
     float_stroke.Color = ACCENT_COLOR
     float_stroke.Thickness = 1.5
     float_stroke.Parent = floating_btn
 
-    local icon_lbl = Instance.new("TextLabel")
+    local icon_lbl = Instance_new("TextLabel")
     icon_lbl.Name = "FloatingIcon"
-    icon_lbl.Size = UDim2.new(1, 0, 1, 0)
-    icon_lbl.Position = UDim2.new(0, 0, 0, 0)
+    icon_lbl.Size = UDim2_new(1, 0, 1, 0)
+    icon_lbl.Position = UDim2_new(0, 0, 0, 0)
     icon_lbl.BackgroundTransparency = 1
     icon_lbl.Text = "K"
     icon_lbl.TextColor3 = ACCENT_COLOR
@@ -3112,28 +2729,36 @@ local function create_ui()
     icon_lbl.Visible = true
     icon_lbl.Parent = floating_btn
 
-    local f_dragging, f_drag_start, f_start_pos
+    local f_dragging, f_drag_input, f_drag_start, f_start_pos
     floating_btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             f_dragging, f_drag_start, f_start_pos = false, input.Position, floating_btn.Position
-            local conn1, conn2
-            conn1 = input.Changed:Connect(function()
+            input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
-                    if conn1 then conn1:Disconnect() end
-                    if conn2 then conn2:Disconnect() end
-                end
-            end)
-            conn2 = user_input_service.InputChanged:Connect(function(move_input)
-                if move_input.UserInputType == Enum.UserInputType.MouseMovement or move_input.UserInputType == Enum.UserInputType.Touch then
-                    local delta = move_input.Position - f_drag_start
-                    if delta.Magnitude > 5 then
-                        f_dragging = true
-                        floating_btn.Position = UDim2.new(f_start_pos.X.Scale, f_start_pos.X.Offset + delta.X, f_start_pos.Y.Scale, f_start_pos.Y.Offset + delta.Y)
-                    end
+                    f_dragging = false
+                    f_drag_start = nil
                 end
             end)
         end
     end)
+    floating_btn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            f_drag_input = input
+        end
+    end)
+
+    track_conn(user_input_service.InputChanged:Connect(function(input)
+        if input == drag_input and dragging and start_pos then
+            local delta = input.Position - drag_start
+            main.Position = UDim2_new(start_pos.X.Scale, start_pos.X.Offset + delta.X, start_pos.Y.Scale, start_pos.Y.Offset + delta.Y)
+        elseif input == f_drag_input and f_drag_start and f_start_pos then
+            local delta = input.Position - f_drag_start
+            if delta.Magnitude > 5 then
+                f_dragging = true
+                floating_btn.Position = UDim2_new(f_start_pos.X.Scale, f_start_pos.X.Offset + delta.X, f_start_pos.Y.Scale, f_start_pos.Y.Offset + delta.Y)
+            end
+        end
+    end))
 
     floating_btn.MouseEnter:Connect(function()
         float_stroke.Thickness = 2
@@ -3151,10 +2776,10 @@ local function create_ui()
         end
     end)
 
-    local min_btn = Instance.new("TextButton")
+    local min_btn = Instance_new("TextButton")
     min_btn.Name = "MinimizeBtn"
-    min_btn.Size = UDim2.new(0, 22, 0, 22)
-    min_btn.Position = UDim2.new(1, -26, 0.5, -11)
+    min_btn.Size = UDim2_new(0, 22, 0, 22)
+    min_btn.Position = UDim2_new(1, -50, 0.5, -11)
     min_btn.BackgroundTransparency = 1
     min_btn.BorderSizePixel = 0
     min_btn.Text = "─"
@@ -3178,19 +2803,47 @@ local function create_ui()
         floating_btn.Visible = true
     end)
 
-    local container = Instance.new("Frame")
+    local close_btn = Instance_new("TextButton")
+    close_btn.Name = "CloseBtn"
+    close_btn.Size = UDim2_new(0, 22, 0, 22)
+    close_btn.Position = UDim2_new(1, -26, 0.5, -11)
+    close_btn.BackgroundTransparency = 1
+    close_btn.BorderSizePixel = 0
+    close_btn.Text = "✕"
+    close_btn.TextColor3 = MUTED_COLOR
+    close_btn.TextSize = 11
+    close_btn.FontFace = font_bold
+    close_btn.Active = true
+    close_btn.Modal = true
+    close_btn.ZIndex = 6
+    close_btn.Parent = header
+
+    close_btn.MouseEnter:Connect(function()
+        close_btn.TextColor3 = Color3_fromRGB(239, 68, 68)
+    end)
+    close_btn.MouseLeave:Connect(function()
+        close_btn.TextColor3 = MUTED_COLOR
+    end)
+
+    close_btn.MouseButton1Click:Connect(function()
+        if _G.KeenanHub_AutoTrade_Cleanup then
+            pcall(_G.KeenanHub_AutoTrade_Cleanup)
+        end
+    end)
+
+    local container = Instance_new("Frame")
     container.Name = "Content"
-    container.Size = UDim2.new(1, -12, 1, -34)
-    container.Position = UDim2.new(0, 6, 0, 28)
+    container.Size = UDim2_new(1, -12, 1, -34)
+    container.Position = UDim2_new(0, 6, 0, 28)
     container.BackgroundTransparency = 1
     container.Active = false
     container.ZIndex = 2
     container.Parent = main
 
-    local settings_panel = Instance.new("ScrollingFrame")
+    local settings_panel = Instance_new("ScrollingFrame")
     settings_panel.Name = "SettingsPanel"
-    settings_panel.Size = UDim2.new(1, 0, 1, 0)
-    settings_panel.Position = UDim2.new(0, 0, 0, 0)
+    settings_panel.Size = UDim2_new(1, 0, 1, 0)
+    settings_panel.Position = UDim2_new(0, 0, 0, 0)
     settings_panel.BackgroundTransparency = 1
     settings_panel.BorderSizePixel = 0
     settings_panel.ScrollBarThickness = 3
@@ -3199,25 +2852,25 @@ local function create_ui()
     safe_set_scroll(settings_panel)
     settings_panel.Parent = container
 
-    local settings_pad = Instance.new("UIPadding")
-    settings_pad.PaddingLeft = UDim.new(0, 6)
-    settings_pad.PaddingRight = UDim.new(0, 10)
-    settings_pad.PaddingTop = UDim.new(0, 6)
-    settings_pad.PaddingBottom = UDim.new(0, 6)
+    local settings_pad = Instance_new("UIPadding")
+    settings_pad.PaddingLeft = UDim_new(0, 6)
+    settings_pad.PaddingRight = UDim_new(0, 10)
+    settings_pad.PaddingTop = UDim_new(0, 6)
+    settings_pad.PaddingBottom = UDim_new(0, 6)
     settings_pad.Parent = settings_panel
 
-    local settings_layout = Instance.new("UIListLayout")
-    settings_layout.Padding = UDim.new(0, 6)
+    local settings_layout = Instance_new("UIListLayout")
+    settings_layout.Padding = UDim_new(0, 6)
     settings_layout.Parent = settings_panel
 
     -- ==========================================================================
-    -- [SECTION 15] UI WIDGET BUILDERS
+    -- [SECTION 14] UI WIDGET BUILDERS
     -- Helper pembuat komponen antarmuka kustom (Accordion, Dropdown list,
     -- Text input box, dan Toggle switch dengan animasi tween).
     -- ==========================================================================
     local function create_accordion(parent, title_text)
-        local item_frame = Instance.new("Frame")
-        item_frame.Size = UDim2.new(1, 0, 0, 26)
+        local item_frame = Instance_new("Frame")
+        item_frame.Size = UDim2_new(1, 0, 0, 26)
         item_frame.BackgroundColor3 = CARD_COLOR
         item_frame.BackgroundTransparency = 0
         item_frame.BorderSizePixel = 0
@@ -3225,17 +2878,17 @@ local function create_ui()
         item_frame.Active = false
         item_frame.Parent = parent
 
-        local accordion_stroke = Instance.new("UIStroke")
+        local accordion_stroke = Instance_new("UIStroke")
         accordion_stroke.Color = BORDER_COLOR
         accordion_stroke.Thickness = 1
         accordion_stroke.Parent = item_frame
 
-        local accordion_corner = Instance.new("UICorner")
-        accordion_corner.CornerRadius = UDim.new(0, 5)
+        local accordion_corner = Instance_new("UICorner")
+        accordion_corner.CornerRadius = UDim_new(0, 5)
         accordion_corner.Parent = item_frame
 
-        local header = Instance.new("TextButton")
-        header.Size = UDim2.new(1, 0, 0, 26)
+        local header = Instance_new("TextButton")
+        header.Size = UDim2_new(1, 0, 0, 26)
         header.BackgroundTransparency = 1
         header.Text = "  " .. title_text
         header.TextColor3 = TEXT_COLOR
@@ -3246,9 +2899,9 @@ local function create_ui()
         header.Modal = true
         header.Parent = item_frame
 
-        local chevron = Instance.new("TextLabel")
-        chevron.Size = UDim2.new(0, 20, 1, 0)
-        chevron.Position = UDim2.new(1, -25, 0, 0)
+        local chevron = Instance_new("TextLabel")
+        chevron.Size = UDim2_new(0, 20, 1, 0)
+        chevron.Position = UDim2_new(1, -25, 0, 0)
         chevron.BackgroundTransparency = 1
         chevron.Text = "▼"
         chevron.TextColor3 = ACCENT_COLOR
@@ -3257,16 +2910,16 @@ local function create_ui()
         chevron.TextXAlignment = Enum.TextXAlignment.Right
         chevron.Parent = header
 
-        local content = Instance.new("Frame")
+        local content = Instance_new("Frame")
         content.Name = "Content"
-        content.Size = UDim2.new(1, -12, 0, 0)
-        content.Position = UDim2.new(0, 6, 0, 28)
+        content.Size = UDim2_new(1, -12, 0, 0)
+        content.Position = UDim2_new(0, 6, 0, 28)
         content.BackgroundTransparency = 1
         content.Active = false
         content.Parent = item_frame
 
-        local content_layout = Instance.new("UIListLayout")
-        content_layout.Padding = UDim.new(0, 6)
+        local content_layout = Instance_new("UIListLayout")
+        content_layout.Padding = UDim_new(0, 6)
         content_layout.SortOrder = Enum.SortOrder.LayoutOrder
         content_layout.Parent = content
 
@@ -3280,17 +2933,17 @@ local function create_ui()
                 target_height = 32 + content_layout.AbsoluteContentSize.Y
             end
 
-            tween_service:Create(item_frame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                Size = UDim2.new(1, 0, 0, target_height)
+            tween_service:Create(item_frame, TweenInfo_new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = UDim2_new(1, 0, 0, target_height)
             }):Play()
 
             task_wait(0.21)
-            parent.CanvasSize = UDim2.new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
+            parent.CanvasSize = UDim2_new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
         end
 
         content_layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
             if expanded then
-                item_frame.Size = UDim2.new(1, 0, 0, 32 + content_layout.AbsoluteContentSize.Y)
+                item_frame.Size = UDim2_new(1, 0, 0, 32 + content_layout.AbsoluteContentSize.Y)
             end
         end)
 
@@ -3300,8 +2953,8 @@ local function create_ui()
     end
 
     local function create_dropdown(parent, placeholder, options, default, is_multi, callback)
-        local drop_btn = Instance.new("TextButton")
-        drop_btn.Size = UDim2.new(1, 0, 0, 22)
+        local drop_btn = Instance_new("TextButton")
+        drop_btn.Size = UDim2_new(1, 0, 0, 22)
         drop_btn.BackgroundColor3 = INPUT_BG_COLOR
         drop_btn.Text = placeholder
         drop_btn.TextColor3 = TEXT_COLOR
@@ -3312,23 +2965,23 @@ local function create_ui()
         drop_btn.Modal = true
         drop_btn.Parent = parent
 
-        local drop_btn_c = Instance.new("UICorner")
-        drop_btn_c.CornerRadius = UDim.new(0, 4)
+        local drop_btn_c = Instance_new("UICorner")
+        drop_btn_c.CornerRadius = UDim_new(0, 4)
         drop_btn_c.Parent = drop_btn
 
-        local d_stroke = Instance.new("UIStroke")
+        local d_stroke = Instance_new("UIStroke")
         d_stroke.Color = BORDER_COLOR
         d_stroke.Thickness = 1
         d_stroke.Parent = drop_btn
 
-        local padding = Instance.new("UIPadding")
-        padding.PaddingLeft = UDim.new(0, 8)
-        padding.PaddingRight = UDim.new(0, 8)
+        local padding = Instance_new("UIPadding")
+        padding.PaddingLeft = UDim_new(0, 8)
+        padding.PaddingRight = UDim_new(0, 8)
         padding.Parent = drop_btn
 
-        local chevron = Instance.new("TextLabel")
-        chevron.Size = UDim2.new(0, 20, 1, 0)
-        chevron.Position = UDim2.new(1, -12, 0, 0)
+        local chevron = Instance_new("TextLabel")
+        chevron.Size = UDim2_new(0, 20, 1, 0)
+        chevron.Position = UDim2_new(1, -12, 0, 0)
         chevron.BackgroundTransparency = 1
         chevron.Text = "▼"
         chevron.TextColor3 = MUTED_COLOR
@@ -3359,8 +3012,8 @@ local function create_ui()
         end
         update_button_text()
 
-        local list_frame = Instance.new("Frame")
-        list_frame.Size = UDim2.new(0, 160, 0, 130)
+        local list_frame = Instance_new("Frame")
+        list_frame.Size = UDim2_new(0, 160, 0, 130)
         list_frame.BackgroundColor3 = SIDEBAR_COLOR
         list_frame.BorderSizePixel = 0
         list_frame.Visible = false
@@ -3368,17 +3021,17 @@ local function create_ui()
         list_frame.Active = true
         list_frame.Parent = gui
 
-        local list_stroke = Instance.new("UIStroke")
+        local list_stroke = Instance_new("UIStroke")
         list_stroke.Color = BORDER_COLOR
         list_stroke.Thickness = 1
         list_stroke.Parent = list_frame
 
-        local list_corner = Instance.new("UICorner")
-        list_corner.CornerRadius = UDim.new(0, 6)
+        local list_corner = Instance_new("UICorner")
+        list_corner.CornerRadius = UDim_new(0, 6)
         list_corner.Parent = list_frame
 
-        local list_scroll = Instance.new("ScrollingFrame")
-        list_scroll.Size = UDim2.new(1, 0, 1, 0)
+        local list_scroll = Instance_new("ScrollingFrame")
+        list_scroll.Size = UDim2_new(1, 0, 1, 0)
         list_scroll.BackgroundTransparency = 1
         list_scroll.BorderSizePixel = 0
         list_scroll.ScrollBarThickness = 3
@@ -3387,8 +3040,8 @@ local function create_ui()
         safe_set_scroll(list_scroll)
         list_scroll.Parent = list_frame
 
-        local list_layout = Instance.new("UIListLayout")
-        list_layout.Padding = UDim.new(0, 2)
+        local list_layout = Instance_new("UIListLayout")
+        list_layout.Padding = UDim_new(0, 2)
         list_layout.Parent = list_scroll
 
         local function populate_options()
@@ -3402,8 +3055,8 @@ local function create_ui()
             end
 
             for _, opt in ipairs(resolved_options) do
-                local opt_btn = Instance.new("TextButton")
-                opt_btn.Size = UDim2.new(1, 0, 0, 22)
+                local opt_btn = Instance_new("TextButton")
+                opt_btn.Size = UDim2_new(1, 0, 0, 22)
                 opt_btn.BackgroundTransparency = 1
                 opt_btn.Text = opt
                 opt_btn.TextSize = 9
@@ -3415,8 +3068,8 @@ local function create_ui()
                 opt_btn.Active = true
                 opt_btn.Parent = list_scroll
 
-                local opt_padding = Instance.new("UIPadding")
-                opt_padding.PaddingLeft = UDim.new(0, 10)
+                local opt_padding = Instance_new("UIPadding")
+                opt_padding.PaddingLeft = UDim_new(0, 10)
                 opt_padding.Parent = opt_btn
 
                 opt_btn.MouseButton1Click:Connect(function()
@@ -3450,7 +3103,7 @@ local function create_ui()
                     callback(selected_values)
                 end)
             end
-            list_scroll.CanvasSize = UDim2.new(0, 0, 0, list_layout.AbsoluteContentSize.Y + 10)
+            list_scroll.CanvasSize = UDim2_new(0, 0, 0, list_layout.AbsoluteContentSize.Y + 10)
         end
 
         drop_btn.MouseButton1Click:Connect(function()
@@ -3477,7 +3130,7 @@ local function create_ui()
             chevron.Text = list_frame.Visible and "▲" or "▼"
             if list_frame.Visible then
                 local abs_pos = drop_btn.AbsolutePosition
-                list_frame.Position = UDim2.new(0, abs_pos.X, 0, abs_pos.Y + drop_btn.AbsoluteSize.Y + 2)
+                list_frame.Position = UDim2_new(0, abs_pos.X, 0, abs_pos.Y + drop_btn.AbsoluteSize.Y + 2)
                 active_dropdown_list = list_frame
                 close_detector.Visible = true
             else
@@ -3490,8 +3143,8 @@ local function create_ui()
     end
 
     local function create_input(parent, placeholder, default, callback)
-        local box = Instance.new("TextBox")
-        box.Size = UDim2.new(1, 0, 0, 22)
+        local box = Instance_new("TextBox")
+        box.Size = UDim2_new(1, 0, 0, 22)
         box.BackgroundColor3 = INPUT_BG_COLOR
         box.Text = tostring(default)
         box.PlaceholderText = placeholder
@@ -3501,18 +3154,18 @@ local function create_ui()
         box.Active = true
         box.Parent = parent
 
-        local box_c = Instance.new("UICorner")
-        box_c.CornerRadius = UDim.new(0, 4)
+        local box_c = Instance_new("UICorner")
+        box_c.CornerRadius = UDim_new(0, 4)
         box_c.Parent = box
 
-        local box_stroke = Instance.new("UIStroke")
+        local box_stroke = Instance_new("UIStroke")
         box_stroke.Color = BORDER_COLOR
         box_stroke.Thickness = 1
         box_stroke.Parent = box
 
-        local padding = Instance.new("UIPadding")
-        padding.PaddingLeft = UDim.new(0, 8)
-        padding.PaddingRight = UDim.new(0, 8)
+        local padding = Instance_new("UIPadding")
+        padding.PaddingLeft = UDim_new(0, 8)
+        padding.PaddingRight = UDim_new(0, 8)
         padding.Parent = box
 
         box.FocusLost:Connect(function()
@@ -3523,14 +3176,14 @@ local function create_ui()
     end
 
     local function create_toggle(parent, label_text, default, callback)
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, 0, 0, 22)
+        local row = Instance_new("Frame")
+        row.Size = UDim2_new(1, 0, 0, 22)
         row.BackgroundTransparency = 1
         row.Active = true
         row.Parent = parent
 
-        local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(0.65, 0, 1, 0)
+        local lbl = Instance_new("TextLabel")
+        lbl.Size = UDim2_new(0.65, 0, 1, 0)
         lbl.BackgroundTransparency = 1
         lbl.Text = label_text
         lbl.TextColor3 = TEXT_COLOR
@@ -3539,47 +3192,47 @@ local function create_ui()
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent = row
 
-        local capsule = Instance.new("TextButton")
-        capsule.Size = UDim2.new(0, 32, 0, 16)
-        capsule.Position = UDim2.new(1, -32, 0.5, -8)
-        capsule.BackgroundColor3 = default and TOGGLE_ON_COLOR or Color3.fromRGB(40, 44, 50)
+        local capsule = Instance_new("TextButton")
+        capsule.Size = UDim2_new(0, 32, 0, 16)
+        capsule.Position = UDim2_new(1, -32, 0.5, -8)
+        capsule.BackgroundColor3 = default and TOGGLE_ON_COLOR or Color3_fromRGB(40, 44, 50)
         capsule.Text = ""
         capsule.AutoButtonColor = false
         capsule.Active = true
         capsule.Parent = row
 
-        local cap_c = Instance.new("UICorner")
-        cap_c.CornerRadius = UDim.new(0.5, 0)
+        local cap_c = Instance_new("UICorner")
+        cap_c.CornerRadius = UDim_new(0.5, 0)
         cap_c.Parent = capsule
 
-        local cap_stroke = Instance.new("UIStroke")
+        local cap_stroke = Instance_new("UIStroke")
         cap_stroke.Color = BORDER_COLOR
         cap_stroke.Thickness = 1
         cap_stroke.Parent = capsule
 
-        local knob = Instance.new("Frame")
-        knob.Size = UDim2.new(0, 12, 0, 12)
-        knob.Position = default and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
-        knob.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+        local knob = Instance_new("Frame")
+        knob.Size = UDim2_new(0, 12, 0, 12)
+        knob.Position = default and UDim2_new(1, -14, 0.5, -6) or UDim2_new(0, 2, 0.5, -6)
+        knob.BackgroundColor3 = Color3_fromRGB(240, 240, 240)
         knob.BorderSizePixel = 0
         knob.Parent = capsule
 
-        local knob_c = Instance.new("UICorner")
-        knob_c.CornerRadius = UDim.new(0.5, 0)
+        local knob_c = Instance_new("UICorner")
+        knob_c.CornerRadius = UDim_new(0.5, 0)
         knob_c.Parent = knob
 
         local active = default
         local function update_visual(state, instant)
-            local target_pos = state and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
-            local target_color = state and TOGGLE_ON_COLOR or Color3.fromRGB(40, 44, 50)
+            local target_pos = state and UDim2_new(1, -14, 0.5, -6) or UDim2_new(0, 2, 0.5, -6)
+            local target_color = state and TOGGLE_ON_COLOR or Color3_fromRGB(40, 44, 50)
             if instant then
                 knob.Position = target_pos
                 capsule.BackgroundColor3 = target_color
             else
-                tween_service:Create(knob, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                tween_service:Create(knob, TweenInfo_new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                     Position = target_pos
                 }):Play()
-                tween_service:Create(capsule, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                tween_service:Create(capsule, TweenInfo_new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                     BackgroundColor3 = target_color
                 }):Play()
             end
@@ -3604,7 +3257,6 @@ local function create_ui()
     local byname_toggle_ctrl
     local enchant_toggle_ctrl
     local rarity_toggle_ctrl
-    local coin_toggle_ctrl
 
     local function sync_mode_toggles(active_mode)
         if active_mode ~= "fish" and byname_toggle_ctrl then
@@ -3619,46 +3271,42 @@ local function create_ui()
             rarity_toggle_ctrl.set_state(false, false)
             config.trade_rarity_enabled = false
         end
-        if active_mode ~= "coin" and coin_toggle_ctrl then
-            coin_toggle_ctrl.set_state(false, false)
-            config.trade_coins_enabled = false
-        end
         save_config()
     end
 
     -- ==========================================================================
-    -- [SECTION 16] UI ACCORDION 1: TRADE BY NAME
+    -- [SECTION 15] UI ACCORDION 1: TRADE BY NAME
     -- Panel GUI untuk memilih target ikan spesifik, filter Tier, filter Mutasi,
     -- input kuantitas pengiriman, status box, dan tombol aktivasi mode By Name.
     -- ==========================================================================
     local byname_content, byname_toggle = create_accordion(settings_panel, "Trade By Name")
-    local status_box = Instance.new("Frame")
+    local status_box = Instance_new("Frame")
     status_box.Name = "1_StatusBox"
     status_box.LayoutOrder = 1
-    status_box.Size = UDim2.new(1, 0, 0, 58)
+    status_box.Size = UDim2_new(1, 0, 0, 58)
     status_box.AutomaticSize = Enum.AutomaticSize.Y
     status_box.BackgroundColor3 = CARD_COLOR
     status_box.BackgroundTransparency = 0
     status_box.BorderSizePixel = 0
     status_box.Parent = byname_content
 
-    local status_box_pad = Instance.new("UIPadding")
-    status_box_pad.PaddingBottom = UDim.new(0, 6)
-    status_box_pad.PaddingRight = UDim.new(0, 10)
+    local status_box_pad = Instance_new("UIPadding")
+    status_box_pad.PaddingBottom = UDim_new(0, 6)
+    status_box_pad.PaddingRight = UDim_new(0, 10)
     status_box_pad.Parent = status_box
 
-    local status_box_c = Instance.new("UICorner")
-    status_box_c.CornerRadius = UDim.new(0, 6)
+    local status_box_c = Instance_new("UICorner")
+    status_box_c.CornerRadius = UDim_new(0, 6)
     status_box_c.Parent = status_box
 
-    local status_box_stroke = Instance.new("UIStroke")
+    local status_box_stroke = Instance_new("UIStroke")
     status_box_stroke.Color = BORDER_COLOR
     status_box_stroke.Thickness = 1
     status_box_stroke.Parent = status_box
 
-    local status_title = Instance.new("TextLabel")
-    status_title.Size = UDim2.new(1, -10, 0, 16)
-    status_title.Position = UDim2.new(0, 10, 0, 6)
+    local status_title = Instance_new("TextLabel")
+    status_title.Size = UDim2_new(1, -10, 0, 16)
+    status_title.Position = UDim2_new(0, 10, 0, 6)
     status_title.BackgroundTransparency = 1
     status_title.Text = "Status"
     status_title.TextColor3 = ACCENT_COLOR
@@ -3667,9 +3315,9 @@ local function create_ui()
     status_title.TextXAlignment = Enum.TextXAlignment.Left
     status_title.Parent = status_box
 
-    status_val_lbl = Instance.new("TextLabel")
-    status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
-    status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
+    status_val_lbl = Instance_new("TextLabel")
+    status_val_lbl.Size = UDim2_new(1, -20, 0, 30)
+    status_val_lbl.Position = UDim2_new(0, 10, 0, 22)
     status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
     status_val_lbl.BackgroundTransparency = 1
     status_val_lbl.Text = "Idle"
@@ -3681,16 +3329,16 @@ local function create_ui()
     status_val_lbl.TextWrapped = true
     status_val_lbl.Parent = status_box
 
-    local item_row = Instance.new("Frame")
+    local item_row = Instance_new("Frame")
     item_row.Name = "2_ItemRow"
     item_row.LayoutOrder = 2
-    item_row.Size = UDim2.new(1, 0, 0, 22)
+    item_row.Size = UDim2_new(1, 0, 0, 22)
     item_row.BackgroundTransparency = 1
     item_row.Active = false
     item_row.Parent = byname_content
 
-    local item_lbl = Instance.new("TextLabel")
-    item_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    local item_lbl = Instance_new("TextLabel")
+    item_lbl.Size = UDim2_new(0.45, 0, 1, 0)
     item_lbl.BackgroundTransparency = 1
     item_lbl.Text = "Select Item"
     item_lbl.TextColor3 = TEXT_COLOR
@@ -3699,9 +3347,9 @@ local function create_ui()
     item_lbl.TextXAlignment = Enum.TextXAlignment.Left
     item_lbl.Parent = item_row
 
-    fish_dropdown_btn = Instance.new("TextButton")
-    fish_dropdown_btn.Size = UDim2.new(0.55, 0, 1, 0)
-    fish_dropdown_btn.Position = UDim2.new(0.45, 0, 0, 0)
+    fish_dropdown_btn = Instance_new("TextButton")
+    fish_dropdown_btn.Size = UDim2_new(0.55, 0, 1, 0)
+    fish_dropdown_btn.Position = UDim2_new(0.45, 0, 0, 0)
     fish_dropdown_btn.BackgroundColor3 = INPUT_BG_COLOR
 
     local function get_fish_dropdown_text()
@@ -3722,23 +3370,23 @@ local function create_ui()
     fish_dropdown_btn.Active = true
     fish_dropdown_btn.Parent = item_row
 
-    local fish_dropdown_c = Instance.new("UICorner")
-    fish_dropdown_c.CornerRadius = UDim.new(0, 4)
+    local fish_dropdown_c = Instance_new("UICorner")
+    fish_dropdown_c.CornerRadius = UDim_new(0, 4)
     fish_dropdown_c.Parent = fish_dropdown_btn
 
-    local fish_dropdown_stroke = Instance.new("UIStroke")
+    local fish_dropdown_stroke = Instance_new("UIStroke")
     fish_dropdown_stroke.Color = BORDER_COLOR
     fish_dropdown_stroke.Thickness = 1
     fish_dropdown_stroke.Parent = fish_dropdown_btn
 
-    local fish_dropdown_pad = Instance.new("UIPadding")
-    fish_dropdown_pad.PaddingLeft = UDim.new(0, 8)
-    fish_dropdown_pad.PaddingRight = UDim.new(0, 8)
+    local fish_dropdown_pad = Instance_new("UIPadding")
+    fish_dropdown_pad.PaddingLeft = UDim_new(0, 8)
+    fish_dropdown_pad.PaddingRight = UDim_new(0, 8)
     fish_dropdown_pad.Parent = fish_dropdown_btn
 
-    local fish_chevron = Instance.new("TextLabel")
-    fish_chevron.Size = UDim2.new(0, 20, 1, 0)
-    fish_chevron.Position = UDim2.new(1, -12, 0, 0)
+    local fish_chevron = Instance_new("TextLabel")
+    fish_chevron.Size = UDim2_new(0, 20, 1, 0)
+    fish_chevron.Position = UDim2_new(1, -12, 0, 0)
     fish_chevron.BackgroundTransparency = 1
     fish_chevron.Text = "▼"
     fish_chevron.TextColor3 = ACCENT_COLOR
@@ -3757,16 +3405,16 @@ local function create_ui()
         end
     end)
 
-    local amount_row = Instance.new("Frame")
+    local amount_row = Instance_new("Frame")
     amount_row.Name = "3_AmountRow"
     amount_row.LayoutOrder = 3
-    amount_row.Size = UDim2.new(1, 0, 0, 22)
+    amount_row.Size = UDim2_new(1, 0, 0, 22)
     amount_row.BackgroundTransparency = 1
     amount_row.Active = false
     amount_row.Parent = byname_content
 
-    local amount_lbl = Instance.new("TextLabel")
-    amount_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    local amount_lbl = Instance_new("TextLabel")
+    amount_lbl.Size = UDim2_new(0.45, 0, 1, 0)
     amount_lbl.BackgroundTransparency = 1
     amount_lbl.Text = "Amount Fish Name"
     amount_lbl.TextColor3 = TEXT_COLOR
@@ -3775,9 +3423,9 @@ local function create_ui()
     amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     amount_lbl.Parent = amount_row
 
-    qty_box = Instance.new("TextBox")
-    qty_box.Size = UDim2.new(0.55, 0, 1, 0)
-    qty_box.Position = UDim2.new(0.45, 0, 0, 0)
+    qty_box = Instance_new("TextBox")
+    qty_box.Size = UDim2_new(0.55, 0, 1, 0)
+    qty_box.Position = UDim2_new(0.45, 0, 0, 0)
     qty_box.BackgroundColor3 = INPUT_BG_COLOR
     qty_box.Text = tostring(config.quantity)
     qty_box.TextColor3 = TEXT_COLOR
@@ -3787,11 +3435,11 @@ local function create_ui()
     qty_box.ClearTextOnFocus = false
     qty_box.Parent = amount_row
 
-    local qty_c = Instance.new("UICorner")
-    qty_c.CornerRadius = UDim.new(0, 4)
+    local qty_c = Instance_new("UICorner")
+    qty_c.CornerRadius = UDim_new(0, 4)
     qty_c.Parent = qty_box
 
-    local qty_stroke = Instance.new("UIStroke")
+    local qty_stroke = Instance_new("UIStroke")
     qty_stroke.Color = BORDER_COLOR
     qty_stroke.Thickness = 1
     qty_stroke.Parent = qty_box
@@ -3800,7 +3448,7 @@ local function create_ui()
         local text = qty_box.Text
         local val = tonumber(text)
         if val and val >= 0 then
-            config.quantity = math.floor(val)
+            config.quantity = math_floor(val)
             save_config()
         elseif text == "" then
             config.quantity = 0
@@ -3811,15 +3459,15 @@ local function create_ui()
     qty_box.FocusLost:Connect(function()
         local text = qty_box.Text
         local val = (text == "") and 0 or (tonumber(text) or config.quantity)
-        task.defer(function()
+        task_defer(function()
             sync_qty_boxes(val)
         end)
     end)
 
-    local refresh_btn = Instance.new("TextButton")
+    local refresh_btn = Instance_new("TextButton")
     refresh_btn.Name = "4_RefreshButton"
     refresh_btn.LayoutOrder = 4
-    refresh_btn.Size = UDim2.new(1, 0, 0, 26)
+    refresh_btn.Size = UDim2_new(1, 0, 0, 26)
     refresh_btn.BackgroundColor3 = BTN_BG_COLOR
     refresh_btn.Text = "Refresh Fish Items"
     refresh_btn.TextColor3 = ACCENT_COLOR
@@ -3828,11 +3476,11 @@ local function create_ui()
     refresh_btn.Active = true
     refresh_btn.Parent = byname_content
 
-    local refresh_btn_c = Instance.new("UICorner")
-    refresh_btn_c.CornerRadius = UDim.new(0, 5)
+    local refresh_btn_c = Instance_new("UICorner")
+    refresh_btn_c.CornerRadius = UDim_new(0, 5)
     refresh_btn_c.Parent = refresh_btn
 
-    local refresh_btn_stroke = Instance.new("UIStroke")
+    local refresh_btn_stroke = Instance_new("UIStroke")
     refresh_btn_stroke.Color = BORDER_COLOR
     refresh_btn_stroke.Thickness = 1
     refresh_btn_stroke.Parent = refresh_btn
@@ -3859,7 +3507,7 @@ local function create_ui()
             if qty_box and qty_box.Text ~= "" then
                 local num = tonumber(qty_box.Text)
                 if num and num >= 0 then
-                    sync_qty_boxes(math.floor(num))
+                    sync_qty_boxes(math_floor(num))
                 end
             end
             cache.stats.fish.success_trades = 0
@@ -3891,38 +3539,38 @@ local function create_ui()
     byname_fav_toggle.Frame.Name = "6_FavToggle"
 
     -- ==========================================================================
-    -- [SECTION 17] UI ACCORDION 2: TRADE ENCHANTS
+    -- [SECTION 16] UI ACCORDION 2: TRADE ENCHANTS
     -- Panel GUI untuk memilih batu enchant stone, input batasan kuantitas,
     -- status box, dan tombol aktivasi mode Enchant.
     -- ==========================================================================
     local enchant_content, enchant_toggle = create_accordion(settings_panel, "Trade Enchant Stone")
-    local enchant_status_box = Instance.new("Frame")
+    local enchant_status_box = Instance_new("Frame")
     enchant_status_box.Name = "1_StatusBox"
     enchant_status_box.LayoutOrder = 1
-    enchant_status_box.Size = UDim2.new(1, 0, 0, 58)
+    enchant_status_box.Size = UDim2_new(1, 0, 0, 58)
     enchant_status_box.AutomaticSize = Enum.AutomaticSize.Y
     enchant_status_box.BackgroundColor3 = CARD_COLOR
     enchant_status_box.BackgroundTransparency = 0
     enchant_status_box.BorderSizePixel = 0
     enchant_status_box.Parent = enchant_content
 
-    local enchant_status_box_pad = Instance.new("UIPadding")
-    enchant_status_box_pad.PaddingBottom = UDim.new(0, 6)
-    enchant_status_box_pad.PaddingRight = UDim.new(0, 10)
+    local enchant_status_box_pad = Instance_new("UIPadding")
+    enchant_status_box_pad.PaddingBottom = UDim_new(0, 6)
+    enchant_status_box_pad.PaddingRight = UDim_new(0, 10)
     enchant_status_box_pad.Parent = enchant_status_box
 
-    local enchant_status_box_c = Instance.new("UICorner")
-    enchant_status_box_c.CornerRadius = UDim.new(0, 6)
+    local enchant_status_box_c = Instance_new("UICorner")
+    enchant_status_box_c.CornerRadius = UDim_new(0, 6)
     enchant_status_box_c.Parent = enchant_status_box
 
-    local enchant_status_box_stroke = Instance.new("UIStroke")
+    local enchant_status_box_stroke = Instance_new("UIStroke")
     enchant_status_box_stroke.Color = BORDER_COLOR
     enchant_status_box_stroke.Thickness = 1
     enchant_status_box_stroke.Parent = enchant_status_box
 
-    local enchant_status_title = Instance.new("TextLabel")
-    enchant_status_title.Size = UDim2.new(1, -10, 0, 16)
-    enchant_status_title.Position = UDim2.new(0, 10, 0, 6)
+    local enchant_status_title = Instance_new("TextLabel")
+    enchant_status_title.Size = UDim2_new(1, -10, 0, 16)
+    enchant_status_title.Position = UDim2_new(0, 10, 0, 6)
     enchant_status_title.BackgroundTransparency = 1
     enchant_status_title.Text = "Status"
     enchant_status_title.TextColor3 = ACCENT_COLOR
@@ -3931,9 +3579,9 @@ local function create_ui()
     enchant_status_title.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_title.Parent = enchant_status_box
 
-    enchant_status_val_lbl = Instance.new("TextLabel")
-    enchant_status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
-    enchant_status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
+    enchant_status_val_lbl = Instance_new("TextLabel")
+    enchant_status_val_lbl.Size = UDim2_new(1, -20, 0, 30)
+    enchant_status_val_lbl.Position = UDim2_new(0, 10, 0, 22)
     enchant_status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
     enchant_status_val_lbl.BackgroundTransparency = 1
     enchant_status_val_lbl.Text = "Idle"
@@ -3945,16 +3593,16 @@ local function create_ui()
     enchant_status_val_lbl.TextWrapped = true
     enchant_status_val_lbl.Parent = enchant_status_box
 
-    local stone_row = Instance.new("Frame")
+    local stone_row = Instance_new("Frame")
     stone_row.Name = "2_StoneRow"
     stone_row.LayoutOrder = 2
-    stone_row.Size = UDim2.new(1, 0, 0, 22)
+    stone_row.Size = UDim2_new(1, 0, 0, 22)
     stone_row.BackgroundTransparency = 1
     stone_row.Active = false
     stone_row.Parent = enchant_content
 
-    local stone_lbl = Instance.new("TextLabel")
-    stone_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    local stone_lbl = Instance_new("TextLabel")
+    stone_lbl.Size = UDim2_new(0.45, 0, 1, 0)
     stone_lbl.BackgroundTransparency = 1
     stone_lbl.Text = "Stone Type"
     stone_lbl.TextColor3 = TEXT_COLOR
@@ -3963,9 +3611,9 @@ local function create_ui()
     stone_lbl.TextXAlignment = Enum.TextXAlignment.Left
     stone_lbl.Parent = stone_row
 
-    enchant_dropdown_btn = Instance.new("TextButton")
-    enchant_dropdown_btn.Size = UDim2.new(0.55, 0, 1, 0)
-    enchant_dropdown_btn.Position = UDim2.new(0.45, 0, 0, 0)
+    enchant_dropdown_btn = Instance_new("TextButton")
+    enchant_dropdown_btn.Size = UDim2_new(0.55, 0, 1, 0)
+    enchant_dropdown_btn.Position = UDim2_new(0.45, 0, 0, 0)
     enchant_dropdown_btn.BackgroundColor3 = INPUT_BG_COLOR
 
     local function get_enchant_dropdown_text()
@@ -3986,23 +3634,23 @@ local function create_ui()
     enchant_dropdown_btn.Active = true
     enchant_dropdown_btn.Parent = stone_row
 
-    local enchant_dropdown_c = Instance.new("UICorner")
-    enchant_dropdown_c.CornerRadius = UDim.new(0, 4)
+    local enchant_dropdown_c = Instance_new("UICorner")
+    enchant_dropdown_c.CornerRadius = UDim_new(0, 4)
     enchant_dropdown_c.Parent = enchant_dropdown_btn
 
-    local enchant_dropdown_stroke = Instance.new("UIStroke")
+    local enchant_dropdown_stroke = Instance_new("UIStroke")
     enchant_dropdown_stroke.Color = BORDER_COLOR
     enchant_dropdown_stroke.Thickness = 1
     enchant_dropdown_stroke.Parent = enchant_dropdown_btn
 
-    local enchant_dropdown_pad = Instance.new("UIPadding")
-    enchant_dropdown_pad.PaddingLeft = UDim.new(0, 8)
-    enchant_dropdown_pad.PaddingRight = UDim.new(0, 8)
+    local enchant_dropdown_pad = Instance_new("UIPadding")
+    enchant_dropdown_pad.PaddingLeft = UDim_new(0, 8)
+    enchant_dropdown_pad.PaddingRight = UDim_new(0, 8)
     enchant_dropdown_pad.Parent = enchant_dropdown_btn
 
-    local enchant_chevron = Instance.new("TextLabel")
-    enchant_chevron.Size = UDim2.new(0, 20, 1, 0)
-    enchant_chevron.Position = UDim2.new(1, -12, 0, 0)
+    local enchant_chevron = Instance_new("TextLabel")
+    enchant_chevron.Size = UDim2_new(0, 20, 1, 0)
+    enchant_chevron.Position = UDim2_new(1, -12, 0, 0)
     enchant_chevron.BackgroundTransparency = 1
     enchant_chevron.Text = "▼"
     enchant_chevron.TextColor3 = ACCENT_COLOR
@@ -4021,16 +3669,16 @@ local function create_ui()
         end
     end)
 
-    local es_amount_row = Instance.new("Frame")
+    local es_amount_row = Instance_new("Frame")
     es_amount_row.Name = "3_AmountRow"
     es_amount_row.LayoutOrder = 3
-    es_amount_row.Size = UDim2.new(1, 0, 0, 22)
+    es_amount_row.Size = UDim2_new(1, 0, 0, 22)
     es_amount_row.BackgroundTransparency = 1
     es_amount_row.Active = false
     es_amount_row.Parent = enchant_content
 
-    local es_amount_lbl = Instance.new("TextLabel")
-    es_amount_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    local es_amount_lbl = Instance_new("TextLabel")
+    es_amount_lbl.Size = UDim2_new(0.45, 0, 1, 0)
     es_amount_lbl.BackgroundTransparency = 1
     es_amount_lbl.Text = "Amount Enchant Stone"
     es_amount_lbl.TextColor3 = TEXT_COLOR
@@ -4039,9 +3687,9 @@ local function create_ui()
     es_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     es_amount_lbl.Parent = es_amount_row
 
-    es_qty_box = Instance.new("TextBox")
-    es_qty_box.Size = UDim2.new(0.55, 0, 1, 0)
-    es_qty_box.Position = UDim2.new(0.45, 0, 0, 0)
+    es_qty_box = Instance_new("TextBox")
+    es_qty_box.Size = UDim2_new(0.55, 0, 1, 0)
+    es_qty_box.Position = UDim2_new(0.45, 0, 0, 0)
     es_qty_box.BackgroundColor3 = INPUT_BG_COLOR
     es_qty_box.Text = tostring(config.quantity)
     es_qty_box.TextColor3 = TEXT_COLOR
@@ -4051,11 +3699,11 @@ local function create_ui()
     es_qty_box.ClearTextOnFocus = false
     es_qty_box.Parent = es_amount_row
 
-    local es_qty_c = Instance.new("UICorner")
-    es_qty_c.CornerRadius = UDim.new(0, 4)
+    local es_qty_c = Instance_new("UICorner")
+    es_qty_c.CornerRadius = UDim_new(0, 4)
     es_qty_c.Parent = es_qty_box
 
-    local es_qty_stroke = Instance.new("UIStroke")
+    local es_qty_stroke = Instance_new("UIStroke")
     es_qty_stroke.Color = BORDER_COLOR
     es_qty_stroke.Thickness = 1
     es_qty_stroke.Parent = es_qty_box
@@ -4064,7 +3712,7 @@ local function create_ui()
         local text = es_qty_box.Text
         local val = tonumber(text)
         if val and val >= 0 then
-            config.quantity = math.floor(val)
+            config.quantity = math_floor(val)
             save_config()
         elseif text == "" then
             config.quantity = 0
@@ -4075,15 +3723,15 @@ local function create_ui()
     es_qty_box.FocusLost:Connect(function()
         local text = es_qty_box.Text
         local val = (text == "") and 0 or (tonumber(text) or config.quantity)
-        task.defer(function()
+        task_defer(function()
             sync_qty_boxes(val)
         end)
     end)
 
-    local es_refresh = Instance.new("TextButton")
+    local es_refresh = Instance_new("TextButton")
     es_refresh.Name = "4_RefreshButton"
     es_refresh.LayoutOrder = 4
-    es_refresh.Size = UDim2.new(1, 0, 0, 26)
+    es_refresh.Size = UDim2_new(1, 0, 0, 26)
     es_refresh.BackgroundColor3 = BTN_BG_COLOR
     es_refresh.Text = "Check Enchant Stones"
     es_refresh.TextColor3 = ACCENT_COLOR
@@ -4092,11 +3740,11 @@ local function create_ui()
     es_refresh.Active = true
     es_refresh.Parent = enchant_content
 
-    local es_refresh_c = Instance.new("UICorner")
-    es_refresh_c.CornerRadius = UDim.new(0, 5)
+    local es_refresh_c = Instance_new("UICorner")
+    es_refresh_c.CornerRadius = UDim_new(0, 5)
     es_refresh_c.Parent = es_refresh
 
-    local es_refresh_stroke = Instance.new("UIStroke")
+    local es_refresh_stroke = Instance_new("UIStroke")
     es_refresh_stroke.Color = BORDER_COLOR
     es_refresh_stroke.Thickness = 1
     es_refresh_stroke.Parent = es_refresh
@@ -4125,14 +3773,14 @@ local function create_ui()
 
         for _, name in ipairs(sorted_names) do
             local qty = counts[name]
-            local short_name = string.gsub(name, "%s*Enchant%s*Stone", "")
+            local short_name = string_gsub(name, "%s*Enchant%s*Stone", "")
             if short_name == "" then
                 short_name = "Enchant Stone"
             end
             table_insert(status_lines, short_name .. " x" .. qty)
         end
 
-        cache.enchant_status_text = table.concat(status_lines, "\n")
+        cache.enchant_status_text = table_concat(status_lines, "\n")
         cache.enchant_status_details = ""
         if enchant_status_val_lbl then
             enchant_status_val_lbl.Text = cache.enchant_status_text
@@ -4147,7 +3795,7 @@ local function create_ui()
             if es_qty_box and es_qty_box.Text ~= "" then
                 local num = tonumber(es_qty_box.Text)
                 if num and num >= 0 then
-                    sync_qty_boxes(math.floor(num))
+                    sync_qty_boxes(math_floor(num))
                 end
             end
             cache.stats.enchant.success_trades = 0
@@ -4173,38 +3821,38 @@ local function create_ui()
     enchant_toggle_ctrl.Frame.Name = "5_StartTradeToggle"
 
     -- ==========================================================================
-    -- [SECTION 18] UI ACCORDION 3: TRADE BY RARITY
+    -- [SECTION 17] UI ACCORDION 3: TRADE BY RARITY
     -- Panel GUI untuk memilih tingkat kelangkaan ikan (Common s/d Forgotten),
     -- filter mutasi, batasan kuantitas, dan tombol aktivasi mode By Rarity.
     -- ==========================================================================
     local rarity_content, rarity_toggle = create_accordion(settings_panel, "Trade By Rarity")
-    local rarity_status_box = Instance.new("Frame")
+    local rarity_status_box = Instance_new("Frame")
     rarity_status_box.Name = "1_StatusBox"
     rarity_status_box.LayoutOrder = 1
-    rarity_status_box.Size = UDim2.new(1, 0, 0, 58)
+    rarity_status_box.Size = UDim2_new(1, 0, 0, 58)
     rarity_status_box.AutomaticSize = Enum.AutomaticSize.Y
     rarity_status_box.BackgroundColor3 = CARD_COLOR
     rarity_status_box.BackgroundTransparency = 0
     rarity_status_box.BorderSizePixel = 0
     rarity_status_box.Parent = rarity_content
 
-    local rarity_status_box_pad = Instance.new("UIPadding")
-    rarity_status_box_pad.PaddingBottom = UDim.new(0, 6)
-    rarity_status_box_pad.PaddingRight = UDim.new(0, 10)
+    local rarity_status_box_pad = Instance_new("UIPadding")
+    rarity_status_box_pad.PaddingBottom = UDim_new(0, 6)
+    rarity_status_box_pad.PaddingRight = UDim_new(0, 10)
     rarity_status_box_pad.Parent = rarity_status_box
 
-    local rarity_status_box_c = Instance.new("UICorner")
-    rarity_status_box_c.CornerRadius = UDim.new(0, 6)
+    local rarity_status_box_c = Instance_new("UICorner")
+    rarity_status_box_c.CornerRadius = UDim_new(0, 6)
     rarity_status_box_c.Parent = rarity_status_box
 
-    local rarity_status_box_stroke = Instance.new("UIStroke")
+    local rarity_status_box_stroke = Instance_new("UIStroke")
     rarity_status_box_stroke.Color = BORDER_COLOR
     rarity_status_box_stroke.Thickness = 1
     rarity_status_box_stroke.Parent = rarity_status_box
 
-    local rarity_status_title = Instance.new("TextLabel")
-    rarity_status_title.Size = UDim2.new(1, -10, 0, 16)
-    rarity_status_title.Position = UDim2.new(0, 10, 0, 6)
+    local rarity_status_title = Instance_new("TextLabel")
+    rarity_status_title.Size = UDim2_new(1, -10, 0, 16)
+    rarity_status_title.Position = UDim2_new(0, 10, 0, 6)
     rarity_status_title.BackgroundTransparency = 1
     rarity_status_title.Text = "Status"
     rarity_status_title.TextColor3 = ACCENT_COLOR
@@ -4213,9 +3861,9 @@ local function create_ui()
     rarity_status_title.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_title.Parent = rarity_status_box
 
-    rarity_status_val_lbl = Instance.new("TextLabel")
-    rarity_status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
-    rarity_status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
+    rarity_status_val_lbl = Instance_new("TextLabel")
+    rarity_status_val_lbl.Size = UDim2_new(1, -20, 0, 30)
+    rarity_status_val_lbl.Position = UDim2_new(0, 10, 0, 22)
     rarity_status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
     rarity_status_val_lbl.BackgroundTransparency = 1
     rarity_status_val_lbl.Text = "Idle"
@@ -4227,16 +3875,16 @@ local function create_ui()
     rarity_status_val_lbl.TextWrapped = true
     rarity_status_val_lbl.Parent = rarity_status_box
 
-    local r_row = Instance.new("Frame")
+    local r_row = Instance_new("Frame")
     r_row.Name = "2_RarityRow"
     r_row.LayoutOrder = 2
-    r_row.Size = UDim2.new(1, 0, 0, 22)
+    r_row.Size = UDim2_new(1, 0, 0, 22)
     r_row.BackgroundTransparency = 1
     r_row.Active = false
     r_row.Parent = rarity_content
 
-    local r_lbl = Instance.new("TextLabel")
-    r_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    local r_lbl = Instance_new("TextLabel")
+    r_lbl.Size = UDim2_new(0.45, 0, 1, 0)
     r_lbl.BackgroundTransparency = 1
     r_lbl.Text = "Select Rarity"
     r_lbl.TextColor3 = TEXT_COLOR
@@ -4245,9 +3893,9 @@ local function create_ui()
     r_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_lbl.Parent = r_row
 
-    rarity_dropdown_btn = Instance.new("TextButton")
-    rarity_dropdown_btn.Size = UDim2.new(0.55, 0, 1, 0)
-    rarity_dropdown_btn.Position = UDim2.new(0.45, 0, 0, 0)
+    rarity_dropdown_btn = Instance_new("TextButton")
+    rarity_dropdown_btn.Size = UDim2_new(0.55, 0, 1, 0)
+    rarity_dropdown_btn.Position = UDim2_new(0.45, 0, 0, 0)
     rarity_dropdown_btn.BackgroundColor3 = INPUT_BG_COLOR
 
     local function get_rarity_dropdown_text()
@@ -4268,23 +3916,23 @@ local function create_ui()
     rarity_dropdown_btn.Active = true
     rarity_dropdown_btn.Parent = r_row
 
-    local rarity_dropdown_c = Instance.new("UICorner")
-    rarity_dropdown_c.CornerRadius = UDim.new(0, 4)
+    local rarity_dropdown_c = Instance_new("UICorner")
+    rarity_dropdown_c.CornerRadius = UDim_new(0, 4)
     rarity_dropdown_c.Parent = rarity_dropdown_btn
 
-    local rarity_dropdown_stroke = Instance.new("UIStroke")
+    local rarity_dropdown_stroke = Instance_new("UIStroke")
     rarity_dropdown_stroke.Color = BORDER_COLOR
     rarity_dropdown_stroke.Thickness = 1
     rarity_dropdown_stroke.Parent = rarity_dropdown_btn
 
-    local rarity_dropdown_pad = Instance.new("UIPadding")
-    rarity_dropdown_pad.PaddingLeft = UDim.new(0, 8)
-    rarity_dropdown_pad.PaddingRight = UDim.new(0, 8)
+    local rarity_dropdown_pad = Instance_new("UIPadding")
+    rarity_dropdown_pad.PaddingLeft = UDim_new(0, 8)
+    rarity_dropdown_pad.PaddingRight = UDim_new(0, 8)
     rarity_dropdown_pad.Parent = rarity_dropdown_btn
 
-    local rarity_chevron = Instance.new("TextLabel")
-    rarity_chevron.Size = UDim2.new(0, 20, 1, 0)
-    rarity_chevron.Position = UDim2.new(1, -12, 0, 0)
+    local rarity_chevron = Instance_new("TextLabel")
+    rarity_chevron.Size = UDim2_new(0, 20, 1, 0)
+    rarity_chevron.Position = UDim2_new(1, -12, 0, 0)
     rarity_chevron.BackgroundTransparency = 1
     rarity_chevron.Text = "▼"
     rarity_chevron.TextColor3 = ACCENT_COLOR
@@ -4303,16 +3951,16 @@ local function create_ui()
         end
     end)
 
-    local r_amount_row = Instance.new("Frame")
+    local r_amount_row = Instance_new("Frame")
     r_amount_row.Name = "3_AmountRow"
     r_amount_row.LayoutOrder = 3
-    r_amount_row.Size = UDim2.new(1, 0, 0, 22)
+    r_amount_row.Size = UDim2_new(1, 0, 0, 22)
     r_amount_row.BackgroundTransparency = 1
     r_amount_row.Active = false
     r_amount_row.Parent = rarity_content
 
-    local r_amount_lbl = Instance.new("TextLabel")
-    r_amount_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    local r_amount_lbl = Instance_new("TextLabel")
+    r_amount_lbl.Size = UDim2_new(0.45, 0, 1, 0)
     r_amount_lbl.BackgroundTransparency = 1
     r_amount_lbl.Text = "Amount Fish Rarity"
     r_amount_lbl.TextColor3 = TEXT_COLOR
@@ -4321,9 +3969,9 @@ local function create_ui()
     r_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_amount_lbl.Parent = r_amount_row
 
-    r_qty_box = Instance.new("TextBox")
-    r_qty_box.Size = UDim2.new(0.55, 0, 1, 0)
-    r_qty_box.Position = UDim2.new(0.45, 0, 0, 0)
+    r_qty_box = Instance_new("TextBox")
+    r_qty_box.Size = UDim2_new(0.55, 0, 1, 0)
+    r_qty_box.Position = UDim2_new(0.45, 0, 0, 0)
     r_qty_box.BackgroundColor3 = INPUT_BG_COLOR
     r_qty_box.Text = tostring(config.quantity)
     r_qty_box.TextColor3 = TEXT_COLOR
@@ -4333,11 +3981,11 @@ local function create_ui()
     r_qty_box.ClearTextOnFocus = false
     r_qty_box.Parent = r_amount_row
 
-    local r_qty_c = Instance.new("UICorner")
-    r_qty_c.CornerRadius = UDim.new(0, 4)
+    local r_qty_c = Instance_new("UICorner")
+    r_qty_c.CornerRadius = UDim_new(0, 4)
     r_qty_c.Parent = r_qty_box
 
-    local r_qty_stroke = Instance.new("UIStroke")
+    local r_qty_stroke = Instance_new("UIStroke")
     r_qty_stroke.Color = BORDER_COLOR
     r_qty_stroke.Thickness = 1
     r_qty_stroke.Parent = r_qty_box
@@ -4346,7 +3994,7 @@ local function create_ui()
         local text = r_qty_box.Text
         local val = tonumber(text)
         if val and val >= 0 then
-            config.quantity = math.floor(val)
+            config.quantity = math_floor(val)
             save_config()
         elseif text == "" then
             config.quantity = 0
@@ -4357,15 +4005,15 @@ local function create_ui()
     r_qty_box.FocusLost:Connect(function()
         local text = r_qty_box.Text
         local val = (text == "") and 0 or (tonumber(text) or config.quantity)
-        task.defer(function()
+        task_defer(function()
             sync_qty_boxes(val)
         end)
     end)
 
-    local r_refresh = Instance.new("TextButton")
+    local r_refresh = Instance_new("TextButton")
     r_refresh.Name = "4_RefreshButton"
     r_refresh.LayoutOrder = 4
-    r_refresh.Size = UDim2.new(1, 0, 0, 26)
+    r_refresh.Size = UDim2_new(1, 0, 0, 26)
     r_refresh.BackgroundColor3 = BTN_BG_COLOR
     r_refresh.Text = "Refresh Fish Rarity"
     r_refresh.TextColor3 = ACCENT_COLOR
@@ -4374,11 +4022,11 @@ local function create_ui()
     r_refresh.Active = true
     r_refresh.Parent = rarity_content
 
-    local r_refresh_c = Instance.new("UICorner")
-    r_refresh_c.CornerRadius = UDim.new(0, 5)
+    local r_refresh_c = Instance_new("UICorner")
+    r_refresh_c.CornerRadius = UDim_new(0, 5)
     r_refresh_c.Parent = r_refresh
 
-    local r_refresh_stroke = Instance.new("UIStroke")
+    local r_refresh_stroke = Instance_new("UIStroke")
     r_refresh_stroke.Color = BORDER_COLOR
     r_refresh_stroke.Thickness = 1
     r_refresh_stroke.Parent = r_refresh
@@ -4401,7 +4049,7 @@ local function create_ui()
             if r_qty_box and r_qty_box.Text ~= "" then
                 local num = tonumber(r_qty_box.Text)
                 if num and num >= 0 then
-                    sync_qty_boxes(math.floor(num))
+                    sync_qty_boxes(math_floor(num))
                 end
             end
             cache.stats.rarity.success_trades = 0
@@ -4432,230 +4080,18 @@ local function create_ui()
     rarity_fav_toggle.Frame.LayoutOrder = 6
     rarity_fav_toggle.Frame.Name = "6_FavToggle"
 
-    -- ==========================================================================
-    -- [SECTION 19] UI ACCORDION 4: TRADE BY COIN
-    -- Panel GUI untuk mengatur target perolehan koin, status kalkulasi harga ikan,
-    -- reset statistik koin, dan tombol aktivasi mode By Coin.
-    -- ==========================================================================
-    local coin_content, coin_toggle = create_accordion(settings_panel, "Trade By Coin")
-    local coin_status_box = Instance.new("Frame")
-    coin_status_box.Name = "1_StatusBox"
-    coin_status_box.LayoutOrder = 1
-    coin_status_box.Size = UDim2.new(1, 0, 0, 58)
-    coin_status_box.AutomaticSize = Enum.AutomaticSize.Y
-    coin_status_box.BackgroundColor3 = CARD_COLOR
-    coin_status_box.BackgroundTransparency = 0
-    coin_status_box.BorderSizePixel = 0
-    coin_status_box.Parent = coin_content
-
-    local coin_status_box_pad = Instance.new("UIPadding")
-    coin_status_box_pad.PaddingBottom = UDim.new(0, 6)
-    coin_status_box_pad.PaddingRight = UDim.new(0, 10)
-    coin_status_box_pad.Parent = coin_status_box
-
-    local coin_status_box_c = Instance.new("UICorner")
-    coin_status_box_c.CornerRadius = UDim.new(0, 6)
-    coin_status_box_c.Parent = coin_status_box
-
-    local coin_status_box_stroke = Instance.new("UIStroke")
-    coin_status_box_stroke.Color = BORDER_COLOR
-    coin_status_box_stroke.Thickness = 1
-    coin_status_box_stroke.Parent = coin_status_box
-
-    local coin_status_title = Instance.new("TextLabel")
-    coin_status_title.Size = UDim2.new(1, -10, 0, 16)
-    coin_status_title.Position = UDim2.new(0, 10, 0, 6)
-    coin_status_title.BackgroundTransparency = 1
-    coin_status_title.Text = "Status"
-    coin_status_title.TextColor3 = ACCENT_COLOR
-    coin_status_title.TextSize = 9
-    coin_status_title.FontFace = font_bold
-    coin_status_title.TextXAlignment = Enum.TextXAlignment.Left
-    coin_status_title.Parent = coin_status_box
-
-    coin_status_val_lbl = Instance.new("TextLabel")
-    coin_status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
-    coin_status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
-    coin_status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
-    coin_status_val_lbl.BackgroundTransparency = 1
-    coin_status_val_lbl.Text = "Idle"
-    coin_status_val_lbl.TextColor3 = TEXT_COLOR
-    coin_status_val_lbl.TextSize = 9
-    coin_status_val_lbl.FontFace = font_face
-    coin_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
-    coin_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
-    coin_status_val_lbl.TextWrapped = true
-    coin_status_val_lbl.Parent = coin_status_box
-
-    local coin_row = Instance.new("Frame")
-    coin_row.Name = "2_CoinRow"
-    coin_row.LayoutOrder = 2
-    coin_row.Size = UDim2.new(1, 0, 0, 22)
-    coin_row.BackgroundTransparency = 1
-    coin_row.Active = false
-    coin_row.Parent = coin_content
-
-    local coin_lbl = Instance.new("TextLabel")
-    coin_lbl.Size = UDim2.new(0.45, 0, 1, 0)
-    coin_lbl.BackgroundTransparency = 1
-    coin_lbl.Text = "Target Coins"
-    coin_lbl.TextColor3 = TEXT_COLOR
-    coin_lbl.TextSize = 9
-    coin_lbl.FontFace = font_bold
-    coin_lbl.TextXAlignment = Enum.TextXAlignment.Left
-    coin_lbl.Parent = coin_row
-
-    local coin_box = Instance.new("TextBox")
-    coin_box.Size = UDim2.new(0.55, 0, 1, 0)
-    coin_box.Position = UDim2.new(0.45, 0, 0, 0)
-    coin_box.BackgroundColor3 = INPUT_BG_COLOR
-    coin_box.Text = tostring(config.target_coin_amount)
-    coin_box.TextColor3 = TEXT_COLOR
-    coin_box.TextSize = 9
-    coin_box.FontFace = font_face
-    coin_box.TextXAlignment = Enum.TextXAlignment.Center
-    coin_box.ClearTextOnFocus = false
-    coin_box.Parent = coin_row
-
-    local coin_box_c = Instance.new("UICorner")
-    coin_box_c.CornerRadius = UDim.new(0, 4)
-    coin_box_c.Parent = coin_box
-
-    local coin_box_stroke = Instance.new("UIStroke")
-    coin_box_stroke.Color = BORDER_COLOR
-    coin_box_stroke.Thickness = 1
-    coin_box_stroke.Parent = coin_box
-
-    coin_box:GetPropertyChangedSignal("Text"):Connect(function()
-        local text = coin_box.Text
-        local val = tonumber(text)
-        if val and val >= 0 then
-            config.target_coin_amount = math.floor(val)
-            config.trade_coins_enabled = (config.target_coin_amount > 0)
-            save_config()
-        elseif text == "" then
-            config.target_coin_amount = 0
-            save_config()
-        end
-    end)
-
-    coin_box.FocusLost:Connect(function()
-        local text = coin_box.Text
-        local val = (text == "") and 0 or (tonumber(text) or config.target_coin_amount)
-        config.target_coin_amount = val
-        config.trade_coins_enabled = val > 0
-        save_config()
-        task.defer(function()
-            coin_box.Text = tostring(val)
-        end)
-    end)
-
-    coin_toggle_ctrl = create_toggle(coin_content, "Start Trade ByCoin", (config.enabled and config.trade_coins_enabled), function(active)
-        if active then
-            if coin_box and coin_box.Text ~= "" then
-                local num = tonumber(coin_box.Text)
-                if num and num >= 0 then
-                    config.target_coin_amount = math.floor(num)
-                    config.trade_coins_enabled = (config.target_coin_amount > 0)
-                    save_config()
-                end
-            end
-            cache.stats.coin.success_trades = 0
-            cache.stats.coin.last_items = 0
-            cache.stats.coin.total_items = 0
-            cache.stats.coin.attempts = 0
-            cache.stats.coin.failed = 0
-            update_mode_status("coin")
-
-            config.trade_coins_enabled = true
-            config.enabled = true
-            sync_mode_toggles("coin")
-            cache.processed_trades = {}
-            run_auto_trade_loop()
-        else
-            config.enabled = false
-            cache.coin_status_text = "Idle"
-            cache.coin_status_details = ""
-            decline_active_trade()
-        end
-    end)
-    coin_toggle_ctrl.Frame.LayoutOrder = 3
-    coin_toggle_ctrl.Frame.Name = "3_StartTradeToggle"
-
-    coin_fav_toggle = create_toggle(coin_content, "Trade Favorite Items", config.trade_favorited, function(active)
-        sync_fav_toggles(active)
-    end)
-    coin_fav_toggle.Frame.LayoutOrder = 4
-    coin_fav_toggle.Frame.Name = "4_FavToggle"
-
-    local coin_reset = Instance.new("TextButton")
-    coin_reset.Name = "5_ResetStatsButton"
-    coin_reset.LayoutOrder = 5
-    coin_reset.Size = UDim2.new(1, 0, 0, 26)
-    coin_reset.BackgroundColor3 = BTN_BG_COLOR
-    coin_reset.Text = "Reset Stats By Coin"
-    coin_reset.TextColor3 = ACCENT_COLOR
-    coin_reset.TextSize = 9
-    coin_reset.FontFace = font_bold
-    coin_reset.Active = true
-    coin_reset.Parent = coin_content
-
-    local coin_reset_c = Instance.new("UICorner")
-    coin_reset_c.CornerRadius = UDim.new(0, 5)
-    coin_reset_c.Parent = coin_reset
-
-    local coin_reset_stroke = Instance.new("UIStroke")
-    coin_reset_stroke.Color = BORDER_COLOR
-    coin_reset_stroke.Thickness = 1
-    coin_reset_stroke.Parent = coin_reset
-
-    coin_reset.MouseEnter:Connect(function()
-        coin_reset.BackgroundColor3 = BTN_HOVER_COLOR
-    end)
-    coin_reset.MouseLeave:Connect(function()
-        coin_reset.BackgroundColor3 = BTN_BG_COLOR
-    end)
-
-    coin_reset.Activated:Connect(function()
-        coin_reset.Text = "Stats Reset!"
-        cache.processed_trades = {}
-        task_wait(1)
-        coin_reset.Text = "Reset Stats By Coin"
-    end)
-
-
-
-    settings_panel.CanvasSize = UDim2.new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
+    settings_panel.CanvasSize = UDim2_new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
     settings_layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        settings_panel.CanvasSize = UDim2.new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
+        settings_panel.CanvasSize = UDim2_new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
     end)
 
     -- ==========================================================================
-    -- [SECTION 20] REAL-TIME UI STATUS UPDATE LOOP
+    -- [SECTION 18] REAL-TIME UI STATUS UPDATE LOOP
     -- Coroutine background untuk menyinkronkan status visual teks, indikator
     -- status aktif tiap mode, dan sinkronisasi state tombol toggle secara berkala.
     -- ==========================================================================
     task_spawn(function()
-        while gui.Parent do
-
-            if sb_status then
-                local active_text = "Idle"
-                if config.enabled then
-                    if config.trade_fish_enabled and cache.fish_status_text ~= "Idle" then
-                        active_text = cache.fish_status_text
-                    elseif config.trade_enchants_enabled and cache.enchant_status_text ~= "Idle" then
-                        active_text = cache.enchant_status_text
-                    elseif config.trade_coins_enabled and cache.coin_status_text ~= "Idle" then
-                        active_text = cache.coin_status_text
-                    elseif config.trade_rarity_enabled and cache.rarity_status_text ~= "Idle" then
-                        active_text = cache.rarity_status_text
-                    else
-                        active_text = "Active"
-                    end
-                end
-                sb_status.Text = "Status:\n" .. active_text
-            end
-
+        while is_running and gui and gui.Parent do
             if status_val_lbl then
                 if cache.fish_status_details == "" then
                     status_val_lbl.Text = cache.fish_status_text
@@ -4668,13 +4104,6 @@ local function create_ui()
                     enchant_status_val_lbl.Text = cache.enchant_status_text
                 else
                     enchant_status_val_lbl.Text = cache.enchant_status_text .. "\n" .. cache.enchant_status_details
-                end
-            end
-            if coin_status_val_lbl then
-                if cache.coin_status_details == "" then
-                    coin_status_val_lbl.Text = cache.coin_status_text
-                else
-                    coin_status_val_lbl.Text = cache.coin_status_text .. "\n" .. cache.coin_status_details
                 end
             end
             if rarity_status_val_lbl then
@@ -4691,9 +4120,6 @@ local function create_ui()
             if enchant_toggle_ctrl then
                 enchant_toggle_ctrl.set_state(config.enabled and config.trade_enchants_enabled)
             end
-            if coin_toggle_ctrl then
-                coin_toggle_ctrl.set_state(config.enabled and config.trade_coins_enabled)
-            end
             if rarity_toggle_ctrl then
                 rarity_toggle_ctrl.set_state(config.enabled and config.trade_rarity_enabled)
             end
@@ -4704,25 +4130,67 @@ local function create_ui()
 end
 
 -- ==============================================================================
--- [SECTION 21] SCRIPT INITIALIZATION & CLEANUP HANDLER
+-- [SECTION 19] SCRIPT INITIALIZATION & CLEANUP HANDLER
 -- Menjalankan pembuatan UI, dump log ikan di inventory, dan menyediakan
--- handler pembersihan (_G.KeenanHub_AutoTrade_Cleanup) jika script di-reload.
+-- handler pembersihan lengkap (_G.KeenanHub_AutoTrade_Cleanup) untuk mematikan
+-- semua listener, thread background, service hooks, dan elemen GUI tanpa sisa.
 -- ==============================================================================
-local success, err = pcall(create_ui)
-if not success then
-    local err_msg = "UI Creation Error: " .. tostring(err)
-    warn(err_msg)
-    log_debug(err_msg)
-end
-pcall(log_inventory_fish)
+local function cleanup_all()
+    -- 1. Matikan semua state konfigurasi dan loop trading
+    is_running = false
+    config.enabled = false
+    config.trade_fish_enabled = false
+    config.trade_enchants_enabled = false
+    config.trade_rarity_enabled = false
+    cache.is_trading_active = false
+    cache.loop_running = false
 
-_G.KeenanHub_AutoTrade_Cleanup = function()
-    if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end); trade_ended_conn = nil end
+    -- 2. Batalkan sesi trade aktif jika sedang berjalan
+    if decline_active_trade then
+        pcall(decline_active_trade)
+    end
 
+    -- 3. Invalidate script ID untuk menghentikan semua task_spawn background loop
     _G.KeenanHub_AutoTrade_ScriptID = nil
+    script_id = nil
 
+    -- 4. Putus koneksi remote event Net TradeEnded
+    if trade_ended_conn then
+        pcall(function() trade_ended_conn:Disconnect() end)
+        trade_ended_conn = nil
+    end
+
+    -- 5. Putus listener Replion / PlayerData OnChange Inventory
+    if inventory_change_conn then
+        pcall(function()
+            if typeof(inventory_change_conn) == "RBXScriptConnection" or (type(inventory_change_conn) == "table" and inventory_change_conn.Disconnect) then
+                inventory_change_conn:Disconnect()
+            elseif type(inventory_change_conn) == "table" and inventory_change_conn.Destroy then
+                inventory_change_conn:Destroy()
+            elseif type(inventory_change_conn) == "function" then
+                inventory_change_conn()
+            end
+        end)
+        inventory_change_conn = nil
+    end
+
+    -- 6. Putus semua listener yang terdaftar di script_connections (UserInputService, GUI events, dll)
+    for _, c in ipairs(script_connections) do
+        pcall(function()
+            if typeof(c) == "RBXScriptConnection" or (type(c) == "table" and c.Disconnect) then
+                c:Disconnect()
+            elseif type(c) == "table" and c.Destroy then
+                c:Destroy()
+            elseif type(c) == "function" then
+                c()
+            end
+        end)
+    end
+    script_connections = {}
+
+    -- 7. Hapus seluruh elemen GUI dari CoreGui, PlayerGui, dan gethui
     pcall(function()
-        local core = gethui and gethui() or game:GetService("CoreGui")
+        local core = gethui and gethui() or core_gui
         local old = core:FindFirstChild("KeenanHub_AutoTrade") or core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
         if old then old:Destroy() end
     end)
@@ -4731,7 +4199,26 @@ _G.KeenanHub_AutoTrade_Cleanup = function()
         local old = pgui and (pgui:FindFirstChild("KeenanHub_AutoTrade") or pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
         if old then old:Destroy() end
     end)
+
+    -- 8. Bersihkan tabel global _G
+    _G.AutoTradeConfig = nil
+    _G.AutoTradeCache = nil
+    _G.run_auto_trade_loop = nil
+    _G.KeenanHub_AutoTrade_Cleanup = nil
+    _G.NoirHub_AutoTrade_Cleanup = nil
+
+    print("[KEENAN TERMINAL] AutoTrade script, listeners, services, and GUI terminated completely.")
 end
-_G.NoirHub_AutoTrade_Cleanup = _G.KeenanHub_AutoTrade_Cleanup
+
+_G.KeenanHub_AutoTrade_Cleanup = cleanup_all
+_G.NoirHub_AutoTrade_Cleanup = cleanup_all
+
+local success, err = pcall(create_ui)
+if not success then
+    local err_msg = "UI Creation Error: " .. tostring(err)
+    warn(err_msg)
+    log_debug(err_msg)
+end
+pcall(log_inventory_fish)
 
 print("[KEENAN TERMINAL] AutoTrade UI and engine initialized successfully!")
