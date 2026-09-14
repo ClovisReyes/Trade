@@ -20,6 +20,8 @@ local string_match  = string.match
 
 local task_wait     = task.wait
 local task_spawn    = task.spawn
+local task_delay    = task.delay
+local task_defer    = task.defer
 
 if _G.NoirHub_AutoTrade_Cleanup then
     pcall(_G.NoirHub_AutoTrade_Cleanup)
@@ -504,20 +506,18 @@ local function suppress_trade_prompt()
                 local yes_btn = options:FindFirstChild("Yes")
                 if yes_btn then
                     click_gui_button(yes_btn)
+                    task_spawn(function()
+                        task_wait(0.05)
+                        blackout.Visible = false
+                        prompt_gui.Enabled = false
+                        local gc = get_gui_control()
+                        if gc then
+                            pcall(function() gc.Close("Prompt") end)
+                            pcall(function() gc:Close("Prompt") end)
+                        end
+                    end)
                 end
             end
-
-            -- 4. After clicking yes, now hide and disable prompt
-            task_spawn(function()
-                task_wait(0.05)
-                blackout.Visible = false
-                prompt_gui.Enabled = false
-                local gc = get_gui_control()
-                if gc then
-                    pcall(function() gc.Close("Prompt") end)
-                    pcall(function() gc:Close("Prompt") end)
-                end
-            end)
         end
     end)
 end
@@ -531,19 +531,57 @@ local function dismiss_stuck_prompt()
         local label = blackout:FindFirstChild("Label")
         local text = label and label.Text or ""
         local lower = string_lower(text)
-        if string_find(lower, "trade", 1, true) or string_find(lower, "accept", 1, true) or string_find(lower, "request", 1, true) then
+        if string_find(lower, "trade", 1, true) or string_find(lower, "accept", 1, true) or string_find(lower, "request", 1, true) or string_find(lower, "offer", 1, true) then
             local options = blackout:FindFirstChild("Options")
             local yes_btn = options and options:FindFirstChild("Yes")
             if yes_btn then
+                -- User request: "alih2 dipencet no mending dipencet yes saja"
                 click_gui_button(yes_btn)
             end
             task_spawn(function()
                 task_wait(0.05)
                 blackout.Visible = false
+                blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
                 prompt_gui.Enabled = false
             end)
+            local gc = get_gui_control()
+            if gc then
+                pcall(function() gc.Close("Prompt") end)
+                pcall(function() gc:Close("Prompt") end)
+            end
         end
     end)
+    kill_all_blackouts()
+end
+
+local function wire_prompt_buttons(blackout, prompt_gui)
+    if not blackout or not prompt_gui then return end
+    local options = blackout:FindFirstChild("Options")
+    if not options then return end
+
+    local function setup_btn(btn)
+        if not btn then return end
+        local function on_dismiss()
+            task_delay(0.1, function()
+                pcall(function()
+                    blackout.Visible = false
+                    prompt_gui.Enabled = false
+                end)
+            end)
+        end
+        table.insert(prompt_watcher_conns, btn.Activated:Connect(on_dismiss))
+        table.insert(prompt_watcher_conns, btn.MouseButton1Click:Connect(on_dismiss))
+        if btn.InputBegan then
+            table.insert(prompt_watcher_conns, btn.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    on_dismiss()
+                end
+            end))
+        end
+    end
+
+    setup_btn(options:FindFirstChild("Yes"))
+    setup_btn(options:FindFirstChild("No"))
 end
 
 local function init_prompt_watcher()
@@ -565,6 +603,7 @@ local function init_prompt_watcher()
                     end
                 end))
             end
+            wire_prompt_buttons(blackout, prompt_gui)
         end
 
         local frame = prompt_gui:FindFirstChild("Frame")
@@ -596,6 +635,11 @@ local function init_prompt_watcher()
                 if config and config.auto_accept_enabled then
                     suppress_trade_prompt()
                 end
+            elseif desc:IsA("GuiButton") and desc.Parent and desc.Parent.Name == "Options" then
+                local b = desc.Parent.Parent
+                if b and b.Name == "Blackout" then
+                    wire_prompt_buttons(b, prompt_gui)
+                end
             end
         end))
 
@@ -618,31 +662,21 @@ local function init_prompt_watcher()
                     if b then
                         b.AnchorPoint = Vector2.new(0.5, 0.5)
                         b.Position = UDim2.new(0.5, 0, 0.5, 0)
-                        local options = b:FindFirstChild("Options")
-                        if options then
-                            local yes_btn = options:FindFirstChild("Yes")
-                            local no_btn = options:FindFirstChild("No")
-                            if yes_btn then
-                                table.insert(prompt_watcher_conns, yes_btn.Activated:Connect(function()
-                                    task_defer(function()
-                                        b.Visible = false
-                                        prompt_gui.Enabled = false
-                                    end)
-                                end))
-                            end
-                            if no_btn then
-                                table.insert(prompt_watcher_conns, no_btn.Activated:Connect(function()
-                                    task_defer(function()
-                                        b.Visible = false
-                                        prompt_gui.Enabled = false
-                                    end)
-                                end))
-                            end
-                        end
+                        b.Visible = true
+                        wire_prompt_buttons(b, prompt_gui)
                     end
                 end
             end
         end))
+
+        -- If prompt_gui is already enabled right now, wire it up or suppress it immediately!
+        if prompt_gui.Enabled and blackout then
+            if config and config.auto_accept_enabled then
+                suppress_trade_prompt()
+            else
+                wire_prompt_buttons(blackout, prompt_gui)
+            end
+        end
     end)
 end
 init_prompt_watcher()
@@ -673,11 +707,7 @@ local function close_trading_gui()
     pcall(function()
         local prompt_gui = player_gui:FindFirstChild("Prompt")
         if prompt_gui then
-            if config and config.auto_accept_enabled then
-                prompt_gui.Enabled = false
-            else
-                prompt_gui.Enabled = true
-            end
+            prompt_gui.Enabled = false
             local frame = prompt_gui:FindFirstChild("Frame")
             if frame then
                 frame.Visible = false
@@ -686,15 +716,9 @@ local function close_trading_gui()
             end
             local blackout = prompt_gui:FindFirstChild("Blackout")
             if blackout then
-                if config and config.auto_accept_enabled then
-                    blackout.Visible = false
-                    blackout.Position = UDim2.new(10, 0, 10, 0)
-                else
-                    blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                    blackout.AnchorPoint = Vector2.new(0.5, 0.5)
-                    blackout.Visible = true
-                    blackout.ZIndex = 15
-                end
+                blackout.Visible = false
+                blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+                blackout.AnchorPoint = Vector2.new(0.5, 0.5)
             end
         end
         local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
@@ -717,8 +741,10 @@ local function toggle_auto_accept(enable)
         pcall(function()
             local prompt_gui = player_gui:FindFirstChild("Prompt")
             if prompt_gui then
+                prompt_gui.Enabled = false
                 local blackout = prompt_gui:FindFirstChild("Blackout")
                 if blackout then
+                    blackout.Visible = false
                     blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
                     blackout.AnchorPoint = Vector2.new(0.5, 0.5)
                 end
