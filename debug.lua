@@ -1,7 +1,12 @@
 --[[
-    NOIR HUB - TRADE SUPER DEBUGGER [v6.2]
-    Merekam 100% data trade: Remote Masuk/Keluar, GUI Prompt, Window Trading, Klik Tombol, Attribute IsTrading.
-    Ringan, stabil di mobile/Android executor, tidak spam/freeze.
+    NOIR HUB - TRADE SUPER DEBUGGER [v6.4]
+    Merekam 100% Seluruh Siklus & Aktivitas Trade:
+    1. Offer: SendTradeOffer / TradeOfferReceived / Prompt GUI (Yes/No)
+    2. Start: TradeStarted / IsTrading attribute / Partner Name
+    3. Items: AddItem (dengan auto-resolve nama item, rarity, mutation dari inventory) + Return value
+    4. Window GUI: Slots grid update (My items & Partner items)
+    5. Ready & Confirm: SetReady / Countdown lock timer / ConfirmTrade / Button clicks
+    6. End & Verifikasi: TradeEnded / System chat verification / Summary session report
 ]]
 
 local cloneref = cloneref or function(ref) return ref end
@@ -12,24 +17,32 @@ local player_gui         = cloneref(local_player:WaitForChild("PlayerGui"))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
 local user_input_service = cloneref(game:GetService("UserInputService"))
 local http_service       = cloneref(game:GetService("HttpService"))
+local text_chat_service  = cloneref(game:GetService("TextChatService"))
 
--- Cleanup previous spy
+-- Cleanup previous spy instance
 if _G.NoirHub_TradeSpy_Cleanup then
     pcall(_G.NoirHub_TradeSpy_Cleanup)
 end
 
-local spy_active = true
 local script_id = os.clock()
 _G.NoirHub_TradeSpy_ScriptID = script_id
 
 -- ==============================================================================
--- 1. LOG STORAGE & CONSOLE ENGINE
+-- 1. LOG ENGINE & PERSISTENCE
 -- ==============================================================================
 local all_logs = {}
 local active_filter = "ALL"
 local log_text_box = nil
 local log_scroll = nil
 local status_indicator = nil
+
+local current_session = {
+    active = false,
+    partner = "Unknown",
+    start_time = 0,
+    items_sent = {},
+    items_received = {},
+}
 
 local function get_timestamp()
     local now = os.clock()
@@ -96,7 +109,77 @@ local function log_entry(tag, message)
 end
 
 -- ==============================================================================
--- 2. IN-GAME UI CONSOLE
+-- 2. ITEM & INVENTORY RESOLVER (Metadata Lookup)
+-- ==============================================================================
+local item_utility = nil
+local player_data = nil
+
+pcall(function()
+    local rep = game:GetService("ReplicatedStorage")
+    local packages = rep:FindFirstChild("Packages")
+    local replion_pkg = packages and packages:FindFirstChild("Replion")
+    if replion_pkg then
+        local success, replion_mod = pcall(require, replion_pkg)
+        if success and replion_mod and replion_mod.Client then
+            pcall(function()
+                player_data = replion_mod.Client:GetReplion("Data") or replion_mod.Client:WaitReplion("Data", 3)
+            end)
+        end
+    end
+
+    local shared = rep:FindFirstChild("Shared")
+    local iu = shared and shared:FindFirstChild("ItemUtility")
+    if iu then
+        pcall(function() item_utility = require(iu) end)
+    end
+end)
+
+local function resolve_item_info(uuid)
+    if not uuid or uuid == "" then return nil end
+    if player_data then
+        local inv = nil
+        pcall(function() inv = player_data:Get("Inventory") end)
+        local items = inv and inv.Items
+        if items then
+            for _, it in ipairs(items) do
+                if it and it.UUID == uuid then
+                    local name = "Item_" .. tostring(it.Id or "Unknown")
+                    local tier = ""
+                    local mut = {}
+
+                    if it.Id and item_utility then
+                        local data = nil
+                        pcall(function() data = item_utility:GetItemData(it.Id) end)
+                        if data and data.Data then
+                            name = data.Data.Name or name
+                            tier = data.Data.Tier and tostring(data.Data.Tier) or ""
+                        end
+                    end
+
+                    if it.Mutation then table.insert(mut, tostring(it.Mutation)) end
+                    if it.Shiny then table.insert(mut, "Shiny") end
+                    if it.Sparkling then table.insert(mut, "Sparkling") end
+                    if it.Big then table.insert(mut, "Giant") end
+
+                    local mut_str = #mut > 0 and table.concat(mut, ", ") or "Normal"
+                    local weight_str = it.Weight and string.format("%.1fkg", it.Weight) or nil
+
+                    return {
+                        name = name,
+                        tier = tier ~= "" and tier or "Common",
+                        mutation = mut_str,
+                        weight = weight_str,
+                        uuid = uuid
+                    }
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ==============================================================================
+-- 3. IN-GAME UI CONSOLE
 -- ==============================================================================
 local function create_spy_gui()
     local parent_gui = nil
@@ -123,8 +206,8 @@ local function create_spy_gui()
     -- Main Window
     local main = Instance.new("Frame")
     main.Name = "ConsoleFrame"
-    main.Size = UDim2.new(0, 420, 0, 260)
-    main.Position = UDim2.new(0.5, -210, 0.5, 0)
+    main.Size = UDim2.new(0, 440, 0, 270)
+    main.Position = UDim2.new(0.5, -220, 0.45, 0)
     main.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
     main.BackgroundTransparency = 0.1
     main.BorderSizePixel = 0
@@ -156,7 +239,7 @@ local function create_spy_gui()
     title.Size = UDim2.new(0.50, 0, 1, 0)
     title.Position = UDim2.new(0, 8, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "🕵️ Trade Debugger [v6.2]"
+    title.Text = "🕵️ Trade Super Debugger [v6.4]"
     title.TextColor3 = Color3.fromRGB(0, 255, 170)
     title.TextSize = 10
     title.Font = Enum.Font.SourceSansBold
@@ -175,10 +258,7 @@ local function create_spy_gui()
     min_btn.Font = Enum.Font.SourceSansBold
     min_btn.ZIndex = 102
     min_btn.Parent = header
-
-    local min_c = Instance.new("UICorner")
-    min_c.CornerRadius = UDim.new(0, 4)
-    min_c.Parent = min_btn
+    Instance.new("UICorner", min_btn).CornerRadius = UDim.new(0, 4)
 
     -- Clear Button
     local clear_btn = Instance.new("TextButton")
@@ -191,15 +271,12 @@ local function create_spy_gui()
     clear_btn.Font = Enum.Font.SourceSansBold
     clear_btn.ZIndex = 102
     clear_btn.Parent = header
-
-    local clr_c = Instance.new("UICorner")
-    clr_c.CornerRadius = UDim.new(0, 4)
-    clr_c.Parent = clear_btn
+    Instance.new("UICorner", clear_btn).CornerRadius = UDim.new(0, 4)
 
     -- Copy All Button
     local copy_btn = Instance.new("TextButton")
-    copy_btn.Size = UDim2.new(0, 62, 0, 20)
-    copy_btn.Position = UDim2.new(1, -140, 0.5, -10)
+    copy_btn.Size = UDim2.new(0, 56, 0, 20)
+    copy_btn.Position = UDim2.new(1, -134, 0.5, -10)
     copy_btn.BackgroundColor3 = Color3.fromRGB(0, 160, 110)
     copy_btn.Text = "📋 Copy"
     copy_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -207,10 +284,7 @@ local function create_spy_gui()
     copy_btn.Font = Enum.Font.SourceSansBold
     copy_btn.ZIndex = 102
     copy_btn.Parent = header
-
-    local cpy_c = Instance.new("UICorner")
-    cpy_c.CornerRadius = UDim.new(0, 4)
-    cpy_c.Parent = copy_btn
+    Instance.new("UICorner", copy_btn).CornerRadius = UDim.new(0, 4)
 
     -- Floating Icon
     local floating_btn = Instance.new("TextButton")
@@ -222,15 +296,10 @@ local function create_spy_gui()
     floating_btn.Visible = false
     floating_btn.ZIndex = 200
     floating_btn.Parent = gui
-
-    local flt_c = Instance.new("UICorner")
-    flt_c.CornerRadius = UDim.new(0, 8)
-    flt_c.Parent = floating_btn
-
-    local flt_s = Instance.new("UIStroke")
+    Instance.new("UICorner", floating_btn).CornerRadius = UDim.new(0, 8)
+    local flt_s = Instance.new("UIStroke", floating_btn)
     flt_s.Color = Color3.fromRGB(0, 255, 170)
     flt_s.Thickness = 1.5
-    flt_s.Parent = floating_btn
 
     min_btn.MouseButton1Click:Connect(function()
         main.Visible = false
@@ -249,22 +318,21 @@ local function create_spy_gui()
     end)
 
     copy_btn.MouseButton1Click:Connect(function()
-        local full = {}
-        for _, item in ipairs(all_logs) do
-            table.insert(full, item.line)
+        if setclipboard then
+            local lines = {}
+            for _, item in ipairs(all_logs) do table.insert(lines, item.line) end
+            setclipboard(table.concat(lines, "\n"))
+            copy_btn.Text = "✅ Copied"
+            task.delay(1.5, function() copy_btn.Text = "📋 Copy" end)
+        else
+            copy_btn.Text = "No Clip"
+            task.delay(1.5, function() copy_btn.Text = "📋 Copy" end)
         end
-        local content = table.concat(full, "\n")
-        local success = false
-        if setclipboard then pcall(function() setclipboard(content); success = true end) end
-        if not success and toclipboard then pcall(function() toclipboard(content); success = true end) end
-        
-        copy_btn.Text = success and "✅ Copied!" or "Select Text"
-        task.delay(1.5, function() copy_btn.Text = "📋 Copy" end)
     end)
 
     -- Filter Bar
     local filter_bar = Instance.new("Frame")
-    filter_bar.Size = UDim2.new(1, -12, 0, 20)
+    filter_bar.Size = UDim2.new(1, -12, 0, 22)
     filter_bar.Position = UDim2.new(0, 6, 0, 32)
     filter_bar.BackgroundTransparency = 1
     filter_bar.ZIndex = 101
@@ -276,42 +344,42 @@ local function create_spy_gui()
     filter_layout.Parent = filter_bar
 
     local filter_buttons = {}
-    local function make_filter_btn(tag_name, label)
+    local function make_filter_btn(tag, label_text)
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(0, 52, 1, 0)
-        btn.BackgroundColor3 = (active_filter == tag_name) and Color3.fromRGB(0, 170, 115) or Color3.fromRGB(25, 25, 30)
-        btn.Text = label
-        btn.TextColor3 = Color3.fromRGB(240, 240, 240)
-        btn.TextSize = 8
+        btn.BackgroundColor3 = active_filter == tag and Color3.fromRGB(0, 200, 130) or Color3.fromRGB(25, 25, 30)
+        btn.Text = label_text
+        btn.TextColor3 = active_filter == tag and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(200, 200, 200)
+        btn.TextSize = 8.5
         btn.Font = Enum.Font.SourceSansBold
         btn.ZIndex = 102
         btn.Parent = filter_bar
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
 
-        local bc = Instance.new("UICorner")
-        bc.CornerRadius = UDim.new(0, 4)
-        bc.Parent = btn
-
-        filter_buttons[tag_name] = btn
+        filter_buttons[tag] = btn
 
         btn.MouseButton1Click:Connect(function()
-            active_filter = tag_name
-            for k, b in pairs(filter_buttons) do
-                b.BackgroundColor3 = (k == active_filter) and Color3.fromRGB(0, 170, 115) or Color3.fromRGB(25, 25, 30)
+            active_filter = tag
+            for t, b in pairs(filter_buttons) do
+                b.BackgroundColor3 = (t == active_filter) and Color3.fromRGB(0, 200, 130) or Color3.fromRGB(25, 25, 30)
+                b.TextColor3 = (t == active_filter) and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(200, 200, 200)
             end
             refresh_log_display()
         end)
     end
 
     make_filter_btn("ALL", "ALL")
-    make_filter_btn("REMOTE", "REMOTES")
-    make_filter_btn("TRADE", "TRADE")
+    make_filter_btn("TRADE", "FLOW")
+    make_filter_btn("ITEM", "ITEMS")
+    make_filter_btn("REMOTE", "NET")
     make_filter_btn("PROMPT", "PROMPT")
-    make_filter_btn("GUI", "GUI/BTNS")
+    make_filter_btn("GUI", "BUTTONS")
+    make_filter_btn("CHAT", "CHAT")
 
     -- Log Scroll & Text Box
     log_scroll = Instance.new("ScrollingFrame")
-    log_scroll.Size = UDim2.new(1, -12, 1, -78)
-    log_scroll.Position = UDim2.new(0, 6, 0, 56)
+    log_scroll.Size = UDim2.new(1, -12, 1, -80)
+    log_scroll.Position = UDim2.new(0, 6, 0, 58)
     log_scroll.BackgroundColor3 = Color3.fromRGB(6, 6, 8)
     log_scroll.BackgroundTransparency = 0.2
     log_scroll.BorderSizePixel = 0
@@ -320,10 +388,7 @@ local function create_spy_gui()
     log_scroll.Active = true
     log_scroll.ZIndex = 101
     log_scroll.Parent = main
-
-    local sc_c = Instance.new("UICorner")
-    sc_c.CornerRadius = UDim.new(0, 4)
-    sc_c.Parent = log_scroll
+    Instance.new("UICorner", log_scroll).CornerRadius = UDim.new(0, 4)
 
     log_text_box = Instance.new("TextBox")
     log_text_box.Size = UDim2.new(1, -10, 1, 0)
@@ -345,9 +410,9 @@ local function create_spy_gui()
     status_indicator.Size = UDim2.new(1, -12, 0, 16)
     status_indicator.Position = UDim2.new(0, 6, 1, -18)
     status_indicator.BackgroundTransparency = 1
-    status_indicator.Text = "Status: Idle | IsTrading: false | Remotes Hooked"
+    status_indicator.Text = "Status: Idle | IsTrading: false"
     status_indicator.TextColor3 = Color3.fromRGB(150, 150, 150)
-    status_indicator.TextSize = 8
+    status_indicator.TextSize = 8.5
     status_indicator.Font = Enum.Font.SourceSans
     status_indicator.TextXAlignment = Enum.TextXAlignment.Left
     status_indicator.ZIndex = 102
@@ -379,47 +444,45 @@ end
 create_spy_gui()
 
 -- ==============================================================================
--- 3. ENVIRONMENT & REMOTES RESOLUTION (Targeted & Hashed Resolution)
+-- 4. REMOTE RESOLVER & HASH DICTIONARY
 -- ==============================================================================
-local exec_name = identifyexecutor and identifyexecutor() or "Unknown Executor"
-log_entry("INIT", string.format("Trade Debugger [v6.2] Started on %s (%s)", local_player.Name, exec_name))
-
 local trade_remote_names = {
     SendTradeOffer     = true,
     AcceptTradeOffer   = true,
+    DeclineTradeOffer  = true,
     TradeOfferReceived = true,
     TradeStarted       = true,
     TradeEnded         = true,
     AddItem            = true,
+    RemoveItem         = true,
     SetReady           = true,
     ConfirmTrade       = true,
+    CancelTrade        = true,
 }
 
-local discovered_remotes = {}  -- [logical_name] = RemoteInstance
-local discovered_hashes  = {}  -- [hash_name] = logical_name
-local discovered_objects = {}  -- [RemoteInstance] = logical_name
+local discovered_remotes = {}  -- [key] = RemoteInstance
+local discovered_hashes  = {}  -- [hash_name] = key
+local discovered_objects = {}  -- [Instance] = key
 
-local function resolve_trade_remotes()
+local function resolve_all_remotes()
     pcall(function()
         local net_folder = nil
         pcall(function()
             net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"].net
         end)
         if not net_folder then
-            local rep_packages = replicated_storage:FindFirstChild("Packages")
-            local index_folder = rep_packages and rep_packages:FindFirstChild("_Index")
-            if index_folder then
-                for _, folder in ipairs(index_folder:GetChildren()) do
-                    if string.find(folder.Name, "sleitnick_net", 1, true) then
-                        net_folder = folder:FindFirstChild("net")
-                        if net_folder then break end
+            pcall(function()
+                for _, d in ipairs(replicated_storage:GetDescendants()) do
+                    if d.Name == "net" and d.Parent and string.find(string.lower(d.Parent.Name), "sleitnick", 1, true) then
+                        net_folder = d
+                        break
                     end
                 end
-            end
+            end)
         end
 
         if not net_folder then
-            log_entry("WARN", "Could not locate sleitnick_net folder in ReplicatedStorage!")
+            log_entry("WARN", "Tidak dapat menemukan folder sleitnick_net!")
             return
         end
 
@@ -430,7 +493,7 @@ local function resolve_trade_remotes()
                     discovered_remotes[key] = child
                     discovered_objects[child] = key
 
-                    -- Check if next sibling is a hashed remote (RF/ or RE/)
+                    -- Sibling hash lookup (RF/ or RE/)
                     for j = i + 1, math.min(i + 4, #children) do
                         local next_c = children[j]
                         local n_name = next_c.Name
@@ -447,354 +510,379 @@ local function resolve_trade_remotes()
     end)
 end
 
-resolve_trade_remotes()
+resolve_all_remotes()
 
 local remote_summary = {}
 for k, obj in pairs(discovered_remotes) do
-    table.insert(remote_summary, string.format("%s->%s(%s)", k, obj.Name, obj.ClassName))
+    table.insert(remote_summary, string.format("%s->%s", k, obj.Name))
 end
-log_entry("INIT", string.format("Found %d trade remote references: [%s]", #remote_summary, table.concat(remote_summary, ", ")))
+log_entry("INIT", string.format("Detected %d Trade Remotes: [%s]", #remote_summary, table.concat(remote_summary, ", ")))
 
--- Inbound Event Listeners
-local function attach_inbound_listener(key, callback)
-    local attached = false
-    local r = discovered_remotes[key]
-    if r and r:IsA("RemoteEvent") then
-        r.OnClientEvent:Connect(callback)
-        attached = true
-    end
-    local r_hash = discovered_remotes[key .. "_hash"]
-    if r_hash and r_hash:IsA("RemoteEvent") and r_hash ~= r then
-        r_hash.OnClientEvent:Connect(callback)
-        attached = true
-    end
-    return attached
+-- ==============================================================================
+-- 5. INBOUND EVENT SPY (TradeOfferReceived, TradeStarted, TradeEnded)
+-- ==============================================================================
+local function connect_inbound(key, callback)
+    pcall(function()
+        local r = discovered_remotes[key]
+        if r and r:IsA("RemoteEvent") then r.OnClientEvent:Connect(callback) end
+        local r_hash = discovered_remotes[key .. "_hash"]
+        if r_hash and r_hash:IsA("RemoteEvent") and r_hash ~= r then r_hash.OnClientEvent:Connect(callback) end
+    end)
 end
 
-local r_offer_ok = attach_inbound_listener("TradeOfferReceived", function(requester, ...)
+connect_inbound("TradeOfferReceived", function(requester, ...)
     local req_name = typeof(requester) == "Instance" and requester.Name or tostring(requester)
-    log_entry("TRADE", string.format(">>> [INCOMING OFFER] From: %s | Extra: %s", req_name, safe_serialize({...})))
+    log_entry("TRADE", string.format("📩 [OFFER RECEIVED] Masuk dari: %s | Extra: %s", req_name, safe_serialize({...})))
     if status_indicator then
-        status_indicator.Text = "Status: Offer Received from " .. req_name
+        status_indicator.Text = "Status: Offer dari " .. req_name
         status_indicator.TextColor3 = Color3.fromRGB(255, 200, 0)
     end
 end)
-if r_offer_ok then
-    log_entry("INIT", "Targeted listener connected: TradeOfferReceived")
-else
-    log_entry("WARN", "Could not attach to TradeOfferReceived")
-end
 
-local r_start_ok = attach_inbound_listener("TradeStarted", function(...)
-    log_entry("TRADE", string.format(">>> [TRADE STARTED] Session active! Args: %s", safe_serialize({...})))
+connect_inbound("TradeStarted", function(...)
+    local args = { ... }
+    local session_id = args[1] or "Unknown"
+    current_session.active = true
+    current_session.start_time = tick()
+    current_session.items_sent = {}
+    current_session.items_received = {}
+
+    log_entry("TRADE", string.format("🚀 [TRADE STARTED] Sesi aktif! Session ID: %s | FullArgs: %s", tostring(session_id), safe_serialize(args)))
     if status_indicator then
-        status_indicator.Text = "Status: Trade Active! | IsTrading: " .. tostring(local_player:GetAttribute("IsTrading"))
+        status_indicator.Text = "Status: Trade Aktif! (Session: " .. tostring(session_id) .. ")"
         status_indicator.TextColor3 = Color3.fromRGB(0, 255, 170)
     end
 end)
-if r_start_ok then
-    log_entry("INIT", "Targeted listener connected: TradeStarted")
-end
 
-local r_end_ok = attach_inbound_listener("TradeEnded", function(...)
-    log_entry("TRADE", string.format(">>> [TRADE ENDED] Session closed. Args: %s", safe_serialize({...})))
+connect_inbound("TradeEnded", function(...)
+    local args = { ... }
+    local elapsed = current_session.active and (tick() - current_session.start_time) or 0
+    current_session.active = false
+
+    log_entry("TRADE", string.format("🏁 [TRADE ENDED] Sesi selesai setelah %.1fs! Args: %s", elapsed, safe_serialize(args)))
     if status_indicator then
-        status_indicator.Text = "Status: Idle | Trade Ended"
+        status_indicator.Text = "Status: Idle | Trade Selesai"
         status_indicator.TextColor3 = Color3.fromRGB(150, 150, 150)
     end
+
+    -- Session Recap
+    local items_count = #current_session.items_sent
+    log_entry("TRADE", string.format("📊 [RECAP] Total Item Terkirim: %d | Partner: %s | Durasi: %.1fs", items_count, current_session.partner, elapsed))
 end)
-if r_end_ok then
-    log_entry("INIT", "Targeted listener connected: TradeEnded")
-end
 
 -- ==============================================================================
--- 4. OUTGOING REMOTE SPY (Dual-Mode: hookmetamethod + Direct hookfunction)
+-- 6. OUTGOING REMOTE SPY (namecall + Return Value Interception)
 -- ==============================================================================
-local namecall_hooked = false
+local function process_outgoing_call(remote_obj, method, args)
+    local obj_name = tostring(remote_obj.Name)
+    local obj_lower = string.lower(obj_name)
+    local logical = discovered_hashes[obj_name] or discovered_objects[remote_obj]
+
+    local is_hash = string.sub(obj_name, 1, 3) == "RF/" or string.sub(obj_name, 1, 3) == "RE/"
+    local is_relevant = logical ~= nil or is_hash
+        or string.find(obj_lower, "trade", 1, true)
+        or string.find(obj_lower, "offer", 1, true)
+        or string.find(obj_lower, "item", 1, true)
+        or string.find(obj_lower, "ready", 1, true)
+        or string.find(obj_lower, "confirm", 1, true)
+
+    if not is_relevant then return nil end
+
+    local action_name = logical or obj_name
+    local tag = "REMOTE"
+    local formatted_msg = ""
+
+    if action_name == "SendTradeOffer" then
+        tag = "TRADE"
+        local target = args[1]
+        local t_name = typeof(target) == "Instance" and target.Name or tostring(target)
+        current_session.partner = t_name
+        formatted_msg = string.format("📤 [SEND OFFER] Mengirim tawaran trade ke: %s", t_name)
+
+    elseif action_name == "AcceptTradeOffer" then
+        tag = "TRADE"
+        local req = args[1]
+        local r_name = typeof(req) == "Instance" and req.Name or tostring(req)
+        current_session.partner = r_name
+        formatted_msg = string.format("🤝 [ACCEPT OFFER] Menerima tawaran trade dari: %s", r_name)
+
+    elseif action_name == "AddItem" then
+        tag = "ITEM"
+        local category = tostring(args[1] or "Unknown")
+        local uuid = tostring(args[2] or "Unknown")
+        local meta = resolve_item_info(uuid)
+
+        if meta then
+            table.insert(current_session.items_sent, meta.name)
+            formatted_msg = string.format("📦 [ADD ITEM] %s: \"%s\" (Tier: %s | Mutasi: %s%s)", 
+                category, meta.name, meta.tier, meta.mutation, meta.weight and (" | " .. meta.weight) or "")
+        else
+            formatted_msg = string.format("📦 [ADD ITEM] %s (UUID: %s)", category, uuid)
+        end
+
+    elseif action_name == "RemoveItem" then
+        tag = "ITEM"
+        local uuid = tostring(args[1] or "Unknown")
+        local meta = resolve_item_info(uuid)
+        formatted_msg = string.format("🗑️ [REMOVE ITEM] %s (UUID: %s)", meta and meta.name or "Item", uuid)
+
+    elseif action_name == "SetReady" then
+        tag = "TRADE"
+        local is_ready = tostring(args[1])
+        formatted_msg = string.format("🚦 [SET READY] Status Ready diubah -> %s", is_ready)
+
+    elseif action_name == "ConfirmTrade" then
+        tag = "TRADE"
+        formatted_msg = "🔒 [CONFIRM TRADE] Menekan Konfirmasi Trade (Mengunci Transaksi)!"
+
+    else
+        local s_args = {}
+        for idx, v in ipairs(args) do
+            table.insert(s_args, string.format("#%d:%s", idx, safe_serialize(v)))
+        end
+        formatted_msg = string.format("<<< [OUTGOING] %s:%s([%s])", action_name, method, table.concat(s_args, ", "))
+    end
+
+    return tag, formatted_msg
+end
+
+-- Hook __namecall
 if hookmetamethod then
     local old_namecall
-    local success, err = pcall(function()
+    pcall(function()
         old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
             local method = getnamecallmethod()
             if (method == "InvokeServer" or method == "FireServer") and typeof(self) == "Instance" then
-                local self_name = tostring(self.Name)
-                local self_lower = string.lower(self_name)
-                local p = self.Parent
-                local p_name = p and tostring(p.Name) or ""
-                local p_lower = string.lower(p_name)
-                
-                local is_net = string.find(p_lower, "net", 1, true) or (p and p.Parent and string.find(string.lower(tostring(p.Parent.Name)), "sleitnick", 1, true))
-                local is_hash = string.sub(self_name, 1, 3) == "RF/" or string.sub(self_name, 1, 3) == "RE/"
-                local is_trade_kw = string.find(self_lower, "trade", 1, true)
-                    or string.find(self_lower, "offer", 1, true)
-                    or string.find(self_lower, "ready", 1, true)
-                    or string.find(self_lower, "confirm", 1, true)
-                    or string.find(self_lower, "item", 1, true)
-                    or string.find(self_lower, "accept", 1, true)
-                    or string.find(self_lower, "decline", 1, true)
-                
-                local alias = discovered_hashes[self_name] or discovered_objects[self]
-                
-                if alias or is_trade_kw or (is_net and is_hash) then
-                    local display_tag = alias and string.format("%s (%s)", alias, self_name) or self_name
-                    local args = { ... }
-                    local s_args = {}
-                    for idx, val in ipairs(args) do
-                        table.insert(s_args, string.format("#%d:%s", idx, safe_serialize(val)))
-                    end
-                    log_entry("REMOTE", string.format("<<< [OUTGOING] %s:%s([%s])", display_tag, method, table.concat(s_args, ", ")))
+                local args = { ... }
+                local tag, msg = process_outgoing_call(self, method, args)
+                if tag and msg then
+                    log_entry(tag, msg)
                 end
             end
             return old_namecall(self, ...)
         end)
     end)
-    if success then
-        namecall_hooked = true
-        log_entry("INIT", "✅ Hooked __namecall (Global outgoing trade/net calls intercepted)")
-    else
-        log_entry("WARN", "hookmetamethod __namecall failed: " .. tostring(err))
-    end
 end
 
--- Direct hook on discovered RemoteFunctions / RemoteEvents
+-- Direct hookfunction on discovered RemoteFunctions (to capture return values!)
 if hookfunction then
-    local hooked_count = 0
     for key, robj in pairs(discovered_remotes) do
-        if typeof(robj) == "Instance" then
+        if typeof(robj) == "Instance" and robj:IsA("RemoteFunction") then
             pcall(function()
-                if robj:IsA("RemoteFunction") and robj.InvokeServer then
-                    local old_inv
-                    old_inv = hookfunction(robj.InvokeServer, function(self, ...)
-                        if not namecall_hooked then
-                            local args = { ... }
-                            local s_args = {}
-                            for idx, val in ipairs(args) do
-                                table.insert(s_args, string.format("#%d:%s", idx, safe_serialize(val)))
-                            end
-                            log_entry("REMOTE", string.format("<<< [OUTGOING DIRECT] %s (%s):InvokeServer([%s])", key, robj.Name, table.concat(s_args, ", ")))
-                        end
-                        return old_inv(self, ...)
-                    end)
-                    hooked_count = hooked_count + 1
-                elseif robj:IsA("RemoteEvent") and robj.FireServer then
-                    local old_fire
-                    old_fire = hookfunction(robj.FireServer, function(self, ...)
-                        if not namecall_hooked then
-                            local args = { ... }
-                            local s_args = {}
-                            for idx, val in ipairs(args) do
-                                table.insert(s_args, string.format("#%d:%s", idx, safe_serialize(val)))
-                            end
-                            log_entry("REMOTE", string.format("<<< [OUTGOING DIRECT] %s (%s):FireServer([%s])", key, robj.Name, table.concat(s_args, ", ")))
-                        end
-                        return old_fire(self, ...)
-                    end)
-                    hooked_count = hooked_count + 1
-                end
+                local old_invoke
+                old_invoke = hookfunction(robj.InvokeServer, function(self, ...)
+                    local args = { ... }
+                    local tag, msg = process_outgoing_call(self, "InvokeServer", args)
+                    if tag and msg and not hookmetamethod then
+                        log_entry(tag, msg)
+                    end
+                    local results = { old_invoke(self, ...) }
+                    if tag == "ITEM" or tag == "TRADE" then
+                        log_entry("REMOTE", string.format("↩️ [RETURN %s] -> %s", key, safe_serialize(results)))
+                    end
+                    return unpack(results)
+                end)
             end)
         end
     end
-    if hooked_count > 0 then
-        log_entry("INIT", string.format("✅ Direct hookfunction attached to %d targeted remotes", hooked_count))
-    end
 end
 
 -- ==============================================================================
--- 5. ATTRIBUTE SPY (LocalPlayer.IsTrading)
+-- 7. ATTRIBUTE & PLAYER STATE SPY
 -- ==============================================================================
 local_player:GetAttributeChangedSignal("IsTrading"):Connect(function()
     local val = local_player:GetAttribute("IsTrading")
-    log_entry("TRADE", string.format("[ATTRIBUTE] LocalPlayer:GetAttribute('IsTrading') -> %s", tostring(val)))
+    log_entry("TRADE", string.format("🏷️ [ATTRIBUTE] LocalPlayer:GetAttribute('IsTrading') -> %s", tostring(val)))
     if status_indicator then
-        status_indicator.Text = string.format("Status: %s | IsTrading: %s", val and "Trading Active" or "Idle", tostring(val))
+        status_indicator.Text = string.format("Status: %s | IsTrading: %s", val and "Trade Aktif" or "Idle", tostring(val))
         status_indicator.TextColor3 = val and Color3.fromRGB(0, 255, 170) or Color3.fromRGB(150, 150, 150)
     end
 end)
 
 -- ==============================================================================
--- 6. PROXIMITY PROMPT & INTERACTION SPY
--- ==============================================================================
-pcall(function()
-    local proximity_prompt_service = cloneref(game:GetService("ProximityPromptService"))
-    proximity_prompt_service.PromptTriggered:Connect(function(prompt, player)
-        local act = tostring(prompt.ActionText or "")
-        local obj = tostring(prompt.ObjectText or "")
-        log_entry("INTERACT", string.format("[PROXIMITY PROMPT] Action: '%s' | Target: '%s' | By: %s", act, obj, tostring(player and player.Name or "Unknown")))
-    end)
-    proximity_prompt_service.PromptButtonHoldBegan:Connect(function(prompt, player)
-        local act = tostring(prompt.ActionText or "")
-        local obj = tostring(prompt.ObjectText or "")
-        log_entry("INTERACT", string.format("[PROMPT HOLD BEGAN] '%s' on '%s' by %s", act, obj, tostring(player and player.Name or "Unknown")))
-    end)
-    log_entry("INIT", "ProximityPromptService spy connected.")
-end)
-
--- ==============================================================================
--- 7. BUTTON & INTERACTION LOGGER (Deep & Global)
+-- 8. GUI BUTTONS & USER INTERACTION SPY
 -- ==============================================================================
 local spied_buttons = {}
-local function spy_on_button(btn, path)
+local function attach_button_spy(btn, path)
     if not btn or not btn:IsA("GuiButton") or spied_buttons[btn] then return end
     spied_buttons[btn] = true
 
     local btn_text = (btn:IsA("TextButton") and btn.Text ~= "") and string.format(" ('%s')", btn.Text) or ""
 
     btn.Activated:Connect(function()
-        log_entry("GUI", string.format("[CLICK Activated] %s%s", path, btn_text))
+        log_entry("GUI", string.format("👆 [BUTTON CLICK: Activated] %s%s", path, btn_text))
     end)
     btn.MouseButton1Click:Connect(function()
-        log_entry("GUI", string.format("[CLICK Mouse1] %s%s", path, btn_text))
+        log_entry("GUI", string.format("👆 [BUTTON CLICK: Mouse1] %s%s", path, btn_text))
     end)
 end
 
-local function check_and_spy_button(btn)
+local function scan_and_attach_btn(btn)
     if not btn or not btn:IsA("GuiButton") or spied_buttons[btn] then return end
     local name_l = string.lower(btn.Name)
     local text_l = (btn:IsA("TextButton") and string.lower(btn.Text)) or ""
-    
+
     local is_relevant = string.find(name_l, "trade", 1, true)
         or string.find(name_l, "offer", 1, true)
         or string.find(name_l, "accept", 1, true)
         or string.find(name_l, "decline", 1, true)
         or string.find(name_l, "yes", 1, true)
         or string.find(name_l, "no", 1, true)
-        or string.find(name_l, "close", 1, true)
         or string.find(name_l, "ready", 1, true)
         or string.find(name_l, "confirm", 1, true)
-        or string.find(text_l, "trade", 1, true)
-        or string.find(text_l, "offer", 1, true)
-        or string.find(text_l, "accept", 1, true)
-        or string.find(text_l, "yes", 1, true)
-        or string.find(text_l, "no", 1, true)
         or string.find(text_l, "ready", 1, true)
         or string.find(text_l, "confirm", 1, true)
-        or (btn.Parent and (btn.Parent.Name == "Options" or btn.Parent.Name == "Blackout" or string.find(string.lower(btn.Parent.Name), "trade", 1, true)))
+        or (btn.Parent and (btn.Parent.Name == "Options" or btn.Parent.Name == "Buttons"))
 
     if is_relevant then
-        spy_on_button(btn, btn.Name)
+        attach_button_spy(btn, btn.Name)
     end
 end
 
--- Scan all existing GUI buttons in PlayerGui
-for _, desc in ipairs(player_gui:GetDescendants()) do
-    check_and_spy_button(desc)
-end
-
-player_gui.DescendantAdded:Connect(function(desc)
-    check_and_spy_button(desc)
-end)
+for _, desc in ipairs(player_gui:GetDescendants()) do scan_and_attach_btn(desc) end
+player_gui.DescendantAdded:Connect(scan_and_attach_btn)
 
 -- ==============================================================================
--- 8. PROMPT GUI DEEP SPY (PlayerGui.Prompt)
+-- 9. PROMPT GUI SPY (PlayerGui.Prompt)
 -- ==============================================================================
-local function monitor_prompt_gui(prompt_gui)
-    if not prompt_gui then return end
-    log_entry("PROMPT", string.format("Monitoring %s (Enabled=%s)", prompt_gui.Name, tostring(prompt_gui.Enabled)))
+local function monitor_prompt(p_gui)
+    if not p_gui then return end
+    log_entry("PROMPT", string.format("🔔 [PROMPT DETECTED] %s (Enabled: %s)", p_gui.Name, tostring(p_gui.Enabled)))
 
-    prompt_gui:GetPropertyChangedSignal("Enabled"):Connect(function()
-        log_entry("PROMPT", string.format("[PROMPT GUI] Enabled -> %s", tostring(prompt_gui.Enabled)))
+    p_gui:GetPropertyChangedSignal("Enabled"):Connect(function()
+        log_entry("PROMPT", string.format("🔔 [PROMPT GUI] Enabled -> %s", tostring(p_gui.Enabled)))
     end)
 
-    local blackout = prompt_gui:FindFirstChild("Blackout")
+    local blackout = p_gui:FindFirstChild("Blackout")
     if blackout then
         blackout:GetPropertyChangedSignal("Visible"):Connect(function()
-            log_entry("PROMPT", string.format("[BLACKOUT] Visible -> %s", tostring(blackout.Visible)))
+            log_entry("PROMPT", string.format("👁️ [BLACKOUT] Visible -> %s", tostring(blackout.Visible)))
         end)
         blackout:GetPropertyChangedSignal("Position"):Connect(function()
-            log_entry("PROMPT", string.format("[BLACKOUT] Position -> %s", tostring(blackout.Position)))
+            log_entry("PROMPT", string.format("📍 [BLACKOUT] Position -> %s", tostring(blackout.Position)))
         end)
 
         local label = blackout:FindFirstChild("Label")
         if label then
-            log_entry("PROMPT", string.format("[LABEL CURRENT] Text = '%s'", label.Text))
+            log_entry("PROMPT", string.format("💬 [PROMPT TEXT] '%s'", label.Text))
             label:GetPropertyChangedSignal("Text"):Connect(function()
-                log_entry("PROMPT", string.format("[LABEL TEXT] -> '%s'", label.Text))
+                log_entry("PROMPT", string.format("💬 [PROMPT TEXT] -> '%s'", label.Text))
             end)
         end
 
-        for _, desc in ipairs(blackout:GetDescendants()) do
-            if desc:IsA("GuiButton") then
-                spy_on_button(desc, "Prompt.Blackout." .. desc.Name)
+        local options = blackout:FindFirstChild("Options")
+        if options then
+            for _, b in ipairs(options:GetChildren()) do
+                if b:IsA("GuiButton") then attach_button_spy(b, "Prompt.Options." .. b.Name) end
             end
         end
     end
-
-    prompt_gui.DescendantAdded:Connect(function(desc)
-        if desc:IsA("TextLabel") and desc.Name == "Label" then
-            log_entry("PROMPT", string.format("[NEW LABEL] Text: '%s'", desc.Text))
-            desc:GetPropertyChangedSignal("Text"):Connect(function()
-                log_entry("PROMPT", string.format("[LABEL TEXT] -> '%s'", desc.Text))
-            end)
-        elseif desc:IsA("GuiButton") then
-            log_entry("PROMPT", string.format("[NEW BUTTON] %s", desc.Name))
-            spy_on_button(desc, "Prompt." .. desc.Name)
-        end
-    end)
 end
 
 -- ==============================================================================
--- 9. TRADING WINDOW DEEP SPY (! Trading / Trading)
+-- 10. TRADING WINDOW DEEP SPY (Slots, Countdown, Partner Status)
 -- ==============================================================================
-local function monitor_trading_gui(t_gui)
+local function monitor_trading_window(t_gui)
     if not t_gui then return end
-    log_entry("TRADE", string.format(">>> Monitoring Trading Window: %s (Enabled=%s)", t_gui.Name, tostring(t_gui.Enabled)))
+    log_entry("TRADE", string.format("🪟 [TRADING WINDOW OPEN] %s (Enabled: %s)", t_gui.Name, tostring(t_gui.Enabled)))
 
     t_gui:GetPropertyChangedSignal("Enabled"):Connect(function()
-        log_entry("TRADE", string.format("[TRADING WINDOW] Enabled -> %s", tostring(t_gui.Enabled)))
+        log_entry("TRADE", string.format("🪟 [TRADING WINDOW] Enabled -> %s", tostring(t_gui.Enabled)))
     end)
 
-    local function wire_elem(item)
-        if item:IsA("GuiButton") then
-            spy_on_button(item, t_gui.Name .. "." .. item.Name)
-        elseif item:IsA("TextLabel") then
-            local lower_name = string.lower(item.Name)
-            if string.find(lower_name, "status", 1, true) or string.find(lower_name, "ready", 1, true) or string.find(lower_name, "confirm", 1, true) or string.find(lower_name, "partner", 1, true) then
-                log_entry("TRADE", string.format("[TRADE LABEL] %s = '%s'", item.Name, item.Text))
-                item:GetPropertyChangedSignal("Text"):Connect(function()
-                    log_entry("TRADE", string.format("[TRADE LABEL] %s -> '%s'", item.Name, item.Text))
-                end)
+    local function wire_element(elem)
+        if elem:IsA("GuiButton") then
+            attach_button_spy(elem, t_gui.Name .. "." .. elem.Name)
+        elseif elem:IsA("TextLabel") then
+            local l_text = elem.Text or ""
+            local l_name = string.lower(elem.Name)
+
+            -- Countdown detection
+            local sec = string.match(l_text, "%((%d)s?%)") or string.match(l_text, "Countdown: (%d)") or string.match(l_text, "Confirm%s*%(?(%d)%)?")
+            if sec then
+                log_entry("TRADE", string.format("⏱️ [COUNTDOWN] Timer aktif: %ss", sec))
+            end
+
+            elem:GetPropertyChangedSignal("Text"):Connect(function()
+                local new_t = elem.Text or ""
+                local s = string.match(new_t, "%((%d)s?%)") or string.match(new_t, "Countdown: (%d)") or string.match(new_t, "Confirm%s*%(?(%d)%)?")
+                if s then
+                    log_entry("TRADE", string.format("⏱️ [COUNTDOWN] Timer: %ss (%s)", s, elem.Name))
+                elseif string.find(l_name, "status", 1, true) or string.find(l_name, "ready", 1, true) or string.find(l_name, "partner", 1, true) then
+                    log_entry("TRADE", string.format("ℹ️ [STATUS TEXT] %s -> '%s'", elem.Name, new_t))
+                end
+            end)
+        elseif elem:IsA("Frame") or elem:IsA("ImageLabel") then
+            -- Item slot grid change detection
+            local p = elem.Parent
+            if p and (string.find(string.lower(p.Name), "slot", 1, true) or string.find(string.lower(p.Name), "grid", 1, true) or string.find(string.lower(p.Name), "left", 1, true) or string.find(string.lower(p.Name), "right", 1, true)) then
+                log_entry("ITEM", string.format("🧩 [SLOT UPDATE] Elemen baru di slot trade: %s (Parent: %s)", elem.Name, p.Name))
             end
         end
     end
 
-    for _, desc in ipairs(t_gui:GetDescendants()) do
-        wire_elem(desc)
-    end
-
-    t_gui.DescendantAdded:Connect(function(desc)
-        wire_elem(desc)
-    end)
+    for _, desc in ipairs(t_gui:GetDescendants()) do wire_element(desc) end
+    t_gui.DescendantAdded:Connect(wire_element)
 end
 
 -- Scan existing GUIs
 local existing_prompt = player_gui:FindFirstChild("Prompt")
-if existing_prompt then monitor_prompt_gui(existing_prompt) end
+if existing_prompt then monitor_prompt(existing_prompt) end
 
 local existing_trade = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
-if existing_trade then monitor_trading_gui(existing_trade) end
+if existing_trade then monitor_trading_window(existing_trade) end
 
--- Watch PlayerGui dynamically
 player_gui.ChildAdded:Connect(function(child)
     if child.Name == "Prompt" then
-        log_entry("PROMPT", ">>> [GUI ADDED] PlayerGui.Prompt")
-        monitor_prompt_gui(child)
+        monitor_prompt(child)
     elseif child.Name == "! Trading" or child.Name == "Trading" then
-        log_entry("TRADE", string.format(">>> [TRADING WINDOW OPENED] %s added to PlayerGui!", child.Name))
-        monitor_trading_gui(child)
-    end
-end)
-
-player_gui.ChildRemoved:Connect(function(child)
-    if child.Name == "Prompt" or child.Name == "! Trading" or child.Name == "Trading" then
-        log_entry("GUI", string.format("<<< [GUI REMOVED] %s removed from PlayerGui", child.Name))
+        monitor_trading_window(child)
     end
 end)
 
 -- ==============================================================================
--- 10. CLEANUP HANDLER
+-- 11. CHAT SPY (Trade Completion Verification)
+-- ==============================================================================
+local function process_chat_message(sender_name, msg_text)
+    if not msg_text then return end
+    local lower = string.lower(msg_text)
+    if string.find(lower, "trade", 1, true) or string.find(lower, "completed", 1, true) or string.find(lower, "declined", 1, true) or string.find(lower, "cancelled", 1, true) then
+        log_entry("CHAT", string.format("💬 [CHAT MSG] [%s]: %s", tostring(sender_name or "System"), msg_text))
+        if string.find(lower, "completed", 1, true) then
+            log_entry("TRADE", "🎉 [TRADE VERIFIED SUCCESSFUL] Transaksi trade tercatat SUKSES di log chat server!")
+        end
+    end
+end
+
+pcall(function()
+    if text_chat_service then
+        text_chat_service.MessageReceived:Connect(function(msg)
+            if msg and msg.Text then
+                local s_name = msg.TextSource and msg.TextSource.Name or "System"
+                process_chat_message(s_name, msg.Text)
+            end
+        end)
+    end
+end)
+
+pcall(function()
+    local chat_events = replicated_storage:FindFirstChild("DefaultChatSystemChatEvents")
+    if chat_events then
+        local on_msg = chat_events:FindFirstChild("OnMessageDoneFiltering")
+        if on_msg then
+            on_msg.OnClientEvent:Connect(function(data)
+                if data and data.Message then
+                    process_chat_message(data.FromSpeaker, data.Message)
+                end
+            end)
+        end
+    end
+end)
+
+-- ==============================================================================
+-- 12. CLEANUP HANDLER
 -- ==============================================================================
 _G.NoirHub_TradeSpy_Cleanup = function()
-    spy_active = false
     _G.NoirHub_TradeSpy_ScriptID = nil
     pcall(function()
         local core = gethui and gethui() or game:GetService("CoreGui")
@@ -805,7 +893,7 @@ _G.NoirHub_TradeSpy_Cleanup = function()
         local old = player_gui:FindFirstChild("NoirHub_TradeSpyConsole")
         if old then old:Destroy() end
     end)
-    log_entry("CLEANUP", "Trade Debugger stopped.")
+    log_entry("CLEANUP", "Trade Debugger dihentikan.")
 end
 
-log_entry("READY", "=== Trade Debugger [v6.2] Active! Silakan lakukan tes trade ===")
+log_entry("READY", "=== Trade Super Debugger [v6.4] Siap! Melacak SendOffer -> AddItem -> Countdown -> Confirm -> Selesai ===")
