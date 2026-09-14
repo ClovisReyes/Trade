@@ -53,6 +53,61 @@ local function get_gui_control()
 end
 get_gui_control()
 
+local function kill_all_blackouts()
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                frame.Visible = false
+                frame.BackgroundTransparency = 1
+                frame.Active = false
+            end
+        end
+    end)
+
+    pcall(function()
+        local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
+        if psb then
+            psb.Enabled = false
+            for _, d in ipairs(psb:GetDescendants()) do
+                if d:IsA("Frame") or d:IsA("ImageLabel") then
+                    d.Visible = false
+                    d.BackgroundTransparency = 1
+                    d.Active = false
+                end
+            end
+        end
+    end)
+
+    pcall(function()
+        for _, gui in ipairs(player_gui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "NoirHub_AutoTrade" and gui.Name ~= "KeenanTrade" and gui.Name ~= "KeenanTradeDebugger" then
+                local g_lower = string_lower(gui.Name)
+                if string_find(g_lower, "blackout", 1, true) or string_find(g_lower, "fade", 1, true) then
+                    gui.Enabled = false
+                end
+            end
+        end
+    end)
+
+    pcall(function()
+        for _, parent in ipairs({lighting, workspace.CurrentCamera}) do
+            if parent then
+                for _, child in ipairs(parent:GetChildren()) do
+                    if child:IsA("BlurEffect") or child.Name == "Blur" then
+                        child.Enabled = false
+                    elseif child:IsA("ColorCorrectionEffect") then
+                        if child.Brightness < 0 or string_find(string_lower(child.Name), "blur", 1, true) or string_find(string_lower(child.Name), "dim", 1, true) or string_find(string_lower(child.Name), "blackout", 1, true) then
+                            child.Enabled = false
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
 local function restore_hud()
     local gc = get_gui_control()
     if gc then
@@ -62,24 +117,69 @@ local function restore_hud()
         pcall(function() gc:SetHUDVisibility(true) end)
         pcall(function() gc.Unlock() end)
         pcall(function() gc:Unlock() end)
+        if config and config.auto_accept_enabled then
+            pcall(function() gc.Close("Prompt") end)
+            pcall(function() gc:Close("Prompt") end)
+        end
     end
 
     pcall(function()
-        for _, child in ipairs(lighting:GetChildren()) do
-            if child:IsA("BlurEffect") or child.Name == "Blur" then
-                child.Enabled = false
+        for _, gui_name in ipairs({"HUD", "! HUD", "MainHUD", "GameHUD", "TopBar", "CoreHUD"}) do
+            local h = player_gui:FindFirstChild(gui_name)
+            if h and h:IsA("ScreenGui") then
+                h.Enabled = true
             end
         end
     end)
 
+    kill_all_blackouts()
+
     pcall(function()
         local prompt_gui = player_gui:FindFirstChild("Prompt")
         if prompt_gui then
-            prompt_gui.Enabled = false
             local blackout = prompt_gui:FindFirstChild("Blackout")
-            if blackout then blackout.Visible = true end
             local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then frame.Visible = true end
+            if frame then
+                frame.Visible = false
+                frame.BackgroundTransparency = 1
+                frame.Active = false
+            end
+
+            if config and config.auto_accept_enabled then
+                if blackout then
+                    local label = blackout:FindFirstChild("Label")
+                    local text = label and label.Text or ""
+                    local lower = string_lower(text)
+                    if string_find(lower, "trade request", 1, true) or string_find(lower, "accept", 1, true) then
+                        blackout.Position = UDim2.new(10, 0, 10, 0)
+                        blackout.Visible = false
+                        prompt_gui.Enabled = false
+                    end
+                end
+                if not auto_accept_active then
+                    prompt_gui.Enabled = false
+                end
+            else
+                -- Auto Accept is OFF:
+                -- Center the prompt card and ensure Enabled so trade offers display cleanly without blackout
+                prompt_gui.Enabled = true
+                if blackout then
+                    blackout.Visible = true
+                    blackout.AnchorPoint = Vector2.new(0.5, 0.5)
+                    blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    blackout.ZIndex = 15
+                    local options = blackout:FindFirstChild("Options")
+                    if options then
+                        options.Visible = true
+                        for _, btn in ipairs(options:GetChildren()) do
+                            if btn:IsA("GuiButton") then
+                                btn.Visible = true
+                                btn.Active = true
+                            end
+                        end
+                    end
+                end
+            end
         end
     end)
 end
@@ -126,18 +226,10 @@ local function get_net_lookup()
     _net_lookup = {}
 
     local net_folder = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
-    local children = net_folder:GetChildren()
-
-    for i, v in ipairs(children) do
+    for _, child in ipairs(net_folder:GetChildren()) do
         for _, logical_name in pairs(remote_map) do
-            if string_find(v.Name, logical_name, 1, true) then
-                for j = i + 1, #children do
-                    local next_obj = children[j]
-                    if string_match(next_obj.Name, "^RF/") or string_match(next_obj.Name, "^RE/") then
-                        _net_lookup[logical_name] = next_obj
-                        break
-                    end
-                end
+            if string_find(child.Name, logical_name, 1, true) then
+                _net_lookup[logical_name] = child
                 break
             end
         end
@@ -338,19 +430,260 @@ local function click_gui_button(btn)
     if not btn then return end
     pcall(function()
         if firesignal then
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.Activated)
-        elseif getconnections then
-            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
-                conn:Fire()
+            pcall(firesignal, btn.Activated)
+            pcall(firesignal, btn.MouseButton1Click)
+            pcall(firesignal, btn.MouseButton1Up)
+        end
+        if getconnections then
+            for _, sig in ipairs({btn.Activated, btn.MouseButton1Click, btn.MouseButton1Up}) do
+                pcall(function()
+                    for _, conn in ipairs(getconnections(sig)) do
+                        pcall(function() conn:Fire() end)
+                    end
+                end)
             end
         end
     end)
 end
 
+local prompt_watcher_conns = {}
+
+local function cleanup_prompt_watcher()
+    for _, c in ipairs(prompt_watcher_conns) do
+        pcall(function() c:Disconnect() end)
+    end
+    prompt_watcher_conns = {}
+end
+
+local last_trade_offer_time = 0
+
+local function restore_blackout_defaults()
+    kill_all_blackouts()
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            if blackout then
+                blackout.Visible = true
+                blackout.AnchorPoint = Vector2.new(0.5, 0.5)
+                blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+                blackout.ZIndex = 15
+                local options = blackout:FindFirstChild("Options")
+                if options then
+                    options.Visible = true
+                    for _, btn in ipairs(options:GetChildren()) do
+                        if btn:IsA("GuiButton") then
+                            btn.Visible = true
+                            btn.Active = true
+                        end
+                    end
+                end
+            end
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                frame.Visible = false
+                frame.BackgroundTransparency = 1
+                frame.Active = false
+            end
+            if config and config.auto_accept_enabled then
+                prompt_gui.Enabled = false
+            else
+                prompt_gui.Enabled = true
+            end
+        end
+    end)
+end
+
+local function suppress_trade_prompt()
+    if not (config and config.auto_accept_enabled) then return end
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if not prompt_gui then return end
+        local blackout = prompt_gui:FindFirstChild("Blackout")
+        if not blackout then return end
+
+        local label = blackout:FindFirstChild("Label")
+        local text = label and label.Text or ""
+        local lower = string_lower(text)
+
+        local is_trade = string_find(lower, "trade", 1, true)
+            or string_find(lower, "accept", 1, true)
+            or string_find(lower, "request", 1, true)
+            or string_find(lower, "offer", 1, true)
+            or auto_accept_active
+            or (tick() - last_trade_offer_time < 4)
+
+        if is_trade then
+            -- 1. Move Blackout far off-screen and hide immediately so it NEVER shows on screen
+            prompt_gui.Enabled = false
+            blackout.Visible = false
+            blackout.Position = UDim2.new(10, 0, 10, 0)
+
+            -- 2. Frame must be 100% invisible and transparent (never block view)
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                frame.Visible = false
+                frame.BackgroundTransparency = 1
+                frame.Active = false
+            end
+
+            -- 3. Clear any blur in Lighting and Camera
+            kill_all_blackouts()
+
+            -- 4. Click YES button in background so PromptController dismisses cleanly and confirms trade
+            local options = blackout:FindFirstChild("Options")
+            if options then
+                local yes_btn = options:FindFirstChild("Yes")
+                if yes_btn then
+                    click_gui_button(yes_btn)
+                end
+            end
+
+            -- 5. Close Prompt in GuiControl
+            local gc = get_gui_control()
+            if gc then
+                pcall(function() gc.Close("Prompt") end)
+                pcall(function() gc:Close("Prompt") end)
+            end
+
+            -- 6. Restore HUD immediately
+            restore_hud()
+        end
+    end)
+end
+
+local function init_prompt_watcher()
+    cleanup_prompt_watcher()
+    restore_blackout_defaults()
+
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt") or player_gui:WaitForChild("Prompt", 5)
+        if not prompt_gui then return end
+
+        local blackout = prompt_gui:FindFirstChild("Blackout") or prompt_gui:WaitForChild("Blackout", 5)
+        if blackout then
+            local label = blackout:FindFirstChild("Label")
+            if label then
+                table.insert(prompt_watcher_conns, label:GetPropertyChangedSignal("Text"):Connect(function()
+                    if config and config.auto_accept_enabled then
+                        suppress_trade_prompt()
+                    else
+                        blackout.Visible = true
+                        blackout.AnchorPoint = Vector2.new(0.5, 0.5)
+                        blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+                        blackout.ZIndex = 15
+                    end
+                end))
+            end
+        end
+
+        local frame = prompt_gui:FindFirstChild("Frame")
+        if frame then
+            frame.Visible = false
+            frame.BackgroundTransparency = 1
+            frame.Active = false
+            table.insert(prompt_watcher_conns, frame:GetPropertyChangedSignal("Visible"):Connect(function()
+                if frame.Visible then
+                    frame.Visible = false
+                    frame.BackgroundTransparency = 1
+                    frame.Active = false
+                end
+            end))
+            table.insert(prompt_watcher_conns, frame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
+                if frame.BackgroundTransparency < 1 then
+                    frame.BackgroundTransparency = 1
+                end
+            end))
+        end
+
+        table.insert(prompt_watcher_conns, prompt_gui.DescendantAdded:Connect(function(desc)
+            if desc:IsA("TextLabel") and desc.Name == "Label" and desc.Parent and desc.Parent.Name == "Blackout" then
+                table.insert(prompt_watcher_conns, desc:GetPropertyChangedSignal("Text"):Connect(function()
+                    if config and config.auto_accept_enabled then
+                        suppress_trade_prompt()
+                    else
+                        local b = desc.Parent
+                        if b then
+                            b.Visible = true
+                            b.AnchorPoint = Vector2.new(0.5, 0.5)
+                            b.Position = UDim2.new(0.5, 0, 0.5, 0)
+                            b.ZIndex = 15
+                        end
+                    end
+                end))
+                if config and config.auto_accept_enabled then
+                    suppress_trade_prompt()
+                else
+                    local b = desc.Parent
+                    if b then
+                        b.Visible = true
+                        b.AnchorPoint = Vector2.new(0.5, 0.5)
+                        b.Position = UDim2.new(0.5, 0, 0.5, 0)
+                        b.ZIndex = 15
+                    end
+                end
+            end
+        end))
+
+        table.insert(prompt_watcher_conns, prompt_gui:GetPropertyChangedSignal("Enabled"):Connect(function()
+            if config and config.auto_accept_enabled then
+                if prompt_gui.Enabled then
+                    local b = prompt_gui:FindFirstChild("Blackout")
+                    local lbl = b and b:FindFirstChild("Label")
+                    local text = lbl and lbl.Text or ""
+                    local lower = string_lower(text)
+                    if string_find(lower, "trade", 1, true) or string_find(lower, "accept", 1, true) or string_find(lower, "request", 1, true) or auto_accept_active or (tick() - last_trade_offer_time < 4) then
+                        suppress_trade_prompt()
+                    else
+                        task.delay(0.05, function()
+                            if config and config.auto_accept_enabled and prompt_gui.Enabled then
+                                suppress_trade_prompt()
+                            end
+                        end)
+                    end
+                end
+            else
+                -- Auto Accept is OFF:
+                -- Keep Frame permanently invisible so it NEVER blocks the popup with a black screen!
+                local f = prompt_gui:FindFirstChild("Frame")
+                if f then
+                    f.Visible = false
+                    f.BackgroundTransparency = 1
+                    f.Active = false
+                end
+                kill_all_blackouts()
+                -- Keep Blackout centered and visible when Prompt is enabled by the game
+                local b = prompt_gui:FindFirstChild("Blackout")
+                if b then
+                    b.Visible = true
+                    b.AnchorPoint = Vector2.new(0.5, 0.5)
+                    b.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    b.ZIndex = 15
+                    local options = b:FindFirstChild("Options")
+                    if options then
+                        options.Visible = true
+                        for _, btn in ipairs(options:GetChildren()) do
+                            if btn:IsA("GuiButton") then
+                                btn.Visible = true
+                                btn.Active = true
+                            end
+                        end
+                    end
+                end
+            end
+        end))
+    end)
+end
+init_prompt_watcher()
+
 local function close_trading_gui()
     auto_accept_active = false
     pcall(function()
+        local gc = get_gui_control()
+        if gc then
+            pcall(function() gc.Close("! Trading") end)
+            pcall(function() gc:Close("! Trading") end)
+        end
         local t_gui = player_gui:FindFirstChild("! Trading")
         if t_gui then
             t_gui.Enabled = false
@@ -365,6 +698,37 @@ local function close_trading_gui()
             end
         end
     end)
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            if config and config.auto_accept_enabled then
+                prompt_gui.Enabled = false
+            else
+                prompt_gui.Enabled = true
+            end
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                frame.Visible = false
+                frame.BackgroundTransparency = 1
+                frame.Active = false
+            end
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            if blackout then
+                if config and config.auto_accept_enabled then
+                    blackout.Visible = false
+                    blackout.Position = UDim2.new(10, 0, 10, 0)
+                else
+                    blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    blackout.AnchorPoint = Vector2.new(0.5, 0.5)
+                    blackout.Visible = true
+                    blackout.ZIndex = 15
+                end
+            end
+        end
+        local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
+        if psb then psb.Enabled = false end
+    end)
+    kill_all_blackouts()
     restore_hud()
 end
 
@@ -378,6 +742,39 @@ local function toggle_auto_accept(enable)
 
     if not enable then
         auto_accept_active = false
+        pcall(function()
+            local prompt_gui = player_gui:FindFirstChild("Prompt")
+            if prompt_gui then
+                prompt_gui.Enabled = true
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then
+                    blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    blackout.AnchorPoint = Vector2.new(0.5, 0.5)
+                    blackout.Visible = true
+                    blackout.ZIndex = 15
+                    local options = blackout:FindFirstChild("Options")
+                    if options then
+                        options.Visible = true
+                        for _, btn in ipairs(options:GetChildren()) do
+                            if btn:IsA("GuiButton") then
+                                btn.Visible = true
+                                btn.Active = true
+                            end
+                        end
+                    end
+                end
+                local frame = prompt_gui:FindFirstChild("Frame")
+                if frame then
+                    frame.Visible = false
+                    frame.BackgroundTransparency = 1
+                    frame.Active = false
+                end
+            end
+            local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
+            if psb then psb.Enabled = false end
+        end)
+
+        kill_all_blackouts()
         restore_hud()
         return
     end
@@ -388,68 +785,110 @@ local function toggle_auto_accept(enable)
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         if not config.auto_accept_enabled then return end
 
+        last_trade_offer_time = tick()
+
+        -- Immediately hide prompt off-screen before it renders
+        suppress_trade_prompt()
+
+        -- Invoke server to accept trade offer
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
-
         pcall(function()
-            local prompt_gui = player_gui:FindFirstChild("Prompt")
-            if prompt_gui then
-                for _, desc in ipairs(prompt_gui:GetDescendants()) do
-                    if desc:IsA("TextLabel") and desc.Text then
-                        local text = string_lower(desc.Text)
-                        if string_find(text, "trade", 1, true) then
-                            local parent_frame = desc:FindFirstAncestorOfClass("Frame") or desc.Parent
-                            if parent_frame then
-                                for _, btn in ipairs(parent_frame:GetDescendants()) do
-                                    if btn:IsA("GuiButton") then
-                                        local btn_text = (btn:IsA("TextButton") and string_lower(btn.Text) or "")
-                                        local btn_name = string_lower(btn.Name)
-                                        if btn_name == "yes" or btn_name == "accept" or string_find(btn_text, "yes", 1, true) or string_find(btn_text, "accept", 1, true) then
-                                            click_gui_button(btn)
-                                        end
-                                    end
-                                end
-                                if parent_frame.Name ~= "Blackout" and parent_frame.Name ~= "Frame" then
-                                    pcall(function() parent_frame:Destroy() end)
-                                elseif parent_frame:IsA("GuiObject") then
-                                    parent_frame.Visible = false
-                                end
-                            end
-                        end
+            trade_remotes.AcceptTradeOffer:InvokeServer(requester)
+        end)
+
+        task.defer(suppress_trade_prompt)
+        task.delay(0.05, suppress_trade_prompt)
+        task.delay(0.1, suppress_trade_prompt)
+
+        -- Background loop: ensure Yes button is clicked as soon as prompt options appear,
+        -- so the game's PromptController terminates and opens ! Trading cleanly
+        task_spawn(function()
+            for _ = 1, 15 do
+                if not config.auto_accept_enabled then break end
+                local p = player_gui:FindFirstChild("Prompt")
+                local b = p and p:FindFirstChild("Blackout")
+                if b then
+                    b.Visible = false
+                    b.Position = UDim2.new(10, 0, 10, 0)
+                    local opt = b:FindFirstChild("Options")
+                    local y = opt and opt:FindFirstChild("Yes")
+                    if y then
+                        click_gui_button(y)
+                        break
                     end
                 end
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = false end
+                task_wait(0.05)
             end
         end)
-    end)
 
-    auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
-        if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-        close_trading_gui()
-        restore_hud()
+        -- Watch for IsTrading attribute becoming true and open ! Trading immediately
+        task_spawn(function()
+            for _ = 1, 30 do
+                if not config.auto_accept_enabled then break end
+                if local_player:GetAttribute("IsTrading") then
+                    pcall(function()
+                        local gc = get_gui_control()
+                        if gc then
+                            pcall(function() gc.Open("! Trading") end)
+                            pcall(function() gc:Open("! Trading") end)
+                            pcall(function() gc.Open("Trading") end)
+                            pcall(function() gc:Open("Trading") end)
+                        end
+                        local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
+                        if t_gui then
+                            t_gui.Enabled = true
+                            local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChildWhichIsA("Frame")
+                            if frame then frame.Visible = true end
+                        end
+                    end)
+                    break
+                end
+                task_wait(0.1)
+            end
+        end)
     end)
 
     auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
         if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         auto_accept_active = true
 
+        -- Kill any black screen from Prompt, PurchaseScreenBlackout, or Lighting
         pcall(function()
             local prompt_gui = player_gui:FindFirstChild("Prompt")
             if prompt_gui then
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then blackout.Visible = false end
+                prompt_gui.Enabled = false
                 local frame = prompt_gui:FindFirstChild("Frame")
-                if frame then frame.Visible = false end
+                if frame then
+                    frame.Visible = false
+                    frame.BackgroundTransparency = 1
+                    frame.Active = false
+                end
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                if blackout then
+                    blackout.Visible = false
+                    blackout.Position = UDim2.new(10, 0, 10, 0)
+                end
             end
+            local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
+            if psb then psb.Enabled = false end
         end)
+        kill_all_blackouts()
+        restore_hud()
 
         pcall(function()
-            local t_gui = player_gui:FindFirstChild("! Trading")
+            local gc = get_gui_control()
+            if gc then
+                pcall(function() gc.Open("! Trading") end)
+                pcall(function() gc:Open("! Trading") end)
+                pcall(function() gc.Open("Trading") end)
+                pcall(function() gc:Open("Trading") end)
+            end
+            local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
             if t_gui then
                 t_gui.Enabled = true
-                local frame = t_gui:FindFirstChild("Frame")
+                local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChildWhichIsA("Frame")
                 if frame then
                     frame.Visible = true
                 end
@@ -457,7 +896,7 @@ local function toggle_auto_accept(enable)
         end)
 
         task_spawn(function()
-            task_wait(0.5)
+            task_wait(0.3)
             if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
 
             pcall(function()
@@ -467,10 +906,10 @@ local function toggle_auto_accept(enable)
             local start_time = tick()
             while config.auto_accept_enabled and auto_accept_active and local_player:GetAttribute("IsTrading") and (tick() - start_time) < 60 do
                 pcall(function()
-                    local t_gui = player_gui:FindFirstChild("! Trading")
+                    local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
                     if t_gui then
                         t_gui.Enabled = true
-                        local frame = t_gui:FindFirstChild("Frame")
+                        local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChildWhichIsA("Frame")
                         if frame then frame.Visible = true end
                     end
                 end)
@@ -483,7 +922,7 @@ local function toggle_auto_accept(enable)
                 end)
 
                 pcall(function()
-                    local t_gui = player_gui:FindFirstChild("! Trading")
+                    local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
                     if t_gui then
                         for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
                             local btn = t_gui:FindFirstChild(btn_name, true)
@@ -498,6 +937,22 @@ local function toggle_auto_accept(enable)
             end
 
             close_trading_gui()
+            kill_all_blackouts()
+            restore_hud()
+        end)
+    end)
+
+    auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
+        if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+        close_trading_gui()
+        kill_all_blackouts()
+        restore_hud()
+        task.delay(0.2, function()
+            kill_all_blackouts()
+            restore_hud()
+        end)
+        task.delay(0.5, function()
+            kill_all_blackouts()
             restore_hud()
         end)
     end)
@@ -4669,6 +5124,7 @@ pcall(function() toggle_auto_accept(config.auto_accept_enabled) end)
 
 _G.NoirHub_AutoTrade_Cleanup = function()
     if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end); trade_ended_conn = nil end
+    pcall(cleanup_prompt_watcher)
     pcall(function() toggle_auto_accept(false) end)
     pcall(restore_hud)
 
