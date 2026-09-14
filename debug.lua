@@ -1,6 +1,7 @@
 --[[
-    NOIR HUB - TRADE ULTRA DEBUGGER & DEEP INSPECTOR
-    Merekam 100% data trade: Semua Remotes (In & Out), Isi GUI Trading, Klik Tombol, State Item & Attributes.
+    NOIR HUB - TRADE SUPER DEBUGGER [v6.2]
+    Merekam 100% data trade: Remote Masuk/Keluar, GUI Prompt, Window Trading, Klik Tombol, Attribute IsTrading.
+    Ringan, stabil di mobile/Android executor, tidak spam/freeze.
 ]]
 
 local cloneref = cloneref or function(ref) return ref end
@@ -152,10 +153,10 @@ local function create_spy_gui()
     h_corner.Parent = header
 
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(0.48, 0, 1, 0)
+    title.Size = UDim2.new(0.50, 0, 1, 0)
     title.Position = UDim2.new(0, 8, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "🕵️ Trade Ultra Debugger [v2]"
+    title.Text = "🕵️ Trade Debugger [v6.2]"
     title.TextColor3 = Color3.fromRGB(0, 255, 170)
     title.TextSize = 10
     title.Font = Enum.Font.SourceSansBold
@@ -378,81 +379,228 @@ end
 create_spy_gui()
 
 -- ==============================================================================
--- 3. ENVIRONMENT & REMOTES RESOLUTION
+-- 3. ENVIRONMENT & REMOTES RESOLUTION (Targeted & Hashed Resolution)
 -- ==============================================================================
 local exec_name = identifyexecutor and identifyexecutor() or "Unknown Executor"
-log_entry("INIT", string.format("Ultra Debugger Started on %s (%s)", local_player.Name, exec_name))
+log_entry("INIT", string.format("Trade Debugger [v6.2] Started on %s (%s)", local_player.Name, exec_name))
 
-local net_folder = nil
-pcall(function()
-    net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"].net
-end)
+local trade_remote_names = {
+    SendTradeOffer     = true,
+    AcceptTradeOffer   = true,
+    TradeOfferReceived = true,
+    TradeStarted       = true,
+    TradeEnded         = true,
+    AddItem            = true,
+    SetReady           = true,
+    ConfirmTrade       = true,
+}
 
-local remote_lookup = {}
-if net_folder then
-    local children = net_folder:GetChildren()
-    log_entry("INIT", string.format("Scanning Net folder (%d children found)...", #children))
-    for idx, child in ipairs(children) do
-        remote_lookup[child] = child.Name
-        remote_lookup[child.Name] = child
+local discovered_remotes = {}  -- [logical_name] = RemoteInstance
+local discovered_hashes  = {}  -- [hash_name] = logical_name
+local discovered_objects = {}  -- [RemoteInstance] = logical_name
 
-        -- Dump all trade related remotes
-        local c_lower = string.lower(child.Name)
-        if string.find(c_lower, "trade") or string.find(c_lower, "item") or string.find(c_lower, "ready") or string.find(c_lower, "confirm") or string.find(c_lower, "offer") then
-            log_entry("REMOTE", string.format("Found Trade Remote #%d: %s (%s)", idx, child.Name, child.ClassName))
-        end
-
-        -- Listen to EVERY RemoteEvent in net folder to ensure zero blindspots
-        if child:IsA("RemoteEvent") then
-            pcall(function()
-                child.OnClientEvent:Connect(function(...)
-                    local args = { ... }
-                    local s_args = {}
-                    for i, a in ipairs(args) do
-                        table.insert(s_args, string.format("#%d:%s", i, safe_serialize(a)))
+local function resolve_trade_remotes()
+    pcall(function()
+        local net_folder = nil
+        pcall(function()
+            net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"].net
+        end)
+        if not net_folder then
+            local rep_packages = replicated_storage:FindFirstChild("Packages")
+            local index_folder = rep_packages and rep_packages:FindFirstChild("_Index")
+            if index_folder then
+                for _, folder in ipairs(index_folder:GetChildren()) do
+                    if string.find(folder.Name, "sleitnick_net", 1, true) then
+                        net_folder = folder:FindFirstChild("net")
+                        if net_folder then break end
                     end
-                    log_entry("REMOTE", string.format(">>> [NET RE] %s received: [%s]", child.Name, table.concat(s_args, ", ")))
-                end)
-            end)
-        end
-    end
-else
-    log_entry("WARN", "Net folder sleitnick_net@0.2.0 not found in ReplicatedStorage!")
-end
-
--- ==============================================================================
--- 4. OUTGOING REMOTE CALL SPY (__namecall Hook)
--- ==============================================================================
-local g_meta = getrawmetatable and getrawmetatable(game) or nil
-if g_meta and setreadonly and hookmetamethod then
-    local old_namecall
-    old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        local args = { ... }
-
-        if (method == "InvokeServer" or method == "FireServer") and self then
-            local self_name = tostring(self.Name)
-            local p_name = tostring(self.Parent and self.Parent.Name or "nil")
-            
-            local is_net = string.find(string.lower(p_name), "net") or (net_folder and self.Parent == net_folder)
-            local is_trade = string.find(string.lower(self_name), "trade") or string.find(string.lower(self_name), "ready") or string.find(string.lower(self_name), "confirm") or string.find(string.lower(self_name), "item")
-
-            if is_net or is_trade then
-                local s_args = {}
-                for idx, val in ipairs(args) do
-                    table.insert(s_args, string.format("#%d:%s", idx, safe_serialize(val)))
                 end
-                log_entry("REMOTE", string.format("<<< [OUTGOING] %s:%s([%s])", self_name, method, table.concat(s_args, ", ")))
             end
         end
 
-        return old_namecall(self, ...)
+        if not net_folder then
+            log_entry("WARN", "Could not locate sleitnick_net folder in ReplicatedStorage!")
+            return
+        end
+
+        local children = net_folder:GetChildren()
+        for i, child in ipairs(children) do
+            for key, _ in pairs(trade_remote_names) do
+                if string.find(child.Name, key, 1, true) then
+                    discovered_remotes[key] = child
+                    discovered_objects[child] = key
+
+                    -- Check if next sibling is a hashed remote (RF/ or RE/)
+                    for j = i + 1, math.min(i + 4, #children) do
+                        local next_c = children[j]
+                        local n_name = next_c.Name
+                        if string.sub(n_name, 1, 3) == "RF/" or string.sub(n_name, 1, 3) == "RE/" then
+                            discovered_remotes[key .. "_hash"] = next_c
+                            discovered_hashes[n_name] = key
+                            discovered_objects[next_c] = key
+                            break
+                        end
+                    end
+                end
+            end
+        end
     end)
-    log_entry("INIT", "Hooked __namecall for all outgoing Net & Trade calls.")
+end
+
+resolve_trade_remotes()
+
+local remote_summary = {}
+for k, obj in pairs(discovered_remotes) do
+    table.insert(remote_summary, string.format("%s->%s(%s)", k, obj.Name, obj.ClassName))
+end
+log_entry("INIT", string.format("Found %d trade remote references: [%s]", #remote_summary, table.concat(remote_summary, ", ")))
+
+-- Inbound Event Listeners
+local function attach_inbound_listener(key, callback)
+    local attached = false
+    local r = discovered_remotes[key]
+    if r and r:IsA("RemoteEvent") then
+        r.OnClientEvent:Connect(callback)
+        attached = true
+    end
+    local r_hash = discovered_remotes[key .. "_hash"]
+    if r_hash and r_hash:IsA("RemoteEvent") and r_hash ~= r then
+        r_hash.OnClientEvent:Connect(callback)
+        attached = true
+    end
+    return attached
+end
+
+local r_offer_ok = attach_inbound_listener("TradeOfferReceived", function(requester, ...)
+    local req_name = typeof(requester) == "Instance" and requester.Name or tostring(requester)
+    log_entry("TRADE", string.format(">>> [INCOMING OFFER] From: %s | Extra: %s", req_name, safe_serialize({...})))
+    if status_indicator then
+        status_indicator.Text = "Status: Offer Received from " .. req_name
+        status_indicator.TextColor3 = Color3.fromRGB(255, 200, 0)
+    end
+end)
+if r_offer_ok then
+    log_entry("INIT", "Targeted listener connected: TradeOfferReceived")
+else
+    log_entry("WARN", "Could not attach to TradeOfferReceived")
+end
+
+local r_start_ok = attach_inbound_listener("TradeStarted", function(...)
+    log_entry("TRADE", string.format(">>> [TRADE STARTED] Session active! Args: %s", safe_serialize({...})))
+    if status_indicator then
+        status_indicator.Text = "Status: Trade Active! | IsTrading: " .. tostring(local_player:GetAttribute("IsTrading"))
+        status_indicator.TextColor3 = Color3.fromRGB(0, 255, 170)
+    end
+end)
+if r_start_ok then
+    log_entry("INIT", "Targeted listener connected: TradeStarted")
+end
+
+local r_end_ok = attach_inbound_listener("TradeEnded", function(...)
+    log_entry("TRADE", string.format(">>> [TRADE ENDED] Session closed. Args: %s", safe_serialize({...})))
+    if status_indicator then
+        status_indicator.Text = "Status: Idle | Trade Ended"
+        status_indicator.TextColor3 = Color3.fromRGB(150, 150, 150)
+    end
+end)
+if r_end_ok then
+    log_entry("INIT", "Targeted listener connected: TradeEnded")
 end
 
 -- ==============================================================================
--- 5. ATTRIBUTE & STATE SPY
+-- 4. OUTGOING REMOTE SPY (Dual-Mode: hookmetamethod + Direct hookfunction)
+-- ==============================================================================
+local namecall_hooked = false
+if hookmetamethod then
+    local old_namecall
+    local success, err = pcall(function()
+        old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
+            local method = getnamecallmethod()
+            if (method == "InvokeServer" or method == "FireServer") and typeof(self) == "Instance" then
+                local self_name = tostring(self.Name)
+                local self_lower = string.lower(self_name)
+                local p = self.Parent
+                local p_name = p and tostring(p.Name) or ""
+                local p_lower = string.lower(p_name)
+                
+                local is_net = string.find(p_lower, "net", 1, true) or (p and p.Parent and string.find(string.lower(tostring(p.Parent.Name)), "sleitnick", 1, true))
+                local is_hash = string.sub(self_name, 1, 3) == "RF/" or string.sub(self_name, 1, 3) == "RE/"
+                local is_trade_kw = string.find(self_lower, "trade", 1, true)
+                    or string.find(self_lower, "offer", 1, true)
+                    or string.find(self_lower, "ready", 1, true)
+                    or string.find(self_lower, "confirm", 1, true)
+                    or string.find(self_lower, "item", 1, true)
+                    or string.find(self_lower, "accept", 1, true)
+                    or string.find(self_lower, "decline", 1, true)
+                
+                local alias = discovered_hashes[self_name] or discovered_objects[self]
+                
+                if alias or is_trade_kw or (is_net and is_hash) then
+                    local display_tag = alias and string.format("%s (%s)", alias, self_name) or self_name
+                    local args = { ... }
+                    local s_args = {}
+                    for idx, val in ipairs(args) do
+                        table.insert(s_args, string.format("#%d:%s", idx, safe_serialize(val)))
+                    end
+                    log_entry("REMOTE", string.format("<<< [OUTGOING] %s:%s([%s])", display_tag, method, table.concat(s_args, ", ")))
+                end
+            end
+            return old_namecall(self, ...)
+        end)
+    end)
+    if success then
+        namecall_hooked = true
+        log_entry("INIT", "✅ Hooked __namecall (Global outgoing trade/net calls intercepted)")
+    else
+        log_entry("WARN", "hookmetamethod __namecall failed: " .. tostring(err))
+    end
+end
+
+-- Direct hook on discovered RemoteFunctions / RemoteEvents
+if hookfunction then
+    local hooked_count = 0
+    for key, robj in pairs(discovered_remotes) do
+        if typeof(robj) == "Instance" then
+            pcall(function()
+                if robj:IsA("RemoteFunction") and robj.InvokeServer then
+                    local old_inv
+                    old_inv = hookfunction(robj.InvokeServer, function(self, ...)
+                        if not namecall_hooked then
+                            local args = { ... }
+                            local s_args = {}
+                            for idx, val in ipairs(args) do
+                                table.insert(s_args, string.format("#%d:%s", idx, safe_serialize(val)))
+                            end
+                            log_entry("REMOTE", string.format("<<< [OUTGOING DIRECT] %s (%s):InvokeServer([%s])", key, robj.Name, table.concat(s_args, ", ")))
+                        end
+                        return old_inv(self, ...)
+                    end)
+                    hooked_count = hooked_count + 1
+                elseif robj:IsA("RemoteEvent") and robj.FireServer then
+                    local old_fire
+                    old_fire = hookfunction(robj.FireServer, function(self, ...)
+                        if not namecall_hooked then
+                            local args = { ... }
+                            local s_args = {}
+                            for idx, val in ipairs(args) do
+                                table.insert(s_args, string.format("#%d:%s", idx, safe_serialize(val)))
+                            end
+                            log_entry("REMOTE", string.format("<<< [OUTGOING DIRECT] %s (%s):FireServer([%s])", key, robj.Name, table.concat(s_args, ", ")))
+                        end
+                        return old_fire(self, ...)
+                    end)
+                    hooked_count = hooked_count + 1
+                end
+            end)
+        end
+    end
+    if hooked_count > 0 then
+        log_entry("INIT", string.format("✅ Direct hookfunction attached to %d targeted remotes", hooked_count))
+    end
+end
+
+-- ==============================================================================
+-- 5. ATTRIBUTE SPY (LocalPlayer.IsTrading)
 -- ==============================================================================
 local_player:GetAttributeChangedSignal("IsTrading"):Connect(function()
     local val = local_player:GetAttribute("IsTrading")
@@ -464,7 +612,25 @@ local_player:GetAttributeChangedSignal("IsTrading"):Connect(function()
 end)
 
 -- ==============================================================================
--- 6. BUTTON & INTERACTION LOGGER
+-- 6. PROXIMITY PROMPT & INTERACTION SPY
+-- ==============================================================================
+pcall(function()
+    local proximity_prompt_service = cloneref(game:GetService("ProximityPromptService"))
+    proximity_prompt_service.PromptTriggered:Connect(function(prompt, player)
+        local act = tostring(prompt.ActionText or "")
+        local obj = tostring(prompt.ObjectText or "")
+        log_entry("INTERACT", string.format("[PROXIMITY PROMPT] Action: '%s' | Target: '%s' | By: %s", act, obj, tostring(player and player.Name or "Unknown")))
+    end)
+    proximity_prompt_service.PromptButtonHoldBegan:Connect(function(prompt, player)
+        local act = tostring(prompt.ActionText or "")
+        local obj = tostring(prompt.ObjectText or "")
+        log_entry("INTERACT", string.format("[PROMPT HOLD BEGAN] '%s' on '%s' by %s", act, obj, tostring(player and player.Name or "Unknown")))
+    end)
+    log_entry("INIT", "ProximityPromptService spy connected.")
+end)
+
+-- ==============================================================================
+-- 7. BUTTON & INTERACTION LOGGER (Deep & Global)
 -- ==============================================================================
 local spied_buttons = {}
 local function spy_on_button(btn, path)
@@ -474,18 +640,52 @@ local function spy_on_button(btn, path)
     local btn_text = (btn:IsA("TextButton") and btn.Text ~= "") and string.format(" ('%s')", btn.Text) or ""
 
     btn.Activated:Connect(function()
-        log_entry("GUI", string.format("[CLICK ACTIVATED] %s%s", path, btn_text))
+        log_entry("GUI", string.format("[CLICK Activated] %s%s", path, btn_text))
     end)
     btn.MouseButton1Click:Connect(function()
-        log_entry("GUI", string.format("[CLICK MouseButton1] %s%s", path, btn_text))
-    end)
-    btn.MouseButton1Down:Connect(function()
-        log_entry("GUI", string.format("[CLICK MouseDown] %s%s", path, btn_text))
+        log_entry("GUI", string.format("[CLICK Mouse1] %s%s", path, btn_text))
     end)
 end
 
+local function check_and_spy_button(btn)
+    if not btn or not btn:IsA("GuiButton") or spied_buttons[btn] then return end
+    local name_l = string.lower(btn.Name)
+    local text_l = (btn:IsA("TextButton") and string.lower(btn.Text)) or ""
+    
+    local is_relevant = string.find(name_l, "trade", 1, true)
+        or string.find(name_l, "offer", 1, true)
+        or string.find(name_l, "accept", 1, true)
+        or string.find(name_l, "decline", 1, true)
+        or string.find(name_l, "yes", 1, true)
+        or string.find(name_l, "no", 1, true)
+        or string.find(name_l, "close", 1, true)
+        or string.find(name_l, "ready", 1, true)
+        or string.find(name_l, "confirm", 1, true)
+        or string.find(text_l, "trade", 1, true)
+        or string.find(text_l, "offer", 1, true)
+        or string.find(text_l, "accept", 1, true)
+        or string.find(text_l, "yes", 1, true)
+        or string.find(text_l, "no", 1, true)
+        or string.find(text_l, "ready", 1, true)
+        or string.find(text_l, "confirm", 1, true)
+        or (btn.Parent and (btn.Parent.Name == "Options" or btn.Parent.Name == "Blackout" or string.find(string.lower(btn.Parent.Name), "trade", 1, true)))
+
+    if is_relevant then
+        spy_on_button(btn, btn.Name)
+    end
+end
+
+-- Scan all existing GUI buttons in PlayerGui
+for _, desc in ipairs(player_gui:GetDescendants()) do
+    check_and_spy_button(desc)
+end
+
+player_gui.DescendantAdded:Connect(function(desc)
+    check_and_spy_button(desc)
+end)
+
 -- ==============================================================================
--- 7. PROMPT GUI DEEP SPY (PlayerGui.Prompt)
+-- 8. PROMPT GUI DEEP SPY (PlayerGui.Prompt)
 -- ==============================================================================
 local function monitor_prompt_gui(prompt_gui)
     if not prompt_gui then return end
@@ -533,7 +733,7 @@ local function monitor_prompt_gui(prompt_gui)
 end
 
 -- ==============================================================================
--- 8. TRADING WINDOW DEEP SPY (! Trading / Trading)
+-- 9. TRADING WINDOW DEEP SPY (! Trading / Trading)
 -- ==============================================================================
 local function monitor_trading_gui(t_gui)
     if not t_gui then return end
@@ -543,42 +743,37 @@ local function monitor_trading_gui(t_gui)
         log_entry("TRADE", string.format("[TRADING WINDOW] Enabled -> %s", tostring(t_gui.Enabled)))
     end)
 
-    -- Wire all buttons in Trading GUI (Ready, Confirm, Accept, Close, Decline, Item slots)
-    local function check_and_wire(item)
+    local function wire_elem(item)
         if item:IsA("GuiButton") then
             spy_on_button(item, t_gui.Name .. "." .. item.Name)
         elseif item:IsA("TextLabel") then
-            -- Log any label changes like "Waiting...", "Accepted", etc.
             local lower_name = string.lower(item.Name)
-            if string.find(lower_name, "status") or string.find(lower_name, "ready") or string.find(lower_name, "confirm") or string.find(lower_name, "partner") then
+            if string.find(lower_name, "status", 1, true) or string.find(lower_name, "ready", 1, true) or string.find(lower_name, "confirm", 1, true) or string.find(lower_name, "partner", 1, true) then
                 log_entry("TRADE", string.format("[TRADE LABEL] %s = '%s'", item.Name, item.Text))
                 item:GetPropertyChangedSignal("Text"):Connect(function()
-                    log_entry("TRADE", string.format("[TRADE LABEL] %s changed -> '%s'", item.Name, item.Text))
+                    log_entry("TRADE", string.format("[TRADE LABEL] %s -> '%s'", item.Name, item.Text))
                 end)
             end
         end
     end
 
     for _, desc in ipairs(t_gui:GetDescendants()) do
-        check_and_wire(desc)
+        wire_elem(desc)
     end
 
     t_gui.DescendantAdded:Connect(function(desc)
-        check_and_wire(desc)
-        if desc:IsA("GuiButton") then
-            log_entry("TRADE", string.format("[TRADING ELEMENT ADDED] Button: %s", desc.Name))
-        end
+        wire_elem(desc)
     end)
 end
 
--- Check existing GUIs
+-- Scan existing GUIs
 local existing_prompt = player_gui:FindFirstChild("Prompt")
 if existing_prompt then monitor_prompt_gui(existing_prompt) end
 
 local existing_trade = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
 if existing_trade then monitor_trading_gui(existing_trade) end
 
--- Watch PlayerGui for dynamic additions
+-- Watch PlayerGui dynamically
 player_gui.ChildAdded:Connect(function(child)
     if child.Name == "Prompt" then
         log_entry("PROMPT", ">>> [GUI ADDED] PlayerGui.Prompt")
@@ -596,7 +791,7 @@ player_gui.ChildRemoved:Connect(function(child)
 end)
 
 -- ==============================================================================
--- 9. CLEANUP HANDLER
+-- 10. CLEANUP HANDLER
 -- ==============================================================================
 _G.NoirHub_TradeSpy_Cleanup = function()
     spy_active = false
@@ -610,7 +805,7 @@ _G.NoirHub_TradeSpy_Cleanup = function()
         local old = player_gui:FindFirstChild("NoirHub_TradeSpyConsole")
         if old then old:Destroy() end
     end)
-    log_entry("CLEANUP", "Trade Ultra Debugger stopped.")
+    log_entry("CLEANUP", "Trade Debugger stopped.")
 end
 
-log_entry("READY", "=== Ultra Debugger v2 Active! Menunggu aksi trade... ===")
+log_entry("READY", "=== Trade Debugger [v6.2] Active! Silakan lakukan tes trade ===")
