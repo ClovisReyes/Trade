@@ -172,82 +172,11 @@ local function is_trade_prompt(prompt_gui)
     return is_trade
 end
 
-local function purge_stale_trade_prompts()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            local frame = prompt_gui:FindFirstChild("Frame")
-            if frame then
-                for _, child in ipairs(frame:GetChildren()) do
-                    if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIGridLayout" and child.Name ~= "UIPadding" then
-                        local has_trade = false
-                        for _, desc in ipairs(child:GetDescendants()) do
-                            if desc:IsA("TextLabel") and desc.Text then
-                                local t = string_lower(desc.Text)
-                                if string_find(t, "trade", 1, true) then
-                                    has_trade = true
-                                    break
-                                end
-                            end
-                        end
-                        if has_trade or string_find(string_lower(child.Name), "trade", 1, true) then
-                            pcall(function() child:Destroy() end)
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end
-
-local function dismiss_trade_prompt()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            local frame = prompt_gui:FindFirstChild("Frame")
-
-            -- Klik tombol apapun yang dapat menyelesaikan/menutup prompt
-            for _, desc in ipairs(prompt_gui:GetDescendants()) do
-                if desc:IsA("GuiButton") then
-                    local name = string_lower(desc.Name)
-                    local text = desc:IsA("TextButton") and string_lower(desc.Text) or ""
-                    if name == "yes" or name == "accept" or name == "confirm" or name == "no" or name == "cancel" or name == "decline" or name == "close" or name == "x"
-                        or text == "yes" or text == "accept" or text == "confirm" or text == "no" or text == "cancel" or text == "decline" or text == "close" then
-                        click_gui_button(desc)
-                    end
-                end
-            end
-
-            for _, child in ipairs(prompt_gui:GetChildren()) do
-                if child.Name ~= "Blackout" and child.Name ~= "Frame" and child.Name ~= "UIListLayout" and child.Name ~= "UIGridLayout" then
-                    pcall(function() child:Destroy() end)
-                end
-            end
-
-            if config.auto_accept_enabled then
-                purge_stale_trade_prompts()
-                if blackout then blackout.Visible = false end
-                if frame then frame.Visible = false end
-            end
-        end
-    end)
-end
-
 local function apply_prompt_visibility()
     pcall(function()
         local prompt_gui = player_gui:FindFirstChild("Prompt")
         if prompt_gui then
-            local blackout = prompt_gui:FindFirstChild("Blackout")
-            local frame = prompt_gui:FindFirstChild("Frame")
-
-            if config.auto_accept_enabled then
-                prompt_gui.Enabled = false
-                if blackout then blackout.Visible = false end
-                if frame then frame.Visible = false end
-            else
-                prompt_gui.Enabled = true
-            end
+            prompt_gui.Enabled = not config.auto_accept_enabled
         end
     end)
 end
@@ -270,7 +199,7 @@ local function close_trading_gui()
         end
     end)
     if status_label then
-        status_label.Text = config.auto_accept_enabled and "[v2.0] Status: Idle (Listening)" or "[v2.0] Status: Disabled"
+        status_label.Text = config.auto_accept_enabled and "[v2.1] Status: Idle (Listening)" or "[v2.1] Status: Disabled"
     end
 end
 
@@ -280,26 +209,10 @@ local function toggle_auto_accept(enable)
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
 
     config.auto_accept_enabled = enable
-
-    if not enable then
-        dismiss_trade_prompt()
-        purge_stale_trade_prompts()
-        apply_prompt_visibility()
-        pcall(function()
-            local prompt_gui = player_gui:FindFirstChild("Prompt")
-            if prompt_gui then
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                local frame = prompt_gui:FindFirstChild("Frame")
-                if blackout then blackout.Visible = false end
-                if frame then frame.Visible = false end
-            end
-        end)
-    else
-        apply_prompt_visibility()
-    end
+    apply_prompt_visibility()
 
     if status_label then
-        status_label.Text = enable and "[v2.0] Status: Idle (Listening)" or "[v2.0] Status: Disabled"
+        status_label.Text = enable and "[v2.1] Status: Idle (Listening)" or "[v2.1] Status: Disabled"
     end
 
     if not trade_remotes then return end
@@ -307,25 +220,14 @@ local function toggle_auto_accept(enable)
     -- 1. TradeOfferReceived Listener
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
         if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
-
-        if not config.auto_accept_enabled then
-            return
-        end
+        if not config.auto_accept_enabled then return end
 
         if status_label then
-            status_label.Text = "[v2.0] Status: Accepting Offer from " .. tostring(requester.Name or requester)
+            status_label.Text = "[v2.1] Status: Accepting Offer from " .. tostring(requester.Name or requester)
         end
 
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
-        end)
-        apply_prompt_visibility()
-        
-        task_spawn(function()
-            for i = 1, 6 do
-                dismiss_trade_prompt()
-                task_wait(0.06)
-            end
         end)
     end)
 
@@ -333,8 +235,6 @@ local function toggle_auto_accept(enable)
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
         if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
         close_trading_gui()
-        dismiss_trade_prompt()
-        purge_stale_trade_prompts()
     end)
 
     if not enable then return end
@@ -345,7 +245,7 @@ local function toggle_auto_accept(enable)
         auto_accept_active = true
 
         if status_label then
-            status_label.Text = "[v2.0] Status: Trade Active! Showing GUI..."
+            status_label.Text = "[v2.1] Status: Trade Active! Showing GUI..."
         end
 
         pcall(function()
@@ -478,7 +378,7 @@ local function create_ui()
     title_lbl.Size = UDim2.new(1, -30, 1, 0)
     title_lbl.Position = UDim2.new(0, 8, 0, 0)
     title_lbl.BackgroundTransparency = 1
-    title_lbl.Text = "NØIR AutoAccept [v2.0]"
+    title_lbl.Text = "NØIR AutoAccept [v2.1]"
     title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
