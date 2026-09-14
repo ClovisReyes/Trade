@@ -203,8 +203,6 @@ local function apply_prompt_visibility()
                 if frame then frame.Visible = false end
             else
                 prompt_gui.Enabled = true
-                if blackout then blackout.Visible = true end
-                if frame then frame.Visible = true end
             end
         end
     end)
