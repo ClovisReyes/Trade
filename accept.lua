@@ -138,11 +138,18 @@ local function click_gui_button(btn)
     if not btn then return end
     pcall(function()
         if firesignal then
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.Activated)
-        elseif getconnections then
-            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
-                conn:Fire()
+            pcall(function() firesignal(btn.MouseButton1Click) end)
+            pcall(function() firesignal(btn.Activated) end)
+            pcall(function() firesignal(btn.MouseButton1Up) end)
+        end
+        if getconnections then
+            for _, sig in ipairs({"Activated", "MouseButton1Click", "MouseButton1Up"}) do
+                pcall(function()
+                    for _, conn in ipairs(getconnections(btn[sig])) do
+                        pcall(function() conn:Fire() end)
+                        pcall(function() conn.Function() end)
+                    end
+                end)
             end
         end
     end)
@@ -172,10 +179,15 @@ local function dismiss_trade_prompt()
             local blackout = prompt_gui:FindFirstChild("Blackout")
             local frame = prompt_gui:FindFirstChild("Frame")
 
-            -- Klik tombol decline jika ada prompt terbuka saat auto accept aktif
+            -- Klik tombol apapun yang dapat menyelesaikan/menutup prompt
             for _, desc in ipairs(prompt_gui:GetDescendants()) do
-                if desc:IsA("GuiButton") and (desc.Name == "No" or desc.Name == "Cancel" or desc.Name == "Decline") then
-                    click_gui_button(desc)
+                if desc:IsA("GuiButton") then
+                    local name = string_lower(desc.Name)
+                    local text = desc:IsA("TextButton") and string_lower(desc.Text) or ""
+                    if name == "yes" or name == "accept" or name == "confirm" or name == "no" or name == "cancel" or name == "decline" or name == "close" or name == "x"
+                        or text == "yes" or text == "accept" or text == "confirm" or text == "no" or text == "cancel" or text == "decline" or text == "close" then
+                        click_gui_button(desc)
+                    end
                 end
             end
 
@@ -185,8 +197,10 @@ local function dismiss_trade_prompt()
                 end
             end
 
-            if blackout then blackout.Visible = false end
-            if frame then frame.Visible = false end
+            if config.auto_accept_enabled then
+                if blackout then blackout.Visible = false end
+                if frame then frame.Visible = false end
+            end
         end
     end)
 end
@@ -240,9 +254,19 @@ local function toggle_auto_accept(enable)
 
     if not enable then
         dismiss_trade_prompt()
+        apply_prompt_visibility()
+        pcall(function()
+            local prompt_gui = player_gui:FindFirstChild("Prompt")
+            if prompt_gui then
+                local blackout = prompt_gui:FindFirstChild("Blackout")
+                local frame = prompt_gui:FindFirstChild("Frame")
+                if blackout then blackout.Visible = false end
+                if frame then frame.Visible = false end
+            end
+        end)
+    else
+        apply_prompt_visibility()
     end
-
-    apply_prompt_visibility()
 
     if status_label then
         status_label.Text = enable and "Status: Idle (Listening)" or "Status: Disabled"
@@ -276,9 +300,13 @@ local function toggle_auto_accept(enable)
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
         apply_prompt_visibility()
-        task_wait(0.05)
-        dismiss_trade_prompt()
-        apply_prompt_visibility()
+        
+        task_spawn(function()
+            for i = 1, 6 do
+                dismiss_trade_prompt()
+                task_wait(0.06)
+            end
+        end)
     end)
 
     -- 2. TradeEnded Listener
