@@ -1837,7 +1837,7 @@ local function create_ui()
     ply_refresh.BackgroundColor3 = BTN_BG_COLOR
     ply_refresh.Text = "Refresh"
     ply_refresh.TextColor3 = ACCENT_COLOR
-    ply_refresh.TextSize = 9
+    ply_refresh.TextSize = 10
     ply_refresh.FontFace = font_bold
     ply_refresh.Active = true
     ply_refresh.ZIndex = 10
@@ -1866,7 +1866,7 @@ local function create_ui()
     target_lbl.BackgroundTransparency = 0
     target_lbl.Text = truncate_string(config.trade_with ~= "" and config.trade_with or "None", 10)
     target_lbl.TextColor3 = ACCENT_COLOR
-    target_lbl.TextSize = 9
+    target_lbl.TextSize = 10
     target_lbl.FontFace = font_bold
     target_lbl.TextXAlignment = Enum.TextXAlignment.Center
     target_lbl.ZIndex = 10
@@ -1938,7 +1938,7 @@ local function create_ui()
                 opt_lbl.BackgroundTransparency = 1
                 opt_lbl.Text = truncate_string(name, 10)
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
-                opt_lbl.TextSize = 9
+                opt_lbl.TextSize = 10
                 opt_lbl.FontFace = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
@@ -2019,7 +2019,7 @@ local function create_ui()
     item_search_box.PlaceholderText = "Search..."
     item_search_box.PlaceholderColor3 = MUTED_COLOR
     item_search_box.TextColor3 = TEXT_COLOR
-    item_search_box.TextSize = 9
+    item_search_box.TextSize = 10
     item_search_box.FontFace = font_face
     item_search_box.TextXAlignment = Enum.TextXAlignment.Center
     item_search_box.Active = true
@@ -2106,7 +2106,7 @@ local function create_ui()
                     opt_lbl.BackgroundTransparency = 1
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
-                    opt_lbl.TextSize = 9
+                    opt_lbl.TextSize = 10
                     opt_lbl.FontFace = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
@@ -2209,7 +2209,7 @@ local function create_ui()
     enchant_search_box.PlaceholderText = "Search..."
     enchant_search_box.PlaceholderColor3 = MUTED_COLOR
     enchant_search_box.TextColor3 = TEXT_COLOR
-    enchant_search_box.TextSize = 9
+    enchant_search_box.TextSize = 10
     enchant_search_box.FontFace = font_face
     enchant_search_box.TextXAlignment = Enum.TextXAlignment.Center
     enchant_search_box.Active = true
@@ -2297,7 +2297,7 @@ local function create_ui()
                     opt_lbl.BackgroundTransparency = 1
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
-                    opt_lbl.TextSize = 9
+                    opt_lbl.TextSize = 10
                     opt_lbl.FontFace = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
@@ -2398,7 +2398,7 @@ local function create_ui()
     r_title.BackgroundTransparency = 1
     r_title.Text = "Select Rarity"
     r_title.TextColor3 = ACCENT_COLOR
-    r_title.TextSize = 9
+    r_title.TextSize = 10
     r_title.FontFace = font_bold
     r_title.TextXAlignment = Enum.TextXAlignment.Center
     r_title.ZIndex = 10
@@ -2466,7 +2466,7 @@ local function create_ui()
                 opt_lbl.BackgroundTransparency = 1
                 opt_lbl.Text = opt
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
-                opt_lbl.TextSize = 9
+                opt_lbl.TextSize = 10
                 opt_lbl.FontFace = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
@@ -2566,7 +2566,7 @@ local function create_ui()
     title_lbl.BackgroundTransparency = 1
     title_lbl.Text = "Keenan Trade Script"
     title_lbl.TextColor3 = ACCENT_COLOR
-    title_lbl.TextSize = 10
+    title_lbl.TextSize = 11
     title_lbl.FontFace = font_bold
     title_lbl.TextXAlignment = Enum.TextXAlignment.Left
     title_lbl.ZIndex = 26
@@ -2887,7 +2887,7 @@ local function create_ui()
         header.BackgroundTransparency = 1
         header.Text = "  " .. title_text
         header.TextColor3 = TEXT_COLOR
-        header.TextSize = 9
+        header.TextSize = 10
         header.FontFace = font_bold
         header.TextXAlignment = Enum.TextXAlignment.Left
         header.Active = true
@@ -2900,7 +2900,7 @@ local function create_ui()
         chevron.BackgroundTransparency = 1
         chevron.Text = "▼"
         chevron.TextColor3 = ACCENT_COLOR
-        chevron.TextSize = 9
+        chevron.TextSize = 10
         chevron.FontFace = font_face
         chevron.TextXAlignment = Enum.TextXAlignment.Right
         chevron.Parent = header
@@ -2953,7 +2953,7 @@ local function create_ui()
         drop_btn.BackgroundColor3 = INPUT_BG_COLOR
         drop_btn.Text = placeholder
         drop_btn.TextColor3 = TEXT_COLOR
-        drop_btn.TextSize = 9
+        drop_btn.TextSize = 10
         drop_btn.FontFace = font_face
         drop_btn.TextXAlignment = Enum.TextXAlignment.Left
         drop_btn.Active = true
@@ -3054,7 +3054,7 @@ local function create_ui()
                 opt_btn.Size = UDim2_new(1, 0, 0, 22)
                 opt_btn.BackgroundTransparency = 1
                 opt_btn.Text = opt
-                opt_btn.TextSize = 9
+                opt_btn.TextSize = 10
                 opt_btn.TextXAlignment = Enum.TextXAlignment.Left
                 local clean_opt = strip_quantity(opt)
                 local is_selected = table_find(selected_values, clean_opt) ~= nil
@@ -3144,7 +3144,7 @@ local function create_ui()
         box.Text = tostring(default)
         box.PlaceholderText = placeholder
         box.TextColor3 = TEXT_COLOR
-        box.TextSize = 9
+        box.TextSize = 10
         box.FontFace = font_face
         box.Active = true
         box.Parent = parent
@@ -3182,7 +3182,7 @@ local function create_ui()
         lbl.BackgroundTransparency = 1
         lbl.Text = label_text
         lbl.TextColor3 = TEXT_COLOR
-        lbl.TextSize = 9
+        lbl.TextSize = 10
         lbl.FontFace = font_bold
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent = row
@@ -3301,7 +3301,7 @@ local function create_ui()
     status_title.BackgroundTransparency = 1
     status_title.Text = "Status"
     status_title.TextColor3 = ACCENT_COLOR
-    status_title.TextSize = 9
+    status_title.TextSize = 10
     status_title.FontFace = font_bold
     status_title.TextXAlignment = Enum.TextXAlignment.Left
     status_title.Parent = status_box
@@ -3313,7 +3313,7 @@ local function create_ui()
     status_val_lbl.BackgroundTransparency = 1
     status_val_lbl.Text = "Idle"
     status_val_lbl.TextColor3 = TEXT_COLOR
-    status_val_lbl.TextSize = 9
+    status_val_lbl.TextSize = 10
     status_val_lbl.FontFace = font_face
     status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
@@ -3333,7 +3333,7 @@ local function create_ui()
     item_lbl.BackgroundTransparency = 1
     item_lbl.Text = "Select Item"
     item_lbl.TextColor3 = TEXT_COLOR
-    item_lbl.TextSize = 9
+    item_lbl.TextSize = 10
     item_lbl.FontFace = font_bold
     item_lbl.TextXAlignment = Enum.TextXAlignment.Left
     item_lbl.Parent = item_row
@@ -3355,7 +3355,7 @@ local function create_ui()
 
     fish_dropdown_btn.Text = get_fish_dropdown_text()
     fish_dropdown_btn.TextColor3 = TEXT_COLOR
-    fish_dropdown_btn.TextSize = 9
+    fish_dropdown_btn.TextSize = 10
     fish_dropdown_btn.FontFace = font_face
     fish_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     fish_dropdown_btn.Active = true
@@ -3409,7 +3409,7 @@ local function create_ui()
     amount_lbl.BackgroundTransparency = 1
     amount_lbl.Text = "Amount Fish Name"
     amount_lbl.TextColor3 = TEXT_COLOR
-    amount_lbl.TextSize = 9
+    amount_lbl.TextSize = 10
     amount_lbl.FontFace = font_bold
     amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     amount_lbl.Parent = amount_row
@@ -3420,7 +3420,7 @@ local function create_ui()
     qty_box.BackgroundColor3 = INPUT_BG_COLOR
     qty_box.Text = tostring(config.quantity)
     qty_box.TextColor3 = TEXT_COLOR
-    qty_box.TextSize = 9
+    qty_box.TextSize = 10
     qty_box.FontFace = font_face
     qty_box.TextXAlignment = Enum.TextXAlignment.Center
     qty_box.ClearTextOnFocus = false
@@ -3462,7 +3462,7 @@ local function create_ui()
     refresh_btn.BackgroundColor3 = BTN_BG_COLOR
     refresh_btn.Text = "Refresh Fish Items"
     refresh_btn.TextColor3 = ACCENT_COLOR
-    refresh_btn.TextSize = 9
+    refresh_btn.TextSize = 10
     refresh_btn.FontFace = font_bold
     refresh_btn.Active = true
     refresh_btn.Parent = byname_content
@@ -3561,7 +3561,7 @@ local function create_ui()
     enchant_status_title.BackgroundTransparency = 1
     enchant_status_title.Text = "Status"
     enchant_status_title.TextColor3 = ACCENT_COLOR
-    enchant_status_title.TextSize = 9
+    enchant_status_title.TextSize = 10
     enchant_status_title.FontFace = font_bold
     enchant_status_title.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_title.Parent = enchant_status_box
@@ -3573,7 +3573,7 @@ local function create_ui()
     enchant_status_val_lbl.BackgroundTransparency = 1
     enchant_status_val_lbl.Text = "Idle"
     enchant_status_val_lbl.TextColor3 = TEXT_COLOR
-    enchant_status_val_lbl.TextSize = 9
+    enchant_status_val_lbl.TextSize = 10
     enchant_status_val_lbl.FontFace = font_face
     enchant_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
@@ -3593,7 +3593,7 @@ local function create_ui()
     stone_lbl.BackgroundTransparency = 1
     stone_lbl.Text = "Stone Type"
     stone_lbl.TextColor3 = TEXT_COLOR
-    stone_lbl.TextSize = 9
+    stone_lbl.TextSize = 10
     stone_lbl.FontFace = font_bold
     stone_lbl.TextXAlignment = Enum.TextXAlignment.Left
     stone_lbl.Parent = stone_row
@@ -3615,7 +3615,7 @@ local function create_ui()
 
     enchant_dropdown_btn.Text = get_enchant_dropdown_text()
     enchant_dropdown_btn.TextColor3 = TEXT_COLOR
-    enchant_dropdown_btn.TextSize = 9
+    enchant_dropdown_btn.TextSize = 10
     enchant_dropdown_btn.FontFace = font_face
     enchant_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     enchant_dropdown_btn.Active = true
@@ -3669,7 +3669,7 @@ local function create_ui()
     es_amount_lbl.BackgroundTransparency = 1
     es_amount_lbl.Text = "Amount Enchant Stone"
     es_amount_lbl.TextColor3 = TEXT_COLOR
-    es_amount_lbl.TextSize = 9
+    es_amount_lbl.TextSize = 10
     es_amount_lbl.FontFace = font_bold
     es_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     es_amount_lbl.Parent = es_amount_row
@@ -3680,7 +3680,7 @@ local function create_ui()
     es_qty_box.BackgroundColor3 = INPUT_BG_COLOR
     es_qty_box.Text = tostring(config.quantity)
     es_qty_box.TextColor3 = TEXT_COLOR
-    es_qty_box.TextSize = 9
+    es_qty_box.TextSize = 10
     es_qty_box.FontFace = font_face
     es_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     es_qty_box.ClearTextOnFocus = false
@@ -3722,7 +3722,7 @@ local function create_ui()
     es_refresh.BackgroundColor3 = BTN_BG_COLOR
     es_refresh.Text = "Check Enchant Stones"
     es_refresh.TextColor3 = ACCENT_COLOR
-    es_refresh.TextSize = 9
+    es_refresh.TextSize = 10
     es_refresh.FontFace = font_bold
     es_refresh.Active = true
     es_refresh.Parent = enchant_content
@@ -3839,7 +3839,7 @@ local function create_ui()
     rarity_status_title.BackgroundTransparency = 1
     rarity_status_title.Text = "Status"
     rarity_status_title.TextColor3 = ACCENT_COLOR
-    rarity_status_title.TextSize = 9
+    rarity_status_title.TextSize = 10
     rarity_status_title.FontFace = font_bold
     rarity_status_title.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_title.Parent = rarity_status_box
@@ -3851,7 +3851,7 @@ local function create_ui()
     rarity_status_val_lbl.BackgroundTransparency = 1
     rarity_status_val_lbl.Text = "Idle"
     rarity_status_val_lbl.TextColor3 = TEXT_COLOR
-    rarity_status_val_lbl.TextSize = 9
+    rarity_status_val_lbl.TextSize = 10
     rarity_status_val_lbl.FontFace = font_face
     rarity_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
@@ -3871,7 +3871,7 @@ local function create_ui()
     r_lbl.BackgroundTransparency = 1
     r_lbl.Text = "Select Rarity"
     r_lbl.TextColor3 = TEXT_COLOR
-    r_lbl.TextSize = 9
+    r_lbl.TextSize = 10
     r_lbl.FontFace = font_bold
     r_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_lbl.Parent = r_row
@@ -3893,7 +3893,7 @@ local function create_ui()
 
     rarity_dropdown_btn.Text = get_rarity_dropdown_text()
     rarity_dropdown_btn.TextColor3 = TEXT_COLOR
-    rarity_dropdown_btn.TextSize = 9
+    rarity_dropdown_btn.TextSize = 10
     rarity_dropdown_btn.FontFace = font_face
     rarity_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     rarity_dropdown_btn.Active = true
@@ -3947,7 +3947,7 @@ local function create_ui()
     r_amount_lbl.BackgroundTransparency = 1
     r_amount_lbl.Text = "Amount Fish Rarity"
     r_amount_lbl.TextColor3 = TEXT_COLOR
-    r_amount_lbl.TextSize = 9
+    r_amount_lbl.TextSize = 10
     r_amount_lbl.FontFace = font_bold
     r_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_amount_lbl.Parent = r_amount_row
@@ -3958,7 +3958,7 @@ local function create_ui()
     r_qty_box.BackgroundColor3 = INPUT_BG_COLOR
     r_qty_box.Text = tostring(config.quantity)
     r_qty_box.TextColor3 = TEXT_COLOR
-    r_qty_box.TextSize = 9
+    r_qty_box.TextSize = 10
     r_qty_box.FontFace = font_face
     r_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     r_qty_box.ClearTextOnFocus = false
@@ -4000,7 +4000,7 @@ local function create_ui()
     r_refresh.BackgroundColor3 = BTN_BG_COLOR
     r_refresh.Text = "Refresh Fish Rarity"
     r_refresh.TextColor3 = ACCENT_COLOR
-    r_refresh.TextSize = 9
+    r_refresh.TextSize = 10
     r_refresh.FontFace = font_bold
     r_refresh.Active = true
     r_refresh.Parent = rarity_content
