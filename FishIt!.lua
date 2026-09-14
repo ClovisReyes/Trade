@@ -25,13 +25,7 @@
 -- [SECTION 21] SCRIPT INITIALIZATION & CLEANUP    : Eksekusi UI, inventory logger & cleanup handler
 -- ==============================================================================
 
--- ==============================================================================
--- [CUSTOM LOGO SETTING]
--- Masukkan Asset ID Roblox untuk logo floating di bawah ini.
--- Format bisa berupa: "rbxassetid://<ID>" atau cukup nomor ID-nya saja: "123456789"
--- Jika dikosongkan (""), logo floating otomatis menampilkan inisial "K" warna kuning terminal.
--- ==============================================================================
-local CUSTOM_LOGO_ASSET_ID = "rbxassetid://134706593444053"
+
 
 -- ==============================================================================
 -- [SECTION 01] SERVICES & ENGINE DEPENDENCIES
@@ -836,8 +830,63 @@ local function decline_active_trade()
     end)
 end
 
-local function find_success_notification()
+local function is_trade_active()
+    local attr = local_player:GetAttribute("IsTrading")
+    if attr == true then return true end
+    local pgui = local_player:FindFirstChild("PlayerGui")
+    if pgui then
+        for _, name in ipairs({"! Trading", "Trading", "Trade"}) do
+            local t_gui = pgui:FindFirstChild(name)
+            if t_gui and t_gui.Enabled then return true end
+        end
+    end
     return false
+end
+
+local function verify_items_sent(added_items)
+    if not player_data or not added_items or #added_items == 0 then
+        return #added_items
+    end
+    local inventory = player_data:Get("Inventory")
+    local current_items = inventory and inventory.Items or {}
+    local current_uuids = {}
+    for _, item in ipairs(current_items) do
+        if item.UUID then
+            current_uuids[item.UUID] = true
+        end
+    end
+    local sent_count = 0
+    for _, item in ipairs(added_items) do
+        if not current_uuids[item.UUID] then
+            sent_count = sent_count + 1
+        end
+    end
+    return sent_count
+end
+
+local function verify_coins_sent(added_items)
+    if not player_data or not added_items or #added_items == 0 then
+        local sum = 0
+        for _, it in ipairs(added_items) do sum = sum + (it.SellPrice or 0) end
+        return sum, #added_items
+    end
+    local inventory = player_data:Get("Inventory")
+    local current_items = inventory and inventory.Items or {}
+    local current_uuids = {}
+    for _, item in ipairs(current_items) do
+        if item.UUID then
+            current_uuids[item.UUID] = true
+        end
+    end
+    local coins_sent = 0
+    local items_sent = 0
+    for _, item in ipairs(added_items) do
+        if not current_uuids[item.UUID] then
+            coins_sent = coins_sent + (item.SellPrice or 0)
+            items_sent = items_sent + 1
+        end
+    end
+    return coins_sent, items_sent
 end
 
 local function listen_for_trade_completion(on_completed)
@@ -846,8 +895,8 @@ local function listen_for_trade_completion(on_completed)
 
     local function check_text(text)
         if not text or completed then return end
-        text = tostring(text)
-        if text:find("completed") and (text:find("Trade") or text:find("with")) then
+        local lower = string_lower(tostring(text))
+        if (lower:find("completed") or lower:find("complete") or lower:find("success") or lower:find("berhasil")) and (lower:find("trade") or lower:find("with")) then
             completed = true
             if on_completed then
                 pcall(on_completed)
@@ -992,7 +1041,7 @@ end
 
 local function wait_for_trade_end(mode_name, chat_listener)
     local start_t = tick()
-    while local_player:GetAttribute("IsTrading") and tick() - start_t < 15 do
+    while is_trade_active() and tick() - start_t < 90 do
         if chat_listener and chat_listener.is_completed() then
             break
         end
@@ -1007,47 +1056,53 @@ local function wait_for_trade_end(mode_name, chat_listener)
         end)
 
         pcall(function()
-            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
-            if t_gui then
-                local frame = t_gui:FindFirstChild("Frame")
-                local interior = frame and frame:FindFirstChild("Interior")
-                local buttons = interior and interior:FindFirstChild("Buttons")
-                if buttons then
-                    for _, child in ipairs(buttons:GetChildren()) do
-                        if child:IsA("GuiButton") and child.Name ~= "Decline" then
-                            click_gui_button(child)
+            local pgui = local_player:FindFirstChild("PlayerGui")
+            if pgui then
+                local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
+                if t_gui then
+                    local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container") or t_gui:FindFirstChild("Main")
+                    local interior = frame and (frame:FindFirstChild("Interior") or frame)
+                    local buttons = interior and interior:FindFirstChild("Buttons")
+                    if buttons then
+                        for _, child in ipairs(buttons:GetChildren()) do
+                            if child:IsA("GuiButton") and child.Name ~= "Decline" then
+                                click_gui_button(child)
+                            end
                         end
                     end
-                end
 
-                for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
-                    local btn = t_gui:FindFirstChild(btn_name, true)
-                    if btn and btn:IsA("GuiButton") then
-                        click_gui_button(btn)
+                    for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
+                        local btn = t_gui:FindFirstChild(btn_name, true)
+                        if btn and btn:IsA("GuiButton") then
+                            click_gui_button(btn)
+                        end
                     end
                 end
             end
         end)
 
         pcall(function()
-            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
-            if t_gui then
-                local seconds = nil
-                for _, desc in ipairs(t_gui:GetDescendants()) do
-                    if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-                        local text = desc.Text or ""
-                        local sec = string_match(text, "%((%d)s?%)") or string_match(text, "^(%d)$") or string_match(text, "Countdown: (%d)") or string_match(text, "Confirm%s*%(?(%d)%)?") or string_match(text, "Ready%s*%(?(%d)%)?")
-                        if sec then
-                            seconds = sec
-                            break
+            local pgui = local_player:FindFirstChild("PlayerGui")
+            if pgui then
+                local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
+                if t_gui then
+                    local seconds = nil
+                    for _, desc in ipairs(t_gui:GetDescendants()) do
+                        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+                            local text = desc.Text or ""
+                            local sec = string_match(text, "%((%d)s?%)") or string_match(text, "^(%d)$") or string_match(text, "Countdown: (%d)") or string_match(text, "Confirm%s*%(?(%d)%)?") or string_match(text, "Ready%s*%(?(%d)%)?")
+                            if sec then
+                                seconds = sec
+                                break
+                            end
                         end
                     end
-                end
 
-                if seconds then
-                    stage = "Waiting lock countdown (" .. seconds .. "s)..."
-                else
-                    stage = "Accepting & Confirming trade..."
+                    if seconds then
+                        stage = "Waiting lock countdown (" .. seconds .. "s)..."
+                    else
+                        stage = "Accepting & Confirming trade..."
+                    end
                 end
             end
         end)
@@ -1055,14 +1110,14 @@ local function wait_for_trade_end(mode_name, chat_listener)
         if not (chat_listener and chat_listener.is_completed()) then
             set_status_msg(mode_name, stage)
         end
-        task_wait(0.1)
+        task_wait(0.12)
     end
 end
 
 local function start_trade_session(target_player, mode)
     if not target_player or not trade_remotes then return false, "No remotes" end
 
-    if not local_player:GetAttribute("IsTrading") then
+    if not is_trade_active() then
         if cache.last_trade_time then
             local elapsed = tick() - cache.last_trade_time
             if elapsed < 5 then
@@ -1080,11 +1135,11 @@ local function start_trade_session(target_player, mode)
         end
 
         local start_time = tick()
-        while not local_player:GetAttribute("IsTrading") and tick() - start_time < 10 do
+        while not is_trade_active() and tick() - start_time < 12 do
             task_wait(0.1)
         end
 
-        if not local_player:GetAttribute("IsTrading") then
+        if not is_trade_active() then
             cache.last_trade_time = tick()
             set_status_msg(mode, "Trade request timed out")
             return false, "Timeout"
@@ -1201,9 +1256,9 @@ local function try_trade_fish()
     local total_sent = cache.stats.fish.total_items
     if config.quantity > 0 and total_sent >= config.quantity then
         config.enabled = false
+        config.trade_fish_enabled = false
         if byname_toggle_ctrl then
             byname_toggle_ctrl.set_state(false)
-            config.trade_fish_enabled = false
         end
         save_config()
         return
@@ -1238,9 +1293,9 @@ local function try_trade_fish()
         local item_name = get_mode_display_name("fish")
         set_status_msg("fish", "Error: Tidak ada lagi " .. item_name .. " di inventory")
         config.enabled = false
+        config.trade_fish_enabled = false
         if byname_toggle_ctrl then
             byname_toggle_ctrl.set_state(false)
-            config.trade_fish_enabled = false
         end
         save_config()
         return
@@ -1259,7 +1314,7 @@ local function try_trade_fish()
     local added_items = {}
     set_status_msg("fish", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
     for _, item in ipairs(items_to_trade) do
-        if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
+        if not config.enabled or not is_trade_active() then break end
 
         local add_success = false
         for attempt = 1, 2 do
@@ -1280,40 +1335,51 @@ local function try_trade_fish()
         task_wait(0.03)
     end
 
-    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
+    if #added_items > 0 and is_trade_active() then
         local trade_success = false
-        local function mark_success()
+        local function mark_success(count)
             if not trade_success then
                 trade_success = true
+                count = count or #added_items
                 cache.stats.fish.success_trades = cache.stats.fish.success_trades + 1
-                cache.stats.fish.last_items = #added_items
-                cache.stats.fish.total_items = cache.stats.fish.total_items + #added_items
+                cache.stats.fish.last_items = count
+                cache.stats.fish.total_items = cache.stats.fish.total_items + count
                 update_mode_status("fish")
             end
         end
 
-        local chat_listener = listen_for_trade_completion(mark_success)
+        local chat_listener = listen_for_trade_completion(function()
+            mark_success()
+        end)
 
         pcall(function()
             trade_remotes.SetReady:InvokeServer(true)
         end)
 
         wait_for_trade_end("fish", chat_listener)
+        task_wait(0.6)
 
-        if chat_listener.is_completed() or (not local_player:GetAttribute("IsTrading") and #added_items > 0) then
-            mark_success()
+        local sent_count = verify_items_sent(added_items)
+        local is_chat_done = (chat_listener and chat_listener.is_completed())
+
+        if sent_count > 0 or is_chat_done or (not is_trade_active() and #added_items > 0) then
+            local count = (sent_count > 0) and sent_count or #added_items
+            mark_success(count)
         end
 
         chat_listener.disconnect()
 
         if trade_success then
+            cache.last_trade_time = tick()
             if config.quantity > 0 and cache.stats.fish.total_items >= config.quantity then
                 config.enabled = false
+                config.trade_fish_enabled = false
                 if byname_toggle_ctrl then
                     byname_toggle_ctrl.set_state(false)
-                    config.trade_fish_enabled = false
                 end
                 save_config()
+                set_status_msg("fish", string_format("Selesai! Berhasil mengirim %d/%d item", cache.stats.fish.total_items, config.quantity))
+                return
             end
         else
             cache.stats.fish.failed = cache.stats.fish.failed + 1
@@ -1345,9 +1411,9 @@ local function try_trade_rarity()
     local total_sent = cache.stats.rarity.total_items
     if config.quantity > 0 and total_sent >= config.quantity then
         config.enabled = false
+        config.trade_rarity_enabled = false
         if rarity_toggle_ctrl then
             rarity_toggle_ctrl.set_state(false)
-            config.trade_rarity_enabled = false
         end
         save_config()
         return
@@ -1382,9 +1448,9 @@ local function try_trade_rarity()
         local rarity_name = get_mode_display_name("rarity")
         set_status_msg("rarity", "Error: Tidak ada lagi " .. rarity_name .. " di inventory")
         config.enabled = false
+        config.trade_rarity_enabled = false
         if rarity_toggle_ctrl then
             rarity_toggle_ctrl.set_state(false)
-            config.trade_rarity_enabled = false
         end
         save_config()
         return
@@ -1403,7 +1469,7 @@ local function try_trade_rarity()
     local added_items = {}
     set_status_msg("rarity", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
     for _, item in ipairs(items_to_trade) do
-        if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
+        if not config.enabled or not is_trade_active() then break end
 
         local add_success = false
         for attempt = 1, 2 do
@@ -1425,40 +1491,51 @@ local function try_trade_rarity()
         task_wait(0.08)
     end
 
-    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
+    if #added_items > 0 and is_trade_active() then
         local trade_success = false
-        local function mark_success()
+        local function mark_success(count)
             if not trade_success then
                 trade_success = true
+                count = count or #added_items
                 cache.stats.rarity.success_trades = cache.stats.rarity.success_trades + 1
-                cache.stats.rarity.last_items = #added_items
-                cache.stats.rarity.total_items = cache.stats.rarity.total_items + #added_items
+                cache.stats.rarity.last_items = count
+                cache.stats.rarity.total_items = cache.stats.rarity.total_items + count
                 update_mode_status("rarity")
             end
         end
 
-        local chat_listener = listen_for_trade_completion(mark_success)
+        local chat_listener = listen_for_trade_completion(function()
+            mark_success()
+        end)
 
         pcall(function()
             trade_remotes.SetReady:InvokeServer(true)
         end)
 
         wait_for_trade_end("rarity", chat_listener)
+        task_wait(0.6)
 
-        if chat_listener.is_completed() or (not local_player:GetAttribute("IsTrading") and #added_items > 0) then
-            mark_success()
+        local sent_count = verify_items_sent(added_items)
+        local is_chat_done = (chat_listener and chat_listener.is_completed())
+
+        if sent_count > 0 or is_chat_done or (not is_trade_active() and #added_items > 0) then
+            local count = (sent_count > 0) and sent_count or #added_items
+            mark_success(count)
         end
 
         chat_listener.disconnect()
 
         if trade_success then
+            cache.last_trade_time = tick()
             if config.quantity > 0 and cache.stats.rarity.total_items >= config.quantity then
                 config.enabled = false
+                config.trade_rarity_enabled = false
                 if rarity_toggle_ctrl then
                     rarity_toggle_ctrl.set_state(false)
-                    config.trade_rarity_enabled = false
                 end
                 save_config()
+                set_status_msg("rarity", string_format("Selesai! Berhasil mengirim %d/%d item", cache.stats.rarity.total_items, config.quantity))
+                return
             end
         else
             cache.stats.rarity.failed = cache.stats.rarity.failed + 1
@@ -1489,9 +1566,9 @@ local function try_trade_enchant()
     local total_sent = cache.stats.enchant.total_items
     if config.quantity > 0 and total_sent >= config.quantity then
         config.enabled = false
+        config.trade_enchants_enabled = false
         if enchant_toggle_ctrl then
             enchant_toggle_ctrl.set_state(false)
-            config.trade_enchants_enabled = false
         end
         save_config()
         return
@@ -1524,9 +1601,9 @@ local function try_trade_enchant()
         local item_name = get_mode_display_name("enchant")
         set_status_msg("enchant", "Error: Tidak ada lagi " .. item_name .. " di inventory")
         config.enabled = false
+        config.trade_enchants_enabled = false
         if enchant_toggle_ctrl then
             enchant_toggle_ctrl.set_state(false)
-            config.trade_enchants_enabled = false
         end
         save_config()
         return
@@ -1545,7 +1622,7 @@ local function try_trade_enchant()
     local added_items = {}
     set_status_msg("enchant", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
     for _, item in ipairs(items_to_trade) do
-        if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
+        if not config.enabled or not is_trade_active() then break end
 
         local item_data = item_utility:GetItemData(item.Id)
         local add_success = false
@@ -1572,40 +1649,51 @@ local function try_trade_enchant()
         task_wait(0.08)
     end
 
-    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
+    if #added_items > 0 and is_trade_active() then
         local trade_success = false
-        local function mark_success()
+        local function mark_success(count)
             if not trade_success then
                 trade_success = true
+                count = count or #added_items
                 cache.stats.enchant.success_trades = cache.stats.enchant.success_trades + 1
-                cache.stats.enchant.last_items = #added_items
-                cache.stats.enchant.total_items = cache.stats.enchant.total_items + #added_items
+                cache.stats.enchant.last_items = count
+                cache.stats.enchant.total_items = cache.stats.enchant.total_items + count
                 update_mode_status("enchant")
             end
         end
 
-        local chat_listener = listen_for_trade_completion(mark_success)
+        local chat_listener = listen_for_trade_completion(function()
+            mark_success()
+        end)
 
         pcall(function()
             trade_remotes.SetReady:InvokeServer(true)
         end)
 
         wait_for_trade_end("enchant", chat_listener)
+        task_wait(0.6)
 
-        if chat_listener.is_completed() or (not local_player:GetAttribute("IsTrading") and #added_items > 0) then
-            mark_success()
+        local sent_count = verify_items_sent(added_items)
+        local is_chat_done = (chat_listener and chat_listener.is_completed())
+
+        if sent_count > 0 or is_chat_done or (not is_trade_active() and #added_items > 0) then
+            local count = (sent_count > 0) and sent_count or #added_items
+            mark_success(count)
         end
 
         chat_listener.disconnect()
 
         if trade_success then
+            cache.last_trade_time = tick()
             if config.quantity > 0 and cache.stats.enchant.total_items >= config.quantity then
                 config.enabled = false
+                config.trade_enchants_enabled = false
                 if enchant_toggle_ctrl then
                     enchant_toggle_ctrl.set_state(false)
-                    config.trade_enchants_enabled = false
                 end
                 save_config()
+                set_status_msg("enchant", string_format("Selesai! Berhasil mengirim %d/%d enchant stone", cache.stats.enchant.total_items, config.quantity))
+                return
             end
         else
             cache.stats.enchant.failed = cache.stats.enchant.failed + 1
@@ -1769,7 +1857,7 @@ local function try_trade_by_coin()
     local added_coins = 0
     set_status_msg("coin", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
     for idx, fish in ipairs(items_to_trade) do
-        if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
+        if not config.enabled or not is_trade_active() then break end
 
         local add_success = false
         for attempt = 1, 2 do
@@ -1794,41 +1882,54 @@ local function try_trade_by_coin()
         task_wait(0.03)
     end
 
-    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
+    if #added_items > 0 and is_trade_active() then
         local trade_success = false
-        local function mark_success()
+        local function mark_success(coins, items)
             if not trade_success then
                 trade_success = true
+                coins = coins or added_coins
+                items = items or #added_items
                 cache.stats.coin.success_trades = cache.stats.coin.success_trades + 1
-                cache.stats.coin.last_items = #added_items
-                cache.stats.coin.total_items = cache.stats.coin.total_items + #added_items
-                cache.stats.coin.total_coins = (cache.stats.coin.total_coins or 0) + added_coins
+                cache.stats.coin.last_items = items
+                cache.stats.coin.total_items = cache.stats.coin.total_items + items
+                cache.stats.coin.total_coins = (cache.stats.coin.total_coins or 0) + coins
                 update_mode_status("coin")
             end
         end
 
-        local chat_listener = listen_for_trade_completion(mark_success)
+        local chat_listener = listen_for_trade_completion(function()
+            mark_success()
+        end)
 
         pcall(function()
             trade_remotes.SetReady:InvokeServer(true)
         end)
 
         wait_for_trade_end("coin", chat_listener)
+        task_wait(0.6)
 
-        if chat_listener.is_completed() or (not local_player:GetAttribute("IsTrading") and #added_items > 0) then
-            mark_success()
+        local sent_coins, sent_items = verify_coins_sent(added_items)
+        local is_chat_done = (chat_listener and chat_listener.is_completed())
+
+        if sent_items > 0 or is_chat_done or (not is_trade_active() and #added_items > 0) then
+            local coins = (sent_items > 0) and sent_coins or added_coins
+            local items = (sent_items > 0) and sent_items or #added_items
+            mark_success(coins, items)
         end
 
         chat_listener.disconnect()
 
         if trade_success then
+            cache.last_trade_time = tick()
             if config.target_coin_amount > 0 and cache.stats.coin.total_coins >= config.target_coin_amount then
                 config.enabled = false
+                config.trade_coins_enabled = false
                 if coin_toggle_ctrl then
                     coin_toggle_ctrl.set_state(false)
-                    config.trade_coins_enabled = false
                 end
                 save_config()
+                set_status_msg("coin", string_format("Selesai! Target koin tercapai (%d/%d koin)", cache.stats.coin.total_coins, config.target_coin_amount))
+                return
             end
         else
             cache.stats.coin.failed = cache.stats.coin.failed + 1
@@ -2009,11 +2110,12 @@ local function create_ui()
     end
 
     local function sync_qty_boxes(val)
+        val = math.max(0, math.floor(tonumber(val) or 0))
         config.quantity = val
         save_config()
-        if qty_box then qty_box.Text = tostring(val) end
-        if es_qty_box then es_qty_box.Text = tostring(val) end
-        if r_qty_box then r_qty_box.Text = tostring(val) end
+        if qty_box and qty_box.Text ~= tostring(val) then qty_box.Text = tostring(val) end
+        if es_qty_box and es_qty_box.Text ~= tostring(val) then es_qty_box.Text = tostring(val) end
+        if r_qty_box and r_qty_box.Text ~= tostring(val) then r_qty_box.Text = tostring(val) end
     end
 
     local function truncate_string(str, max_len)
@@ -2946,7 +3048,7 @@ local function create_ui()
     title_lbl.Size = UDim2.new(1, -40, 1, 0)
     title_lbl.Position = UDim2.new(0, 10, 0, 0)
     title_lbl.BackgroundTransparency = 1
-    title_lbl.Text = "[K] KEENAN // TERMINAL TRADE"
+    title_lbl.Text = "Keenan Trade Script"
     title_lbl.TextColor3 = ACCENT_COLOR
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
@@ -2975,16 +3077,6 @@ local function create_ui()
         end
     end)
 
-    local formatted_logo_id = ""
-    if CUSTOM_LOGO_ASSET_ID and CUSTOM_LOGO_ASSET_ID ~= "" and CUSTOM_LOGO_ASSET_ID ~= "0" and CUSTOM_LOGO_ASSET_ID ~= 0 then
-        local id_str = tostring(CUSTOM_LOGO_ASSET_ID)
-        if string_find(id_str, "://", 1, true) then
-            formatted_logo_id = id_str
-        else
-            formatted_logo_id = "rbxassetid://" .. id_str
-        end
-    end
-
     local floating_btn = Instance.new("TextButton")
     floating_btn.Name = "FloatingRestore"
     floating_btn.Size = UDim2.new(0, 42, 0, 42)
@@ -3007,19 +3099,8 @@ local function create_ui()
     float_stroke.Thickness = 1.5
     float_stroke.Parent = floating_btn
 
-    local icon_img = Instance.new("ImageLabel")
-    icon_img.Name = "FloatingLogoImg"
-    icon_img.Size = UDim2.new(1, -8, 1, -8)
-    icon_img.Position = UDim2.new(0, 4, 0, 4)
-    icon_img.BackgroundTransparency = 1
-    icon_img.Image = formatted_logo_id
-    icon_img.ScaleType = Enum.ScaleType.Fit
-    icon_img.ZIndex = 21
-    icon_img.Visible = (formatted_logo_id ~= "")
-    icon_img.Parent = floating_btn
-
     local icon_lbl = Instance.new("TextLabel")
-    icon_lbl.Name = "FloatingFallback"
+    icon_lbl.Name = "FloatingIcon"
     icon_lbl.Size = UDim2.new(1, 0, 1, 0)
     icon_lbl.Position = UDim2.new(0, 0, 0, 0)
     icon_lbl.BackgroundTransparency = 1
@@ -3028,7 +3109,7 @@ local function create_ui()
     icon_lbl.TextSize = 22
     icon_lbl.FontFace = font_bold
     icon_lbl.ZIndex = 21
-    icon_lbl.Visible = (formatted_logo_id == "")
+    icon_lbl.Visible = true
     icon_lbl.Parent = floating_btn
 
     local f_dragging, f_drag_start, f_start_pos
@@ -3715,6 +3796,18 @@ local function create_ui()
     qty_stroke.Thickness = 1
     qty_stroke.Parent = qty_box
 
+    qty_box:GetPropertyChangedSignal("Text"):Connect(function()
+        local text = qty_box.Text
+        local val = tonumber(text)
+        if val and val >= 0 then
+            config.quantity = math.floor(val)
+            save_config()
+        elseif text == "" then
+            config.quantity = 0
+            save_config()
+        end
+    end)
+
     qty_box.FocusLost:Connect(function()
         local text = qty_box.Text
         local val = (text == "") and 0 or (tonumber(text) or config.quantity)
@@ -3763,6 +3856,12 @@ local function create_ui()
 
     byname_toggle_ctrl = create_toggle(byname_content, "Start Trade ByName", (config.enabled and config.trade_fish_enabled), function(active)
         if active then
+            if qty_box and qty_box.Text ~= "" then
+                local num = tonumber(qty_box.Text)
+                if num and num >= 0 then
+                    sync_qty_boxes(math.floor(num))
+                end
+            end
             cache.stats.fish.success_trades = 0
             cache.stats.fish.last_items = 0
             cache.stats.fish.total_items = 0
@@ -3961,6 +4060,18 @@ local function create_ui()
     es_qty_stroke.Thickness = 1
     es_qty_stroke.Parent = es_qty_box
 
+    es_qty_box:GetPropertyChangedSignal("Text"):Connect(function()
+        local text = es_qty_box.Text
+        local val = tonumber(text)
+        if val and val >= 0 then
+            config.quantity = math.floor(val)
+            save_config()
+        elseif text == "" then
+            config.quantity = 0
+            save_config()
+        end
+    end)
+
     es_qty_box.FocusLost:Connect(function()
         local text = es_qty_box.Text
         local val = (text == "") and 0 or (tonumber(text) or config.quantity)
@@ -4033,6 +4144,12 @@ local function create_ui()
 
     enchant_toggle_ctrl = create_toggle(enchant_content, "Start Trade EnchantStone", (config.enabled and config.trade_enchants_enabled), function(active)
         if active then
+            if es_qty_box and es_qty_box.Text ~= "" then
+                local num = tonumber(es_qty_box.Text)
+                if num and num >= 0 then
+                    sync_qty_boxes(math.floor(num))
+                end
+            end
             cache.stats.enchant.success_trades = 0
             cache.stats.enchant.last_items = 0
             cache.stats.enchant.total_items = 0
@@ -4225,6 +4342,18 @@ local function create_ui()
     r_qty_stroke.Thickness = 1
     r_qty_stroke.Parent = r_qty_box
 
+    r_qty_box:GetPropertyChangedSignal("Text"):Connect(function()
+        local text = r_qty_box.Text
+        local val = tonumber(text)
+        if val and val >= 0 then
+            config.quantity = math.floor(val)
+            save_config()
+        elseif text == "" then
+            config.quantity = 0
+            save_config()
+        end
+    end)
+
     r_qty_box.FocusLost:Connect(function()
         local text = r_qty_box.Text
         local val = (text == "") and 0 or (tonumber(text) or config.quantity)
@@ -4269,6 +4398,12 @@ local function create_ui()
 
     rarity_toggle_ctrl = create_toggle(rarity_content, "Start Trade ByRarity", (config.enabled and config.trade_rarity_enabled), function(active)
         if active then
+            if r_qty_box and r_qty_box.Text ~= "" then
+                local num = tonumber(r_qty_box.Text)
+                if num and num >= 0 then
+                    sync_qty_boxes(math.floor(num))
+                end
+            end
             cache.stats.rarity.success_trades = 0
             cache.stats.rarity.last_items = 0
             cache.stats.rarity.total_items = 0
@@ -4391,6 +4526,19 @@ local function create_ui()
     coin_box_stroke.Thickness = 1
     coin_box_stroke.Parent = coin_box
 
+    coin_box:GetPropertyChangedSignal("Text"):Connect(function()
+        local text = coin_box.Text
+        local val = tonumber(text)
+        if val and val >= 0 then
+            config.target_coin_amount = math.floor(val)
+            config.trade_coins_enabled = (config.target_coin_amount > 0)
+            save_config()
+        elseif text == "" then
+            config.target_coin_amount = 0
+            save_config()
+        end
+    end)
+
     coin_box.FocusLost:Connect(function()
         local text = coin_box.Text
         local val = (text == "") and 0 or (tonumber(text) or config.target_coin_amount)
@@ -4404,6 +4552,14 @@ local function create_ui()
 
     coin_toggle_ctrl = create_toggle(coin_content, "Start Trade ByCoin", (config.enabled and config.trade_coins_enabled), function(active)
         if active then
+            if coin_box and coin_box.Text ~= "" then
+                local num = tonumber(coin_box.Text)
+                if num and num >= 0 then
+                    config.target_coin_amount = math.floor(num)
+                    config.trade_coins_enabled = (config.target_coin_amount > 0)
+                    save_config()
+                end
+            end
             cache.stats.coin.success_trades = 0
             cache.stats.coin.last_items = 0
             cache.stats.coin.total_items = 0
