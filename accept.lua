@@ -172,6 +172,34 @@ local function is_trade_prompt(prompt_gui)
     return is_trade
 end
 
+local function purge_stale_trade_prompts()
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                for _, child in ipairs(frame:GetChildren()) do
+                    if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIGridLayout" and child.Name ~= "UIPadding" then
+                        local has_trade = false
+                        for _, desc in ipairs(child:GetDescendants()) do
+                            if desc:IsA("TextLabel") and desc.Text then
+                                local t = string_lower(desc.Text)
+                                if string_find(t, "trade", 1, true) then
+                                    has_trade = true
+                                    break
+                                end
+                            end
+                        end
+                        if has_trade or string_find(string_lower(child.Name), "trade", 1, true) then
+                            pcall(function() child:Destroy() end)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
 local function dismiss_trade_prompt()
     pcall(function()
         local prompt_gui = player_gui:FindFirstChild("Prompt")
@@ -198,6 +226,7 @@ local function dismiss_trade_prompt()
             end
 
             if config.auto_accept_enabled then
+                purge_stale_trade_prompts()
                 if blackout then blackout.Visible = false end
                 if frame then frame.Visible = false end
             end
@@ -241,7 +270,7 @@ local function close_trading_gui()
         end
     end)
     if status_label then
-        status_label.Text = config.auto_accept_enabled and "Status: Idle (Listening)" or "Status: Disabled"
+        status_label.Text = config.auto_accept_enabled and "[v2.0] Status: Idle (Listening)" or "[v2.0] Status: Disabled"
     end
 end
 
@@ -254,6 +283,7 @@ local function toggle_auto_accept(enable)
 
     if not enable then
         dismiss_trade_prompt()
+        purge_stale_trade_prompts()
         apply_prompt_visibility()
         pcall(function()
             local prompt_gui = player_gui:FindFirstChild("Prompt")
@@ -269,7 +299,7 @@ local function toggle_auto_accept(enable)
     end
 
     if status_label then
-        status_label.Text = enable and "Status: Idle (Listening)" or "Status: Disabled"
+        status_label.Text = enable and "[v2.0] Status: Idle (Listening)" or "[v2.0] Status: Disabled"
     end
 
     if not trade_remotes then return end
@@ -279,21 +309,11 @@ local function toggle_auto_accept(enable)
         if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
 
         if not config.auto_accept_enabled then
-            pcall(function()
-                local prompt_gui = player_gui:FindFirstChild("Prompt")
-                if prompt_gui then
-                    prompt_gui.Enabled = true
-                    local blackout = prompt_gui:FindFirstChild("Blackout")
-                    if blackout then blackout.Visible = true end
-                    local frame = prompt_gui:FindFirstChild("Frame")
-                    if frame then frame.Visible = true end
-                end
-            end)
             return
         end
 
         if status_label then
-            status_label.Text = "Status: Accepting Offer from " .. tostring(requester.Name or requester)
+            status_label.Text = "[v2.0] Status: Accepting Offer from " .. tostring(requester.Name or requester)
         end
 
         pcall(function()
@@ -314,6 +334,7 @@ local function toggle_auto_accept(enable)
         if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
         close_trading_gui()
         dismiss_trade_prompt()
+        purge_stale_trade_prompts()
     end)
 
     if not enable then return end
@@ -324,7 +345,7 @@ local function toggle_auto_accept(enable)
         auto_accept_active = true
 
         if status_label then
-            status_label.Text = "Status: Trade Active! Showing GUI..."
+            status_label.Text = "[v2.0] Status: Trade Active! Showing GUI..."
         end
 
         pcall(function()
@@ -338,51 +359,49 @@ local function toggle_auto_accept(enable)
             end
         end)
 
-        if config.auto_confirm then
-            task_spawn(function()
-                task_wait(0.5)
-                if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
+        task_spawn(function()
+            task_wait(0.5)
+            if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
 
+            pcall(function()
+                trade_remotes.SetReady:InvokeServer(true)
+            end)
+
+            local start_time = tick()
+            while config.auto_accept_enabled and auto_accept_active and local_player:GetAttribute("IsTrading") and (tick() - start_time) < 60 do
+                pcall(function()
+                    local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
+                    if t_gui then
+                        t_gui.Enabled = true
+                        local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container")
+                        if frame then frame.Visible = true end
+                    end
+                end)
+
+                pcall(function()
+                    trade_remotes.ConfirmTrade:InvokeServer()
+                end)
                 pcall(function()
                     trade_remotes.SetReady:InvokeServer(true)
                 end)
 
-                local start_time = tick()
-                while config.auto_accept_enabled and auto_accept_active and local_player:GetAttribute("IsTrading") and (tick() - start_time) < 60 do
-                    pcall(function()
-                        local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
-                        if t_gui then
-                            t_gui.Enabled = true
-                            local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container")
-                            if frame then frame.Visible = true end
-                        end
-                    end)
-
-                    pcall(function()
-                        trade_remotes.ConfirmTrade:InvokeServer()
-                    end)
-                    pcall(function()
-                        trade_remotes.SetReady:InvokeServer(true)
-                    end)
-
-                    pcall(function()
-                        local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
-                        if t_gui then
-                            for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
-                                local btn = t_gui:FindFirstChild(btn_name, true)
-                                if btn and btn:IsA("GuiButton") then
-                                    click_gui_button(btn)
-                                end
+                pcall(function()
+                    local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
+                    if t_gui then
+                        for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
+                            local btn = t_gui:FindFirstChild(btn_name, true)
+                            if btn and btn:IsA("GuiButton") then
+                                click_gui_button(btn)
                             end
                         end
-                    end)
+                    end
+                end)
 
-                    task_wait(0.4)
-                end
+                task_wait(0.4)
+            end
 
-                close_trading_gui()
-            end)
-        end
+            close_trading_gui()
+        end)
     end)
 end
 
@@ -459,7 +478,7 @@ local function create_ui()
     title_lbl.Size = UDim2.new(1, -30, 1, 0)
     title_lbl.Position = UDim2.new(0, 8, 0, 0)
     title_lbl.BackgroundTransparency = 1
-    title_lbl.Text = "NØIR - Auto Accept"
+    title_lbl.Text = "NØIR AutoAccept [v2.0]"
     title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
@@ -609,7 +628,7 @@ local function create_ui()
     status_label.Size = UDim2.new(1, 0, 0, 28)
     status_label.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     status_label.BackgroundTransparency = 0.4
-    status_label.Text = config.auto_accept_enabled and "Status: Idle (Listening)" or "Status: Disabled"
+    status_label.Text = config.auto_accept_enabled and "[v2.0] Status: Idle (Listening)" or "[v2.0] Status: Disabled"
     status_label.TextColor3 = Color3.fromRGB(0, 255, 170)
     status_label.TextSize = 8
     status_label.FontFace = font_face
