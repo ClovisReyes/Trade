@@ -123,6 +123,20 @@ local trade_remotes = setmetatable({}, {
     end
 })
 
+local GuiControl = nil
+local function get_gui_control()
+    if GuiControl then return GuiControl end
+    pcall(function()
+        local rep = game:GetService("ReplicatedStorage")
+        local modules = rep:FindFirstChild("Modules") or rep:WaitForChild("Modules", 3)
+        if modules and modules:FindFirstChild("GuiControl") then
+            GuiControl = require(modules.GuiControl)
+        end
+    end)
+    return GuiControl
+end
+get_gui_control()
+
 local config = {
     auto_accept_enabled = true,
     auto_confirm        = true
@@ -133,21 +147,31 @@ local auto_accept_trade_started_conn = nil
 local auto_accept_trade_ended_conn = nil
 local auto_accept_active = false
 local status_label = nil
+local last_trade_offer_time = 0
+local prompt_watcher_conns = {}
 
 local function click_gui_button(btn)
     if not btn then return end
     pcall(function()
+        btn.Active = true
         if firesignal then
-            pcall(function() firesignal(btn.MouseButton1Click) end)
-            pcall(function() firesignal(btn.Activated) end)
-            pcall(function() firesignal(btn.MouseButton1Up) end)
+            pcall(firesignal, btn.Activated)
+            pcall(firesignal, btn.MouseButton1Click)
+            pcall(firesignal, btn.MouseButton1Down)
+            pcall(firesignal, btn.MouseButton1Up)
         end
         if getconnections then
-            for _, sig in ipairs({"Activated", "MouseButton1Click", "MouseButton1Up"}) do
+            for _, sig in ipairs({btn.Activated, btn.MouseButton1Click, btn.MouseButton1Down, btn.MouseButton1Up}) do
                 pcall(function()
-                    for _, conn in ipairs(getconnections(btn[sig])) do
-                        pcall(function() conn:Fire() end)
-                        pcall(function() conn.Function() end)
+                    for _, conn in ipairs(getconnections(sig)) do
+                        if type(conn.Fire) == "function" then
+                            pcall(function() conn:Fire() end)
+                        elseif type(conn.fire) == "function" then
+                            pcall(function() conn:fire() end)
+                        end
+                        if type(conn.Function) == "function" then
+                            pcall(conn.Function)
+                        end
                     end
                 end)
             end
@@ -155,57 +179,183 @@ local function click_gui_button(btn)
     end)
 end
 
-local function is_trade_prompt(prompt_gui)
-    if not prompt_gui then return false end
-    local is_trade = false
+local function cleanup_prompt_watcher()
+    for _, c in ipairs(prompt_watcher_conns) do
+        pcall(function() c:Disconnect() end)
+    end
+    prompt_watcher_conns = {}
+end
+
+local function kill_all_blackouts()
     pcall(function()
-        for _, desc in ipairs(prompt_gui:GetDescendants()) do
-            if desc:IsA("TextLabel") and desc.Text then
-                local text = string_lower(desc.Text)
-                if string_find(text, "trade request", 1, true) or (string_find(text, "trade", 1, true) and string_find(text, "accept", 1, true)) then
-                    is_trade = true
-                    break
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                frame.Visible = false
+                frame.BackgroundTransparency = 1
+                frame.Active = false
+            end
+        end
+    end)
+
+    pcall(function()
+        local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
+        if psb then
+            psb.Enabled = false
+            for _, d in ipairs(psb:GetDescendants()) do
+                if d:IsA("Frame") or d:IsA("ImageLabel") then
+                    d.Visible = false
+                    d.BackgroundTransparency = 1
+                    d.Active = false
                 end
             end
         end
     end)
-    return is_trade
+
+    pcall(function()
+        for _, gui in ipairs(player_gui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "NoirHub_AutoTrade" and gui.Name ~= "NoirHub_AutoAccept" and gui.Name ~= "KeenanTrade" and gui.Name ~= "KeenanTradeDebugger" then
+                local g_lower = string_lower(gui.Name)
+                if string_find(g_lower, "blackout", 1, true) or string_find(g_lower, "fade", 1, true) then
+                    gui.Enabled = false
+                end
+            end
+        end
+    end)
 end
 
-local function suppress_and_accept_prompt()
+local function restore_hud()
+    local gc = get_gui_control()
+    if gc then
+        pcall(function() gc.RestoreHUD() end)
+        pcall(function() gc:RestoreHUD() end)
+        pcall(function() gc.SetHUDVisibility(true) end)
+        pcall(function() gc:SetHUDVisibility(true) end)
+        pcall(function() gc.Unlock() end)
+        pcall(function() gc:Unlock() end)
+        if config and config.auto_accept_enabled then
+            pcall(function() gc.Close("Prompt") end)
+            pcall(function() gc:Close("Prompt") end)
+        end
+    end
+
+    pcall(function()
+        for _, gui_name in ipairs({"HUD", "! HUD", "MainHUD", "GameHUD", "TopBar", "CoreHUD"}) do
+            local h = player_gui:FindFirstChild(gui_name)
+            if h and h:IsA("ScreenGui") then
+                h.Enabled = true
+            end
+        end
+    end)
+
+    kill_all_blackouts()
+end
+
+local function suppress_trade_prompt()
+    if not (config and config.auto_accept_enabled) then return end
     pcall(function()
         local prompt_gui = player_gui:FindFirstChild("Prompt")
         if not prompt_gui then return end
         local blackout = prompt_gui:FindFirstChild("Blackout")
-        if blackout then
-            -- Pindahkan Blackout keluar layar agar tidak terlihat sama sekali oleh pemain
+        if not blackout then return end
+
+        local label = blackout:FindFirstChild("Label")
+        local text = label and label.Text or ""
+        local lower = string_lower(text)
+
+        local is_trade = string_find(lower, "trade", 1, true)
+            or string_find(lower, "accept", 1, true)
+            or string_find(lower, "request", 1, true)
+            or string_find(lower, "offer", 1, true)
+            or auto_accept_active
+            or (tick() - last_trade_offer_time < 4)
+
+        if is_trade then
+            -- 1. Pindahkan Blackout keluar layar agar tidak terlihat, tapi biarkan aktif agar klik terdaftar
             blackout.Position = UDim2.new(10, 0, 10, 0)
-            
-            -- Klik tombol Yes saat masih aktif agar PromptController game memproses & menutup prompt
+
+            -- 2. Hilangkan background hitam
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                frame.Visible = false
+                frame.BackgroundTransparency = 1
+                frame.Active = false
+            end
+            kill_all_blackouts()
+
+            -- 3. Klik tombol YES
             local options = blackout:FindFirstChild("Options")
-            local yes_btn = options and options:FindFirstChild("Yes")
-            if yes_btn then
-                click_gui_button(yes_btn)
-                task_spawn(function()
-                    task_wait(0.05)
-                    blackout.Visible = false
-                    prompt_gui.Enabled = false
-                    blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                end)
-            else
-                for _, desc in ipairs(prompt_gui:GetDescendants()) do
-                    if desc:IsA("GuiButton") and (desc.Name == "Yes" or (desc:IsA("TextButton") and string_lower(desc.Text) == "yes")) then
-                        click_gui_button(desc)
-                        task_spawn(function()
-                            task_wait(0.05)
-                            blackout.Visible = false
-                            prompt_gui.Enabled = false
-                            blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                        end)
-                        break
-                    end
+            if options then
+                local yes_btn = options:FindFirstChild("Yes")
+                if yes_btn then
+                    click_gui_button(yes_btn)
+                    task_spawn(function()
+                        task_wait(0.05)
+                        blackout.Visible = false
+                        prompt_gui.Enabled = false
+                        local gc = get_gui_control()
+                        if gc then
+                            pcall(function() gc.Close("Prompt") end)
+                            pcall(function() gc:Close("Prompt") end)
+                        end
+                    end)
                 end
             end
+        end
+    end)
+end
+
+local function wire_prompt_buttons(blackout, prompt_gui)
+    if not blackout or not prompt_gui then return end
+    local options = blackout:FindFirstChild("Options")
+    if not options then return end
+
+    local function setup_btn(btn)
+        if not btn then return end
+        local function on_dismiss()
+            task_spawn(function()
+                task_wait(0.05)
+                pcall(function()
+                    blackout.Visible = false
+                    prompt_gui.Enabled = false
+                end)
+            end)
+        end
+        table.insert(prompt_watcher_conns, btn.Activated:Connect(on_dismiss))
+        table.insert(prompt_watcher_conns, btn.MouseButton1Click:Connect(on_dismiss))
+        if btn.InputBegan then
+            table.insert(prompt_watcher_conns, btn.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    on_dismiss()
+                end
+            end))
+        end
+    end
+
+    setup_btn(options:FindFirstChild("Yes"))
+    setup_btn(options:FindFirstChild("No"))
+end
+
+local function init_prompt_watcher()
+    cleanup_prompt_watcher()
+    kill_all_blackouts()
+
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt") or player_gui:WaitForChild("Prompt", 5)
+        if not prompt_gui then return end
+
+        local blackout = prompt_gui:FindFirstChild("Blackout") or prompt_gui:WaitForChild("Blackout", 5)
+        if blackout then
+            local label = blackout:FindFirstChild("Label")
+            if label then
+                table.insert(prompt_watcher_conns, label:GetPropertyChangedSignal("Text"):Connect(function()
+                    if config and config.auto_accept_enabled then
+                        suppress_trade_prompt()
+                    end
+                end))
+            end
+            wire_prompt_buttons(blackout, prompt_gui)
         end
 
         local frame = prompt_gui:FindFirstChild("Frame")
@@ -213,6 +363,70 @@ local function suppress_and_accept_prompt()
             frame.Visible = false
             frame.BackgroundTransparency = 1
             frame.Active = false
+            table.insert(prompt_watcher_conns, frame:GetPropertyChangedSignal("Visible"):Connect(function()
+                if frame.Visible then
+                    frame.Visible = false
+                    frame.BackgroundTransparency = 1
+                    frame.Active = false
+                end
+            end))
+            table.insert(prompt_watcher_conns, frame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
+                if frame.BackgroundTransparency < 1 then
+                    frame.BackgroundTransparency = 1
+                end
+            end))
+        end
+
+        table.insert(prompt_watcher_conns, prompt_gui.DescendantAdded:Connect(function(desc)
+            if desc:IsA("TextLabel") and desc.Name == "Label" and desc.Parent and desc.Parent.Name == "Blackout" then
+                table.insert(prompt_watcher_conns, desc:GetPropertyChangedSignal("Text"):Connect(function()
+                    if config and config.auto_accept_enabled then
+                        suppress_trade_prompt()
+                    end
+                end))
+                if config and config.auto_accept_enabled then
+                    suppress_trade_prompt()
+                end
+            elseif desc:IsA("GuiButton") and desc.Parent and desc.Parent.Name == "Options" then
+                local b = desc.Parent.Parent
+                if b and b.Name == "Blackout" then
+                    wire_prompt_buttons(b, prompt_gui)
+                end
+            end
+        end))
+
+        table.insert(prompt_watcher_conns, prompt_gui:GetPropertyChangedSignal("Enabled"):Connect(function()
+            if config and config.auto_accept_enabled then
+                if prompt_gui.Enabled then
+                    suppress_trade_prompt()
+                end
+            else
+                -- Toggle OFF: ketika game mengaktifkan Prompt untuk offer BARU, tampilkan Blackout di tengah layar
+                local f = prompt_gui:FindFirstChild("Frame")
+                if f then
+                    f.Visible = false
+                    f.BackgroundTransparency = 1
+                    f.Active = false
+                end
+                kill_all_blackouts()
+                if prompt_gui.Enabled then
+                    local b = prompt_gui:FindFirstChild("Blackout")
+                    if b then
+                        b.AnchorPoint = Vector2.new(0.5, 0.5)
+                        b.Position = UDim2.new(0.5, 0, 0.5, 0)
+                        b.Visible = true
+                        wire_prompt_buttons(b, prompt_gui)
+                    end
+                end
+            end
+        end))
+
+        if prompt_gui.Enabled and blackout then
+            if config and config.auto_accept_enabled then
+                suppress_trade_prompt()
+            else
+                wire_prompt_buttons(blackout, prompt_gui)
+            end
         end
     end)
 end
@@ -220,6 +434,11 @@ end
 local function close_trading_gui()
     auto_accept_active = false
     pcall(function()
+        local gc = get_gui_control()
+        if gc then
+            pcall(function() gc.Close("! Trading") end)
+            pcall(function() gc:Close("! Trading") end)
+        end
         local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
         if t_gui then
             t_gui.Enabled = false
@@ -234,8 +453,30 @@ local function close_trading_gui()
             end
         end
     end)
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            prompt_gui.Enabled = false
+            local frame = prompt_gui:FindFirstChild("Frame")
+            if frame then
+                frame.Visible = false
+                frame.BackgroundTransparency = 1
+                frame.Active = false
+            end
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            if blackout then
+                blackout.Visible = false
+                blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+                blackout.AnchorPoint = Vector2.new(0.5, 0.5)
+            end
+        end
+        local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
+        if psb then psb.Enabled = false end
+    end)
+    kill_all_blackouts()
+    restore_hud()
     if status_label then
-        status_label.Text = config.auto_accept_enabled and "[v4.2] Status: Idle (Listening)" or "[v4.2] Status: Disabled"
+        status_label.Text = config.auto_accept_enabled and "[v5.0] Status: Idle (Listening)" or "[v5.0] Status: Disabled"
     end
 end
 
@@ -245,62 +486,19 @@ local function toggle_auto_accept(enable)
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
 
     config.auto_accept_enabled = enable
+    auto_accept_active = false
 
     if not enable then
-        -- Toggle OFF: dismiss prompt lama, kembalikan ke default game
-        pcall(function()
-            local prompt_gui = player_gui:FindFirstChild("Prompt")
-            if prompt_gui then
-                -- Step 1: Klik No/Decline pada prompt lama agar game dismiss secara internal
-                local blackout = prompt_gui:FindFirstChild("Blackout")
-                if blackout then
-                    local options = blackout:FindFirstChild("Options")
-                    if options then
-                        local no_btn = options:FindFirstChild("No") or options:FindFirstChild("Decline")
-                        if no_btn and no_btn:IsA("GuiButton") then
-                            click_gui_button(no_btn)
-                        end
-                    end
-                end
-
-                -- Step 2: Sembunyikan sejenak agar stale content tidak kelihatan
-                prompt_gui.Enabled = false
-            end
-        end)
-
-        -- Step 3: Delay kecil agar game proses dismiss, lalu restore
-        task_spawn(function()
-            task_wait(0.15)
-            pcall(function()
-                local prompt_gui = player_gui:FindFirstChild("Prompt")
-                if prompt_gui then
-                    local blackout = prompt_gui:FindFirstChild("Blackout")
-                    if blackout then
-                        blackout.AnchorPoint = Vector2.new(0.5, 0.5)
-                        blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
-                        -- JANGAN set Visible = true, biarkan game yg set saat ada offer baru
-                    end
-                    local frame = prompt_gui:FindFirstChild("Frame")
-                    if frame then
-                        frame.BackgroundTransparency = 0.5
-                        frame.Active = true
-                        -- JANGAN set Visible = true
-                    end
-                    -- Re-enable ScreenGui agar game bisa tampilkan prompt baru
-                    prompt_gui.Enabled = true
-                end
-            end)
-        end)
-    else
-        -- Toggle ON: sembunyikan prompt
+        -- Toggle OFF: Tutup prompt lama secara bersih & sembunyikan agar tidak ada sisa popup lama
         pcall(function()
             local prompt_gui = player_gui:FindFirstChild("Prompt")
             if prompt_gui then
                 prompt_gui.Enabled = false
                 local blackout = prompt_gui:FindFirstChild("Blackout")
                 if blackout then
-                    blackout.Position = UDim2.new(10, 0, 10, 0)
                     blackout.Visible = false
+                    blackout.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    blackout.AnchorPoint = Vector2.new(0.5, 0.5)
                 end
                 local frame = prompt_gui:FindFirstChild("Frame")
                 if frame then
@@ -309,43 +507,79 @@ local function toggle_auto_accept(enable)
                     frame.Active = false
                 end
             end
+            local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
+            if psb then psb.Enabled = false end
         end)
+
+        kill_all_blackouts()
+        restore_hud()
+
+        if status_label then
+            status_label.Text = "[v5.0] Status: Disabled"
+        end
+        return
     end
 
     if status_label then
-        status_label.Text = enable and "[v4.2] Status: Idle (Listening)" or "[v4.2] Status: Disabled"
+        status_label.Text = "[v5.0] Status: Idle (Listening)"
     end
 
     if not trade_remotes then return end
 
-    -- Saat toggle OFF: JANGAN connect listener apapun, biarkan game handle sepenuhnya
-    if not enable then return end
-
-    -- 1. TradeOfferReceived Listener (HANYA saat ON)
+    -- 1. TradeOfferReceived Listener
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
         if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
         if not config.auto_accept_enabled then return end
 
+        last_trade_offer_time = tick()
+
         if status_label then
-            status_label.Text = "[v4.2] Status: Accepting Offer from " .. tostring(requester.Name or requester)
+            status_label.Text = "[v5.0] Status: Accepting Offer from " .. tostring(requester.Name or requester)
         end
 
-        suppress_and_accept_prompt()
+        suppress_trade_prompt()
 
         pcall(function()
             trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
         end)
+        pcall(function()
+            trade_remotes.AcceptTradeOffer:InvokeServer(requester)
+        end)
 
         task_spawn(function()
-            for _ = 1, 10 do
+            task_wait(0.05)
+            suppress_trade_prompt()
+        end)
+        task_spawn(function()
+            task_wait(0.1)
+            suppress_trade_prompt()
+        end)
+
+        task_spawn(function()
+            for _ = 1, 20 do
                 if not config.auto_accept_enabled then break end
-                suppress_and_accept_prompt()
+                local p = player_gui:FindFirstChild("Prompt")
+                local b = p and p:FindFirstChild("Blackout")
+                if b then
+                    b.Position = UDim2.new(10, 0, 10, 0)
+                    local opt = b:FindFirstChild("Options")
+                    local y = opt and opt:FindFirstChild("Yes")
+                    if y then
+                        click_gui_button(y)
+                        task_spawn(function()
+                            task_wait(0.05)
+                            b.Visible = false
+                            p.Enabled = false
+                        end)
+                        break
+                    end
+                end
                 task_wait(0.05)
             end
         end)
     end)
 
-    -- 2. TradeEnded Listener (HANYA saat ON)
+    -- 2. TradeEnded Listener
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
         if _G.NoirHub_AutoAccept_ScriptID ~= script_id then return end
         close_trading_gui()
@@ -359,24 +593,41 @@ local function toggle_auto_accept(enable)
         pcall(function()
             local prompt_gui = player_gui:FindFirstChild("Prompt")
             if prompt_gui then
+                prompt_gui.Enabled = false
+                local frame = prompt_gui:FindFirstChild("Frame")
+                if frame then
+                    frame.Visible = false
+                    frame.BackgroundTransparency = 1
+                    frame.Active = false
+                end
                 local blackout = prompt_gui:FindFirstChild("Blackout")
                 if blackout then
-                    blackout.Position = UDim2.new(10, 0, 10, 0)
                     blackout.Visible = false
+                    blackout.Position = UDim2.new(10, 0, 10, 0)
                 end
-                prompt_gui.Enabled = false
             end
+            local psb = player_gui:FindFirstChild("PurchaseScreenBlackout")
+            if psb then psb.Enabled = false end
         end)
+        kill_all_blackouts()
+        restore_hud()
 
         if status_label then
-            status_label.Text = "[v4.2] Status: Trade Active! Showing GUI..."
+            status_label.Text = "[v5.0] Status: Trade Active! Showing GUI..."
         end
 
         pcall(function()
+            local gc = get_gui_control()
+            if gc then
+                pcall(function() gc.Open("! Trading") end)
+                pcall(function() gc:Open("! Trading") end)
+                pcall(function() gc.Open("Trading") end)
+                pcall(function() gc:Open("Trading") end)
+            end
             local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
             if t_gui then
                 t_gui.Enabled = true
-                local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container")
+                local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChildWhichIsA("Frame")
                 if frame then
                     frame.Visible = true
                 end
@@ -384,7 +635,7 @@ local function toggle_auto_accept(enable)
         end)
 
         task_spawn(function()
-            task_wait(0.5)
+            task_wait(0.3)
             if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
 
             pcall(function()
@@ -397,7 +648,7 @@ local function toggle_auto_accept(enable)
                     local t_gui = player_gui:FindFirstChild("! Trading") or player_gui:FindFirstChild("Trading")
                     if t_gui then
                         t_gui.Enabled = true
-                        local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container")
+                        local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChildWhichIsA("Frame")
                         if frame then frame.Visible = true end
                     end
                 end)
@@ -502,7 +753,7 @@ local function create_ui()
     title_lbl.Size = UDim2.new(1, -30, 1, 0)
     title_lbl.Position = UDim2.new(0, 8, 0, 0)
     title_lbl.BackgroundTransparency = 1
-    title_lbl.Text = "NØIR AutoAccept [v4.2]"
+    title_lbl.Text = "NØIR AutoAccept [v5.0]"
     title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
@@ -652,7 +903,7 @@ local function create_ui()
     status_label.Size = UDim2.new(1, 0, 0, 28)
     status_label.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     status_label.BackgroundTransparency = 0.4
-    status_label.Text = config.auto_accept_enabled and "[v2.0] Status: Idle (Listening)" or "[v2.0] Status: Disabled"
+    status_label.Text = config.auto_accept_enabled and "[v5.0] Status: Idle (Listening)" or "[v5.0] Status: Disabled"
     status_label.TextColor3 = Color3.fromRGB(0, 255, 170)
     status_label.TextSize = 8
     status_label.FontFace = font_face
@@ -665,12 +916,14 @@ local function create_ui()
     stat_c.Parent = status_label
 end
 
--- Initialize UI & Auto Accept
+-- Initialize UI & Prompt Watcher & Auto Accept
+init_prompt_watcher()
 pcall(create_ui)
 pcall(function() toggle_auto_accept(config.auto_accept_enabled) end)
 
 _G.NoirHub_AutoAccept_Cleanup = function()
     pcall(function() toggle_auto_accept(false) end)
+    pcall(cleanup_prompt_watcher)
     _G.NoirHub_AutoAccept_ScriptID = nil
     pcall(function()
         local core = gethui and gethui() or game:GetService("CoreGui")
