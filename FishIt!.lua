@@ -264,7 +264,6 @@ local function save_config()
 end
 
 local function log_debug(msg)
-    print(tostring(msg))
     if _G.KeenanTradeDebugLog then
         pcall(_G.KeenanTradeDebugLog, tostring(msg))
     end
@@ -359,9 +358,6 @@ local function get_inventory_enchants(bypass_favorited)
             end
         end
     end)
-    if not success then
-        warn("get_inventory_enchants error: " .. tostring(err))
-    end
     return enchants
 end
 
@@ -750,12 +746,10 @@ local function log_inventory_fish()
     table_insert(log_lines, "==================================")
 
     local log_text = table_concat(log_lines, "\n")
-    print(log_text)
 
     pcall(function()
         if writefile then
             writefile("trade_inventory_log.txt", log_text)
-            print("Successfully wrote trade_inventory_log.txt to executor workspace.")
         end
     end)
 end
@@ -1811,9 +1805,6 @@ local function create_ui()
                 end
             end
         end)
-        if not success then
-            warn("get_owned_fish_options error: " .. tostring(err))
-        end
         for name, qty in pairs(counts) do
             table_insert(list, name .. " (x" .. qty .. ")")
         end
@@ -2071,10 +2062,6 @@ local function create_ui()
 
             p_scroll.CanvasSize = UDim2_new(0, 0, 0, match_count * 26 + 10)
         end)
-        if not success then
-            warn("populate_players_panel error: " .. tostring(err))
-            print("populate_players_panel error: " .. tostring(err))
-        end
     end
 
     ply_refresh.Activated:Connect(function()
@@ -2264,10 +2251,6 @@ local function create_ui()
 
             i_scroll.CanvasSize = UDim2_new(0, 0, 0, match_count * 26 + 10)
         end)
-        if not success then
-            warn("populate_items_panel error: " .. tostring(err))
-            print("populate_items_panel error: " .. tostring(err))
-        end
     end
 
     local item_search_thread = nil
@@ -2459,10 +2442,6 @@ local function create_ui()
 
             en_scroll.CanvasSize = UDim2_new(0, 0, 0, match_count * 26 + 10)
         end)
-        if not success then
-            warn("populate_enchants_panel error: " .. tostring(err))
-            print("populate_enchants_panel error: " .. tostring(err))
-        end
     end
 
     local enchant_search_thread = nil
@@ -2631,9 +2610,6 @@ local function create_ui()
 
             r_scroll.CanvasSize = UDim2_new(0, 0, 0, match_count * 26 + 10)
         end)
-        if not success then
-            warn("populate_rarity_panel error: " .. tostring(err))
-        end
     end
 
     local header = Instance_new("Frame")
@@ -2643,7 +2619,7 @@ local function create_ui()
     header.BackgroundTransparency = 0
     header.BorderSizePixel = 0
     header.Active = true
-    header.ZIndex = 5
+    header.ZIndex = 25
     header.Parent = main
 
     local header_corner = Instance_new("UICorner")
@@ -2656,7 +2632,7 @@ local function create_ui()
     header_cover.BackgroundColor3 = SIDEBAR_COLOR
     header_cover.BackgroundTransparency = 0
     header_cover.BorderSizePixel = 0
-    header_cover.ZIndex = 5
+    header_cover.ZIndex = 25
     header_cover.Parent = header
 
     local header_div = Instance_new("Frame")
@@ -2664,19 +2640,19 @@ local function create_ui()
     header_div.Position = UDim2_new(0, 0, 1, 0)
     header_div.BackgroundColor3 = BORDER_COLOR
     header_div.BorderSizePixel = 0
-    header_div.ZIndex = 5
+    header_div.ZIndex = 25
     header_div.Parent = header
 
     local title_lbl = Instance_new("TextLabel")
-    title_lbl.Size = UDim2_new(1, -60, 1, 0)
-    title_lbl.Position = UDim2_new(0, 10, 0, 0)
+    title_lbl.Size = UDim2_new(1, -85, 1, 0)
+    title_lbl.Position = UDim2_new(0, 8, 0, 0)
     title_lbl.BackgroundTransparency = 1
     title_lbl.Text = "Keenan Trade Script"
     title_lbl.TextColor3 = ACCENT_COLOR
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
     title_lbl.TextXAlignment = Enum.TextXAlignment.Left
-    title_lbl.ZIndex = 6
+    title_lbl.ZIndex = 26
     title_lbl.Parent = header
 
     local dragging, drag_input, drag_start, start_pos
@@ -2778,17 +2754,17 @@ local function create_ui()
 
     local min_btn = Instance_new("TextButton")
     min_btn.Name = "MinimizeBtn"
-    min_btn.Size = UDim2_new(0, 22, 0, 22)
-    min_btn.Position = UDim2_new(1, -50, 0.5, -11)
+    min_btn.Size = UDim2_new(0, 18, 0, 18)
+    min_btn.Position = UDim2_new(1, -66, 0.5, -9)
     min_btn.BackgroundTransparency = 1
     min_btn.BorderSizePixel = 0
     min_btn.Text = "─"
     min_btn.TextColor3 = MUTED_COLOR
-    min_btn.TextSize = 12
+    min_btn.TextSize = 11
     min_btn.FontFace = font_bold
     min_btn.Active = true
     min_btn.Modal = true
-    min_btn.ZIndex = 6
+    min_btn.ZIndex = 27
     min_btn.Parent = header
 
     min_btn.MouseEnter:Connect(function()
@@ -2803,10 +2779,56 @@ local function create_ui()
         floating_btn.Visible = true
     end)
 
+    local is_maximized = false
+    local saved_pos = nil
+    local saved_size = nil
+
+    local restore_btn = Instance_new("TextButton")
+    restore_btn.Name = "RestoreBtn"
+    restore_btn.Size = UDim2_new(0, 18, 0, 18)
+    restore_btn.Position = UDim2_new(1, -44, 0.5, -9)
+    restore_btn.BackgroundTransparency = 1
+    restore_btn.BorderSizePixel = 0
+    restore_btn.Text = "❐"
+    restore_btn.TextColor3 = MUTED_COLOR
+    restore_btn.TextSize = 10
+    restore_btn.FontFace = font_bold
+    restore_btn.Active = true
+    restore_btn.Modal = true
+    restore_btn.ZIndex = 27
+    restore_btn.Parent = header
+
+    restore_btn.MouseEnter:Connect(function()
+        restore_btn.TextColor3 = ACCENT_COLOR
+    end)
+    restore_btn.MouseLeave:Connect(function()
+        restore_btn.TextColor3 = MUTED_COLOR
+    end)
+
+    restore_btn.MouseButton1Click:Connect(function()
+        if not is_maximized then
+            saved_pos = main.Position
+            saved_size = main.Size
+            local top_y = main.Position.Y
+            main.Position = UDim2_new(0, 10, top_y.Scale, top_y.Offset)
+            main.Size = UDim2_new(1, -125, 1 - top_y.Scale, -top_y.Offset - 10)
+            is_maximized = true
+        else
+            if saved_pos and saved_size then
+                main.Position = saved_pos
+                main.Size = saved_size
+            else
+                main.Position = UDim2_new(0.5, -178, 0.5, -100)
+                main.Size = UDim2_new(0, 250, 0, 200)
+            end
+            is_maximized = false
+        end
+    end)
+
     local close_btn = Instance_new("TextButton")
     close_btn.Name = "CloseBtn"
-    close_btn.Size = UDim2_new(0, 22, 0, 22)
-    close_btn.Position = UDim2_new(1, -26, 0.5, -11)
+    close_btn.Size = UDim2_new(0, 18, 0, 18)
+    close_btn.Position = UDim2_new(1, -22, 0.5, -9)
     close_btn.BackgroundTransparency = 1
     close_btn.BorderSizePixel = 0
     close_btn.Text = "✕"
@@ -2815,7 +2837,7 @@ local function create_ui()
     close_btn.FontFace = font_bold
     close_btn.Active = true
     close_btn.Modal = true
-    close_btn.ZIndex = 6
+    close_btn.ZIndex = 27
     close_btn.Parent = header
 
     close_btn.MouseEnter:Connect(function()
@@ -4206,8 +4228,6 @@ local function cleanup_all()
     _G.run_auto_trade_loop = nil
     _G.KeenanHub_AutoTrade_Cleanup = nil
     _G.NoirHub_AutoTrade_Cleanup = nil
-
-    print("[KEENAN TERMINAL] AutoTrade script, listeners, services, and GUI terminated completely.")
 end
 
 _G.KeenanHub_AutoTrade_Cleanup = cleanup_all
@@ -4215,10 +4235,6 @@ _G.NoirHub_AutoTrade_Cleanup = cleanup_all
 
 local success, err = pcall(create_ui)
 if not success then
-    local err_msg = "UI Creation Error: " .. tostring(err)
-    warn(err_msg)
-    log_debug(err_msg)
+    log_debug("UI Creation Error: " .. tostring(err))
 end
 pcall(log_inventory_fish)
-
-print("[KEENAN TERMINAL] AutoTrade UI and engine initialized successfully!")
