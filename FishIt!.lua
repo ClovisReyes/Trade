@@ -63,29 +63,77 @@ local cloneref = cloneref or function(ref) return ref end
 
 local players               = cloneref(game:GetService("Players"))
 local local_player          = players.LocalPlayer
-local player_gui            = cloneref(local_player:WaitForChild("PlayerGui"))
 local user_input_service    = cloneref(game:GetService("UserInputService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
 local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
 local http_service          = cloneref(game:GetService("HttpService"))
-local text_chat_service     = pcall(function() return cloneref(game:GetService("TextChatService")) end) and cloneref(game:GetService("TextChatService")) or nil
-local core_gui              = pcall(function() return cloneref(game:GetService("CoreGui")) end) and cloneref(game:GetService("CoreGui")) or nil
+
+local text_chat_service = nil
+pcall(function()
+    text_chat_service = cloneref(game:GetService("TextChatService"))
+end)
+
+local core_gui = nil
+pcall(function()
+    core_gui = cloneref(game:GetService("CoreGui"))
+end)
+
+local player_gui = nil
+pcall(function()
+    player_gui = cloneref(local_player:WaitForChild("PlayerGui", 5))
+end)
+if not player_gui then
+    player_gui = local_player:FindFirstChild("PlayerGui")
+end
+
+local function safe_wait_child(parent, name, timeout)
+    if not parent then return nil end
+    local child = parent:FindFirstChild(name)
+    if child then return child end
+    local ok, res = pcall(function()
+        return parent:WaitForChild(name, timeout or 3)
+    end)
+    return ok and res or nil
+end
 
 local variables = {
-    items                   = replicated_storage:WaitForChild("Items"),
-    variants                = replicated_storage:WaitForChild("Variants"),
-    replion                 = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
-    item_utility            = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility")
+    items        = safe_wait_child(replicated_storage, "Items", 4),
+    variants     = safe_wait_child(replicated_storage, "Variants", 4),
+    packages     = safe_wait_child(replicated_storage, "Packages", 4),
+    shared       = safe_wait_child(replicated_storage, "Shared", 4)
 }
 
-local success_replion, replion_mod = pcall(require, variables.replion)
-local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
-local success_iu, item_utility = pcall(require, variables.item_utility)
+local replion_pkg = variables.packages and safe_wait_child(variables.packages, "Replion", 4)
+local success_replion, replion_mod = pcall(function()
+    return replion_pkg and require(replion_pkg) or nil
+end)
+
+local item_utility_mod = variables.shared and safe_wait_child(variables.shared, "ItemUtility", 4)
+local success_iu, item_utility = pcall(function()
+    return item_utility_mod and require(item_utility_mod) or nil
+end)
 if not success_iu or not item_utility then
     item_utility = {
         GetItemData = function(_, id) return nil end
     }
 end
+
+local player_data = nil
+local function get_player_data()
+    if player_data then return player_data end
+    if success_replion and replion_mod and replion_mod.Client then
+        pcall(function()
+            if replion_mod.Client.GetReplion then
+                player_data = replion_mod.Client:GetReplion("Data")
+            end
+            if not player_data and replion_mod.Client.WaitReplion then
+                player_data = replion_mod.Client:WaitReplion("Data", 2)
+            end
+        end)
+    end
+    return player_data
+end
+pcall(get_player_data)
 
 -- Remotes
 local remote_map = {
@@ -103,7 +151,7 @@ local function get_net_lookup()
 
     pcall(function()
         local net_folder = nil
-        local index = replicated_storage.Packages:FindFirstChild("_Index")
+        local index = replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("_Index")
         if index then
             for _, child in ipairs(index:GetChildren()) do
                 if string_find(child.Name, "sleitnick_net", 1, true) then
@@ -112,15 +160,23 @@ local function get_net_lookup()
                 end
             end
         end
-        if not net_folder and replicated_storage.Packages:FindFirstChild("_Index") and replicated_storage.Packages._Index:FindFirstChild("sleitnick_net@0.2.0") then
+        if not net_folder and replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("_Index") and replicated_storage.Packages._Index:FindFirstChild("sleitnick_net@0.2.0") then
             net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"]:FindFirstChild("net")
         end
 
         if net_folder then
             local children = net_folder:GetChildren()
+            for _, v in ipairs(children) do
+                for _, logical_name in pairs(remote_map) do
+                    if string_find(v.Name, logical_name, 1, true) and (v:IsA("RemoteEvent") or v:IsA("RemoteFunction")) then
+                        _net_lookup[logical_name] = v
+                    end
+                end
+            end
+
             for i, v in ipairs(children) do
                 for _, logical_name in pairs(remote_map) do
-                    if string_find(v.Name, logical_name, 1, true) then
+                    if not _net_lookup[logical_name] and string_find(v.Name, logical_name, 1, true) then
                         for j = i + 1, #children do
                             local next_obj = children[j]
                             if string_match(next_obj.Name, "^RF/") or string_match(next_obj.Name, "^RE/") then
@@ -128,7 +184,6 @@ local function get_net_lookup()
                                 break
                             end
                         end
-                        break
                     end
                 end
             end
@@ -310,9 +365,10 @@ end
 
 local function get_inventory_enchants(bypass_favorited)
     local enchants = {}
-    local success, err = pcall(function()
-        if player_data then
-            local inventory = player_data:Get("Inventory")
+    pcall(function()
+        local pdata = get_player_data()
+        if pdata then
+            local inventory = pdata:Get("Inventory")
             local items = inventory and inventory.Items or {}
             for _, item in ipairs(items) do
                 if item.Id then
@@ -429,30 +485,25 @@ local function load_game_data()
         cache.loaded_variant_multipliers["shiny"] = 1.5
     end
     table_sort(cache.loaded_mutations)
-
-    if variables.items then
-        for _, item in ipairs(variables.items:GetDescendants()) do
-            if item:IsA("ModuleScript") then
-                local success, item_data = pcall(require, item)
-                if success and type(item_data) == "table" and item_data.Data then
-                    if item_data.Data.Type == "Fish" then
-                        cache.loaded_fish[item_data.Data.Name] = item_data.Data
-                    elseif item_data.Data.Type == "Enchant Stones" then
-                        cache.loaded_enchants[item_data.Data.Name] = item_data.Data
-                    end
-                end
-            end
-        end
-    end
 end
 pcall(load_game_data)
 
 -- Player Target
 local function find_target_player()
     if config.trade_with == "" then return nil end
-    for _, player in ipairs(players:GetPlayers()) do
-        if player.Name == config.trade_with or player.DisplayName == config.trade_with then
-            return player
+    local target_name = string_lower(config.trade_with)
+    for _, p in ipairs(players:GetPlayers()) do
+        if p ~= local_player then
+            if string_lower(p.Name) == target_name or string_lower(p.DisplayName) == target_name then
+                return p
+            end
+        end
+    end
+    for _, p in ipairs(players:GetPlayers()) do
+        if p ~= local_player then
+            if string_find(string_lower(p.Name), target_name, 1, true) or string_find(string_lower(p.DisplayName), target_name, 1, true) then
+                return p
+            end
         end
     end
     return nil
@@ -465,18 +516,12 @@ local function get_item_mutation(item)
         if meta.VariantId and meta.VariantId ~= "" and meta.VariantId ~= "None" then
             return tostring(meta.VariantId)
         end
-        if meta.Mutation and meta.Mutation ~= "" and meta.Mutation ~= "None" then
-            return tostring(meta.Mutation)
+        if meta.Shiny == true or meta.Shiny == 1 or (type(meta.Shiny) == "string" and string_lower(meta.Shiny) == "true") then
+            return "Shiny"
         end
         if meta.Variant and meta.Variant ~= "" and meta.Variant ~= "None" then
             return tostring(meta.Variant)
         end
-    end
-    if item.Mutation and item.Mutation ~= "" and item.Mutation ~= "None" then
-        return tostring(item.Mutation)
-    end
-    if item.Variant and item.Variant ~= "" and item.Variant ~= "None" then
-        return tostring(item.Variant)
     end
     return "None"
 end
@@ -485,9 +530,12 @@ local function is_item_shiny(item)
     if not item then return false end
     local meta = item.Metadata
     if meta then
-        if meta.Shiny == true or meta.Shiny == 1 or (type(meta.Shiny) == "string" and string_lower(meta.Shiny) == "true") then return true end
+        if meta.Shiny == true or meta.Shiny == 1 then return true end
+        if type(meta.Shiny) == "string" and string_lower(meta.Shiny) == "true" then return true end
+        if meta.VariantId and string_lower(tostring(meta.VariantId)) == "shiny" then return true end
     end
-    if item.Shiny == true or item.Shiny == 1 or (type(item.Shiny) == "string" and string_lower(item.Shiny) == "true") then return true end
+    if item.Shiny == true or item.Shiny == 1 then return true end
+    if type(item.Shiny) == "string" and string_lower(item.Shiny) == "true" then return true end
     local mut = string_lower(get_item_mutation(item))
     return string_find(mut, "shiny") ~= nil
 end
@@ -542,11 +590,12 @@ local function calculate_fish_coin_value(item)
 end
 
 local function select_fish_for_coin_trade(target_coins, already_sent_coins)
-    if not player_data then return {}, 0 end
+    local pdata = get_player_data()
+    if not pdata then return {}, 0 end
     local remaining_deficit = target_coins - already_sent_coins
     if remaining_deficit <= 0 then return {}, 0 end
 
-    local inventory = player_data:Get("Inventory")
+    local inventory = pdata:Get("Inventory")
     local items = inventory and inventory.Items or {}
 
     local candidate_pool = {}
@@ -720,517 +769,377 @@ local function should_trade_fish_by_rarity(item_data, inventory_item)
     return should_trade
 end
 
--- Round Robin Selection
-local function collect_round_robin_rarity(player_data_items, selected_tiers, limit)
-    local buckets = {}
-    local bucket_keys = {}
+local function should_trade_enchant_item(item_data, inventory_item)
+    if not config.enabled then return false end
 
-    for _, tier in ipairs(selected_tiers) do
-        local t_lower = string_lower(tier)
-        if t_lower ~= "all" then
-            buckets[t_lower] = {}
-            table_insert(bucket_keys, t_lower)
+    local name_match = false
+    local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
+    if is_fav and not config.trade_favorited then
+        return false
+    end
+
+    local has_all = table_find(config.selected_items, "All") ~= nil
+    if has_all then
+        return true
+    end
+
+    if #config.selected_items > 0 then
+        local enchant_name = string_lower(item_data.Data.Name)
+        for _, selected_name in ipairs(config.selected_items) do
+            if enchant_name == string_lower(selected_name) then
+                name_match = true
+                break
+            end
         end
     end
 
-    for _, fish_item in ipairs(player_data_items) do
-        if fish_item and fish_item.Id then
-            local fish_data = item_utility:GetItemData(fish_item.Id)
-            if fish_data and fish_data.Data and fish_data.Data.Type == "Fish" then
-                if should_trade_fish_by_rarity(fish_data, fish_item) then
-                    local raw_tier = fish_data.Data.Tier
+    return name_match
+end
+
+local function set_status_msg(mode, text, details)
+    if mode == "fish" then
+        cache.fish_status_text = text
+        cache.fish_status_details = details or ""
+    elseif mode == "enchant" then
+        cache.enchant_status_text = text
+        cache.enchant_status_details = details or ""
+    elseif mode == "rarity" then
+        cache.rarity_status_text = text
+        cache.rarity_status_details = details or ""
+    elseif mode == "coin" then
+        cache.coin_status_text = text
+        cache.coin_status_details = details or ""
+    end
+end
+
+local function get_mode_display_name(mode)
+    if mode == "fish" then
+        if #config.selected_fish == 0 then
+            return "ikan (belum dipilih)"
+        elseif table_find(config.selected_fish, "All") then
+            return "semua jenis ikan"
+        elseif #config.selected_fish == 1 then
+            return "ikan " .. tostring(config.selected_fish[1])
+        else
+            return tostring(#config.selected_fish) .. " jenis ikan terpilih"
+        end
+    elseif mode == "rarity" then
+        if #config.selected_tiers == 0 then
+            return "rarity (belum dipilih)"
+        elseif table_find(config.selected_tiers, "All") then
+            return "semua rarity ikan"
+        elseif #config.selected_tiers == 1 then
+            return "rarity " .. tostring(config.selected_tiers[1])
+        else
+            return tostring(#config.selected_tiers) .. " rarity terpilih"
+        end
+    elseif mode == "enchant" then
+        if #config.selected_items == 0 then
+            return "enchant stone (belum dipilih)"
+        elseif table_find(config.selected_items, "All") then
+            return "semua enchant stone"
+        elseif #config.selected_items == 1 then
+            return "enchant stone " .. tostring(config.selected_items[1])
+        else
+            return tostring(#config.selected_items) .. " enchant terpilih"
+        end
+    elseif mode == "coin" then
+        return string_format("Target: %s Coins", format_number(config.trade_coin_target or 8000000))
+    end
+    return "item"
+end
+
+local function update_mode_status(mode)
+    local s = cache.stats[mode]
+    if not s then return end
+
+    local details = string_format("Sent: %d | Last: %d | Fails: %d", s.total_items, s.last_items, s.failed)
+    if mode == "coin" then
+        details = string_format("Sent: %s / %s Coins (%d fish) | Fails: %d", format_number(s.total_coins), format_number(config.trade_coin_target or 8000000), s.total_items, s.failed)
+    end
+
+    local main_text = "Idle"
+    if config.enabled then
+        if (mode == "fish" and config.trade_fish_enabled) or
+           (mode == "rarity" and config.trade_rarity_enabled) or
+           (mode == "enchant" and config.trade_enchants_enabled) or
+           (mode == "coin" and config.trade_coin_enabled) then
+            main_text = "Active - Trading..."
+        end
+    end
+    set_status_msg(mode, main_text, details)
+end
+
+local function collect_round_robin(items_pool, selected_names, max_limit)
+    local selected_lookup = {}
+    for _, name in ipairs(selected_names) do
+        selected_lookup[string_lower(name)] = true
+    end
+
+    local buckets = {}
+    for _, name in ipairs(selected_names) do
+        buckets[string_lower(name)] = {}
+    end
+
+    for _, itm in ipairs(items_pool) do
+        if itm and itm.Id then
+            local data = item_utility:GetItemData(itm.Id)
+            if data and data.Data and data.Data.Type == "Fish" then
+                if should_trade_fish(data, itm) then
+                    local fish_name = string_lower(data.Data.Name)
+                    if buckets[fish_name] and not table_find(cache.processed_trades, itm.UUID) then
+                        table_insert(buckets[fish_name], itm)
+                    end
+                end
+            end
+        end
+    end
+
+    local result = {}
+    local active_buckets = {}
+    for _, name in ipairs(selected_names) do
+        local key = string_lower(name)
+        if #buckets[key] > 0 then
+            table_insert(active_buckets, key)
+        end
+    end
+
+    local round_idx = 1
+    while #result < max_limit and #active_buckets > 0 do
+        local current_key = active_buckets[round_idx]
+        local bucket = buckets[current_key]
+
+        if #bucket > 0 then
+            local item = table_remove(bucket, 1)
+            table_insert(result, item)
+            round_idx = round_idx + 1
+        else
+            table_remove(active_buckets, round_idx)
+        end
+
+        if round_idx > #active_buckets then
+            round_idx = 1
+        end
+    end
+
+    return result
+end
+
+local function collect_round_robin_rarity(items_pool, selected_tiers, max_limit)
+    local buckets = {}
+    for _, tier in ipairs(selected_tiers) do
+        buckets[string_lower(tier)] = {}
+    end
+
+    for _, itm in ipairs(items_pool) do
+        if itm and itm.Id then
+            local data = item_utility:GetItemData(itm.Id)
+            if data and data.Data and data.Data.Type == "Fish" then
+                if should_trade_fish_by_rarity(data, itm) then
+                    local raw_tier = data.Data.Tier
                     local tier_name = ""
                     if type(raw_tier) == "number" then
                         tier_name = tier_mapping[raw_tier] or ""
                     elseif type(raw_tier) == "string" then
                         tier_name = string_lower(raw_tier)
                     end
-                    if buckets[tier_name] then
-                        table_insert(buckets[tier_name], fish_item)
+                    if buckets[tier_name] and not table_find(cache.processed_trades, itm.UUID) then
+                        table_insert(buckets[tier_name], itm)
                     end
                 end
             end
         end
     end
 
-    local items_to_trade = {}
-    local added_uuids = {}
-    local max_pass = 20
-
-    for pass = 1, max_pass do
-        if #items_to_trade >= limit then break end
-        local added_any = false
-
-        for _, key in ipairs(bucket_keys) do
-            if #items_to_trade >= limit then break end
-            local bucket = buckets[key]
-            if bucket then
-                for i = 1, #bucket do
-                    local item = bucket[i]
-                    if not added_uuids[item.UUID] and not table_find(cache.processed_trades, item.UUID) then
-                        added_uuids[item.UUID] = true
-                        table_insert(items_to_trade, item)
-                        added_any = true
-                        break
-                    end
-                end
-            end
+    local result = {}
+    local active_buckets = {}
+    for _, tier in ipairs(selected_tiers) do
+        local key = string_lower(tier)
+        if #buckets[key] > 0 then
+            table_insert(active_buckets, key)
         end
-
-        if not added_any then break end
     end
 
-    return items_to_trade
+    local round_idx = 1
+    while #result < max_limit and #active_buckets > 0 do
+        local current_key = active_buckets[round_idx]
+        local bucket = buckets[current_key]
+
+        if #bucket > 0 then
+            local item = table_remove(bucket, 1)
+            table_insert(result, item)
+            round_idx = round_idx + 1
+        else
+            table_remove(active_buckets, round_idx)
+        end
+
+        if round_idx > #active_buckets then
+            round_idx = 1
+        end
+    end
+
+    return result
 end
 
-local function collect_round_robin_names(player_data_items, selected_fish, limit)
-    local buckets = {}
-    local bucket_keys = {}
-
-    for _, f_name in ipairs(selected_fish) do
-        local n_lower = string_lower(f_name)
-        if n_lower ~= "all" then
-            buckets[n_lower] = {}
-            table_insert(bucket_keys, n_lower)
-        end
-    end
-
-    for _, fish_item in ipairs(player_data_items) do
-        if fish_item and fish_item.Id then
-            local fish_data = item_utility:GetItemData(fish_item.Id)
-            if fish_data and fish_data.Data and fish_data.Data.Type == "Fish" then
-                if should_trade_fish(fish_data, fish_item) then
-                    local name_lower = string_lower(fish_data.Data.Name)
-                    if buckets[name_lower] then
-                        table_insert(buckets[name_lower], fish_item)
-                    end
-                end
-            end
-        end
-    end
-
-    local items_to_trade = {}
-    local added_uuids = {}
-    local max_pass = 20
-
-    for pass = 1, max_pass do
-        if #items_to_trade >= limit then break end
-        local added_any = false
-
-        for _, key in ipairs(bucket_keys) do
-            if #items_to_trade >= limit then break end
-            local bucket = buckets[key]
-            if bucket then
-                for i = 1, #bucket do
-                    local item = bucket[i]
-                    if not added_uuids[item.UUID] and not table_find(cache.processed_trades, item.UUID) then
-                        added_uuids[item.UUID] = true
-                        table_insert(items_to_trade, item)
-                        added_any = true
-                        break
-                    end
-                end
-            end
-        end
-
-        if not added_any then break end
-    end
-
-    return items_to_trade
+local function is_trade_active()
+    local pgui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
+    if not pgui then return false end
+    local trade_ui = pgui:FindFirstChild("Trade")
+    if not trade_ui then return false end
+    local main_frame = trade_ui:FindFirstChild("Main")
+    return (main_frame and main_frame.Visible == true) or trade_ui.Enabled == true
 end
 
--- Trade Handlers
 local function decline_active_trade()
     pcall(function()
-        local trading_gui = local_player.PlayerGui:FindFirstChild("! Trading")
-        if trading_gui then
-            local frame = trading_gui:FindFirstChild("Frame")
-            if frame then
-                local interior = frame:FindFirstChild("Interior")
-                local decline = interior and interior:FindFirstChild("Decline")
-                if decline then
-                    click_gui_button(decline)
-                else
-                    local close = frame:FindFirstChild("Close")
-                    if close then
-                        click_gui_button(close)
-                    end
+        local pgui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
+        local trade_ui = pgui and pgui:FindFirstChild("Trade")
+        if trade_ui then
+            for _, btn in ipairs(trade_ui:GetDescendants()) do
+                if btn:IsA("GuiButton") and (btn.Name == "Decline" or btn.Name == "Cancel" or btn.Name == "Close") then
+                    click_gui_button(btn)
                 end
             end
         end
     end)
 end
 
-local function is_trade_active()
-    local attr = local_player:GetAttribute("IsTrading")
-    if attr == true then return true end
-    local pgui = local_player:FindFirstChild("PlayerGui")
-    if pgui then
-        for _, name in ipairs({"! Trading", "Trading", "Trade"}) do
-            local t_gui = pgui:FindFirstChild(name)
-            if t_gui and t_gui.Enabled then return true end
+local function listen_for_trade_completion(on_completed)
+    local completed = false
+    local conn = nil
+
+    pcall(function()
+        if text_chat_service then
+            local channels = text_chat_service:FindFirstChild("TextChannels")
+            local general = channels and channels:FindFirstChild("RBXGeneral")
+            if general then
+                conn = general.MessageReceived:Connect(function(msg)
+                    if not msg or not msg.Text then return end
+                    local lower = string_lower(msg.Text)
+                    if string_find(lower, "trade complete", 1, true) or string_find(lower, "trade was successful", 1, true) or string_find(lower, "trading completed", 1, true) then
+                        completed = true
+                        if on_completed then pcall(on_completed) end
+                    end
+                end)
+                track_conn(conn)
+            end
         end
-    end
-    return false
+    end)
+
+    return {
+        is_completed = function() return completed end,
+        disconnect = function()
+            if conn then
+                pcall(function() conn:Disconnect() end)
+                conn = nil
+            end
+        end
+    }
 end
 
 local function verify_items_sent(added_items)
-    if not player_data or not added_items or #added_items == 0 then
-        return #added_items
-    end
-    local inventory = player_data:Get("Inventory")
-    local current_items = inventory and inventory.Items or {}
-    local current_uuids = {}
-    for _, item in ipairs(current_items) do
-        if item.UUID then
-            current_uuids[item.UUID] = true
+    local pdata = get_player_data()
+    if not pdata or not added_items or #added_items == 0 then return 0 end
+    local inventory = pdata:Get("Inventory")
+    local items = inventory and inventory.Items or {}
+
+    local uuid_lookup = {}
+    for _, itm in ipairs(items) do
+        if itm and itm.UUID then
+            uuid_lookup[itm.UUID] = true
         end
     end
+
     local sent_count = 0
-    for _, item in ipairs(added_items) do
-        if not current_uuids[item.UUID] then
+    for _, added in ipairs(added_items) do
+        if not uuid_lookup[added.UUID] then
             sent_count = sent_count + 1
         end
     end
     return sent_count
 end
 
-local function listen_for_trade_completion(on_completed)
-    local completed = false
-    local connections = {}
+local function wait_for_trade_end(mode, chat_listener)
+    local start = tick()
+    local confirm_pressed = false
 
-    local function check_text(text)
-        if not text or completed then return end
-        local lower = string_lower(tostring(text))
-        if (string_find(lower, "completed", 1, true) or string_find(lower, "complete", 1, true) or string_find(lower, "success", 1, true) or string_find(lower, "berhasil", 1, true)) and (string_find(lower, "trade", 1, true) or string_find(lower, "with", 1, true)) then
-            completed = true
-            if on_completed then
-                pcall(on_completed)
+    while is_running and is_trade_active() and (tick() - start) < 35 do
+        if not config.enabled then
+            decline_active_trade()
+            break
+        end
+
+        local pgui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
+        local trade_ui = pgui and pgui:FindFirstChild("Trade")
+        local main_frame = trade_ui and trade_ui:FindFirstChild("Main")
+
+        if main_frame and not confirm_pressed then
+            local your_offer = main_frame:FindFirstChild("YourOffer")
+            local their_offer = main_frame:FindFirstChild("TheirOffer")
+            local your_ready = your_offer and your_offer:FindFirstChild("Ready")
+            local their_ready = their_offer and their_offer:FindFirstChild("Ready")
+
+            local is_your_ready = your_ready and your_ready.Visible
+            local is_their_ready = their_ready and their_ready.Visible
+
+            if is_your_ready and is_their_ready then
+                set_status_msg(mode, "Both players ready. Confirming trade...")
+                task_wait(0.3)
+                pcall(function()
+                    trade_remotes.ConfirmTrade:InvokeServer()
+                end)
+                confirm_pressed = true
             end
         end
-    end
 
-    pcall(function()
-        if text_chat_service then
-            local conn = text_chat_service.MessageReceived:Connect(function(msg)
-                if msg then check_text(msg.Text) end
-            end)
-            table_insert(connections, conn)
-        end
-    end)
-
-    pcall(function()
-        if replicated_storage then
-            local chat_events = replicated_storage:FindFirstChild("DefaultChatSystemChatEvents")
-            if chat_events then
-                local msg_event = chat_events:FindFirstChild("OnMessageDoneFiltering")
-                if msg_event then
-                    local conn = msg_event.OnClientEvent:Connect(function(data)
-                        if data and data.Message then
-                            check_text(data.Message)
-                        end
-                    end)
-                    table_insert(connections, conn)
-                end
-            end
-        end
-    end)
-
-    pcall(function()
-        if trade_remotes and trade_remotes.TradeEnded then
-            local conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
-                if not completed then
-                    completed = true
-                    if on_completed then
-                        pcall(on_completed)
-                    end
-                end
-            end)
-            table_insert(connections, conn)
-        end
-    end)
-
-    return {
-        is_completed = function()
-            return completed
-        end,
-        disconnect = function()
-            for _, conn in ipairs(connections) do
-                pcall(function() conn:Disconnect() end)
-            end
-        end
-    }
-end
-
-local function get_mode_display_name(mode_name)
-    if mode_name == "enchant" then
-        if #config.selected_items > 0 and config.selected_items[1] ~= "All" then
-            local names = {}
-            for _, item in ipairs(config.selected_items) do
-                table_insert(names, item)
-            end
-            if #names > 0 then return table_concat(names, "/") end
-        end
-        return "Enchant Stone"
-    elseif mode_name == "fish" then
-        if #config.selected_fish > 0 and config.selected_fish[1] ~= "All" then
-            local names = {}
-            for _, fish in ipairs(config.selected_fish) do
-                table_insert(names, fish)
-            end
-            if #names > 0 then return table_concat(names, "/") end
-        end
-        return "Fish"
-    elseif mode_name == "rarity" then
-        if #config.selected_tiers > 0 and config.selected_tiers[1] ~= "All" then
-            local names = {}
-            for _, tier in ipairs(config.selected_tiers) do
-                local t_name = (type(tier) == "number" and tier_mapping[tier]) or tostring(tier)
-                if t_name and t_name ~= "" then
-                    table_insert(names, (string_upper(string_sub(t_name, 1, 1)) .. string_sub(t_name, 2)))
-                end
-            end
-            if #names > 0 then return table_concat(names, "/") end
-        end
-        return "Rarity"
-    elseif mode_name == "coin" then
-        return "Coin Value (" .. format_number(config.trade_coin_target or 8000000) .. ")"
-    end
-    return "Items"
-end
-
-local function set_status_msg(mode_name, msg, details_override)
-    local s = cache.stats[mode_name]
-    if not s then return end
-
-    local target = config.quantity
-    local progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
-    local details = details_override or string_format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
-
-    if mode_name == "fish" then
-        if msg then cache.fish_status_text = msg end
-        cache.fish_status_details = details
-        if status_val_lbl then
-            status_val_lbl.Text = cache.fish_status_details == "" and cache.fish_status_text or (cache.fish_status_text .. "\n" .. cache.fish_status_details)
-        end
-    elseif mode_name == "rarity" then
-        if msg then cache.rarity_status_text = msg end
-        cache.rarity_status_details = details
-        if rarity_status_val_lbl then
-            rarity_status_val_lbl.Text = cache.rarity_status_details == "" and cache.rarity_status_text or (cache.rarity_status_text .. "\n" .. cache.rarity_status_details)
-        end
-    elseif mode_name == "enchant" then
-        if msg then cache.enchant_status_text = msg end
-        cache.enchant_status_details = details
-        if enchant_status_val_lbl then
-            enchant_status_val_lbl.Text = cache.enchant_status_details == "" and cache.enchant_status_text or (cache.enchant_status_text .. "\n" .. cache.enchant_status_details)
-        end
-    elseif mode_name == "coin" then
-        if msg then cache.coin_status_text = msg end
-        local coin_target = config.trade_coin_target or 8000000
-        local total_c = s.total_coins or 0
-        local progress_pct = coin_target > 0 and string_format(" (%.1f%%)", (total_c / coin_target) * 100) or ""
-        local c_details = details_override or string_format("Coins Sent: %s / %s%s | Fish Sent: %d | Trades: %d | Failed: %d", format_number(total_c), format_number(coin_target), progress_pct, s.total_items, s.success_trades, s.failed)
-        cache.coin_status_details = c_details
-        if coin_status_val_lbl then
-            coin_status_val_lbl.Text = cache.coin_status_details == "" and cache.coin_status_text or (cache.coin_status_text .. "\n" .. cache.coin_status_details)
-        end
-    end
-end
-
-local function wait_for_trade_end(mode_name, chat_listener)
-    local start_t = tick()
-    while is_trade_active() and tick() - start_t < 90 do
         if chat_listener and chat_listener.is_completed() then
             break
         end
 
-        local stage = "Waiting PlayersReady..."
-
-        pcall(function()
-            if trade_remotes then
-                if trade_remotes.SetReady then pcall(function() trade_remotes.SetReady:InvokeServer(true) end) end
-                if trade_remotes.ConfirmTrade then pcall(function() trade_remotes.ConfirmTrade:InvokeServer() end) end
-            end
-        end)
-
-        pcall(function()
-            local pgui = local_player:FindFirstChild("PlayerGui")
-            if pgui then
-                local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
-                if t_gui then
-                    local frame = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container") or t_gui:FindFirstChild("Main")
-                    local interior = frame and (frame:FindFirstChild("Interior") or frame)
-                    local buttons = interior and interior:FindFirstChild("Buttons")
-                    if buttons then
-                        for _, child in ipairs(buttons:GetChildren()) do
-                            if child:IsA("GuiButton") and child.Name ~= "Decline" then
-                                click_gui_button(child)
-                            end
-                        end
-                    end
-
-                    for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
-                        local btn = t_gui:FindFirstChild(btn_name, true)
-                        if btn and btn:IsA("GuiButton") then
-                            click_gui_button(btn)
-                        end
-                    end
-                end
-            end
-        end)
-
-        pcall(function()
-            local pgui = local_player:FindFirstChild("PlayerGui")
-            if pgui then
-                local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
-                if t_gui then
-                    local seconds = nil
-                    for _, desc in ipairs(t_gui:GetDescendants()) do
-                        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-                            local text = desc.Text or ""
-                            local sec = string_match(text, "%((%d)s?%)") or string_match(text, "^(%d)$") or string_match(text, "Countdown: (%d)") or string_match(text, "Confirm%s*%(?(%d)%)?") or string_match(text, "Ready%s*%(?(%d)%)?")
-                            if sec then
-                                seconds = sec
-                                break
-                            end
-                        end
-                    end
-
-                    if seconds then
-                        stage = "Waiting lock countdown (" .. seconds .. "s)..."
-                    else
-                        stage = "Accepting & Confirming trade..."
-                    end
-                end
-            end
-        end)
-
-        if not (chat_listener and chat_listener.is_completed()) then
-            set_status_msg(mode_name, stage)
-        end
-        task_wait(0.12)
+        task_wait(0.2)
     end
 end
 
 local function start_trade_session(target_player, mode)
-    if not target_player or not trade_remotes then return false, "No remotes" end
+    set_status_msg(mode, "Sending trade offer to " .. target_player.Name .. "...")
 
-    if not is_trade_active() then
-        if cache.last_trade_time then
-            local elapsed = tick() - cache.last_trade_time
-            if elapsed < 5 then
-                set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 5 - elapsed) .. ")")
-                task_wait(5 - elapsed)
-            end
-        end
+    local offer_accepted = false
+    local offer_start = tick()
 
-        set_status_msg(mode, "Waiting for target to accept offer...")
-        local success, err = trade_remotes.SendTradeOffer:InvokeServer(target_player)
-        if not success then
-            cache.last_trade_time = tick()
-            set_status_msg(mode, "Failed: " .. (err or "Declined"))
-            return false, err
-        end
-
-        local start_time = tick()
-        while not is_trade_active() and tick() - start_time < 12 do
-            task_wait(0.1)
-        end
-
-        if not is_trade_active() then
-            cache.last_trade_time = tick()
-            set_status_msg(mode, "Trade request timed out")
-            return false, "Timeout"
+    while is_running and config.enabled and (tick() - offer_start) < 25 do
+        if is_trade_active() then
+            offer_accepted = true
+            break
         end
 
         pcall(function()
-            local pgui = local_player:FindFirstChild("PlayerGui")
-            if pgui then
-                local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
-                if t_gui then
-                    t_gui.Enabled = true
-                    local container = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container") or t_gui:FindFirstChild("Main")
-                    if container then container.Visible = true end
-                end
-            end
+            trade_remotes.SendTradeOffer:InvokeServer(target_player)
         end)
 
-        task_wait(0.5)
+        task_wait(1.5)
+        if is_trade_active() then
+            offer_accepted = true
+            break
+        end
     end
 
+    if not offer_accepted then
+        set_status_msg(mode, "Trade offer expired/declined by " .. target_player.Name)
+        return false, "Offer timed out"
+    end
+
+    task_wait(0.5)
     return true
-end
-
-local function update_mode_status(mode_name)
-    local s = cache.stats[mode_name]
-    if not s then return end
-
-    local target = config.quantity
-    local progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
-    local display_name = get_mode_display_name(mode_name)
-    local text
-    if target > 0 and s.total_items >= target then
-        text = string_format("Completed! %d/%d items sent", s.total_items, target)
-    elseif (s.attempts or 0) == 0 and (s.success_trades or 0) == 0 then
-        text = string_format("Starting Trade: %s (%s)", display_name, progress_str)
-    elseif (s.success_trades or 0) > 0 then
-        text = string_format("Active: %s - %d items sent (%s)", display_name, s.total_items, progress_str)
-    else
-        text = string_format("Trading: %s (%s)", display_name, progress_str)
-    end
-
-    local details = string_format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
-
-    if mode_name == "fish" then
-        cache.fish_status_text = text
-        cache.fish_status_details = details
-        if status_val_lbl then
-            status_val_lbl.Text = cache.fish_status_details == "" and cache.fish_status_text or (cache.fish_status_text .. "\n" .. cache.fish_status_details)
-        end
-    elseif mode_name == "rarity" then
-        cache.rarity_status_text = text
-        cache.rarity_status_details = details
-        if rarity_status_val_lbl then
-            rarity_status_val_lbl.Text = cache.rarity_status_details == "" and cache.rarity_status_text or (cache.rarity_status_text .. "\n" .. cache.rarity_status_details)
-        end
-    elseif mode_name == "enchant" then
-        cache.enchant_status_text = text
-        cache.enchant_status_details = details
-        if enchant_status_val_lbl then
-            enchant_status_val_lbl.Text = cache.enchant_status_details == "" and cache.enchant_status_text or (cache.enchant_status_text .. "\n" .. cache.enchant_status_details)
-        end
-    elseif mode_name == "coin" then
-        local coin_target = config.trade_coin_target or 8000000
-        local total_c = s.total_coins or 0
-        if coin_target > 0 and total_c >= coin_target then
-            text = string_format("Target Reached! %s / %s Coins sent", format_number(total_c), format_number(coin_target))
-        elseif (s.attempts or 0) == 0 and (s.success_trades or 0) == 0 then
-            text = string_format("Starting Trade: %s Coins target", format_number(coin_target))
-        elseif (s.success_trades or 0) > 0 then
-            text = string_format("Active: %s Coins sent so far", format_number(total_c))
-        else
-            text = string_format("Trading towards %s Coins", format_number(coin_target))
-        end
-
-        local progress_pct = coin_target > 0 and string_format(" (%.1f%%)", (total_c / coin_target) * 100) or ""
-        local c_details = string_format("Coins Sent: %s / %s%s | Fish Sent: %d | Trades: %d | Failed: %d", format_number(total_c), format_number(coin_target), progress_pct, s.total_items, s.success_trades, s.failed)
-
-        cache.coin_status_text = text
-        cache.coin_status_details = c_details
-        if coin_status_val_lbl then
-            coin_status_val_lbl.Text = cache.coin_status_details == "" and cache.coin_status_text or (cache.coin_status_text .. "\n" .. cache.coin_status_details)
-        end
-    end
 end
 
 -- Trade by Name
 local function try_trade_fish()
     cache.processed_trades = {}
     local target_player = find_target_player()
-    if not target_player or not player_data then
+    local pdata = get_player_data()
+    if not target_player or not pdata then
         local err_msg = "Error: Target player belum dipilih"
-        if config.trade_with ~= "" and player_data then
+        if config.trade_with ~= "" and pdata then
             err_msg = "Error: Target player tidak ditemukan"
         end
         set_status_msg("fish", err_msg)
@@ -1241,14 +1150,11 @@ local function try_trade_fish()
     if config.quantity > 0 and total_sent >= config.quantity then
         config.enabled = false
         config.trade_fish_enabled = false
-        if byname_toggle_ctrl then
-            byname_toggle_ctrl.set_state(false)
-        end
         save_config()
         return
     end
 
-    local inventory = player_data:Get("Inventory")
+    local inventory = pdata:Get("Inventory")
     local player_data_items = inventory and inventory.Items or {}
 
     local items_to_trade = {}
@@ -1256,7 +1162,7 @@ local function try_trade_fish()
 
     local has_all_fish = table_find(config.selected_fish, "All") ~= nil
     if #config.selected_fish > 1 and not has_all_fish then
-        items_to_trade = collect_round_robin_names(player_data_items, config.selected_fish, limit)
+        items_to_trade = collect_round_robin(player_data_items, config.selected_fish, limit)
     else
         for _, fish_item in ipairs(player_data_items) do
             if #items_to_trade >= limit then break end
@@ -1274,13 +1180,10 @@ local function try_trade_fish()
     end
 
     if #items_to_trade == 0 then
-        local item_name = get_mode_display_name("fish")
-        set_status_msg("fish", "Error: Tidak ada lagi " .. item_name .. " di inventory")
+        local fish_name = get_mode_display_name("fish")
+        set_status_msg("fish", "Error: Tidak ada lagi " .. fish_name .. " di inventory")
         config.enabled = false
         config.trade_fish_enabled = false
-        if byname_toggle_ctrl then
-            byname_toggle_ctrl.set_state(false)
-        end
         save_config()
         return
     end
@@ -1358,9 +1261,6 @@ local function try_trade_fish()
             if config.quantity > 0 and cache.stats.fish.total_items >= config.quantity then
                 config.enabled = false
                 config.trade_fish_enabled = false
-                if byname_toggle_ctrl then
-                    byname_toggle_ctrl.set_state(false)
-                end
                 save_config()
                 set_status_msg("fish", string_format("Selesai! Berhasil mengirim %d/%d item", cache.stats.fish.total_items, config.quantity))
                 return
@@ -1379,9 +1279,10 @@ end
 local function try_trade_rarity()
     cache.processed_trades = {}
     local target_player = find_target_player()
-    if not target_player or not player_data then
+    local pdata = get_player_data()
+    if not target_player or not pdata then
         local err_msg = "Error: Target player belum dipilih"
-        if config.trade_with ~= "" and player_data then
+        if config.trade_with ~= "" and pdata then
             err_msg = "Error: Target player tidak ditemukan"
         end
         set_status_msg("rarity", err_msg)
@@ -1392,14 +1293,11 @@ local function try_trade_rarity()
     if config.quantity > 0 and total_sent >= config.quantity then
         config.enabled = false
         config.trade_rarity_enabled = false
-        if rarity_toggle_ctrl then
-            rarity_toggle_ctrl.set_state(false)
-        end
         save_config()
         return
     end
 
-    local inventory = player_data:Get("Inventory")
+    local inventory = pdata:Get("Inventory")
     local player_data_items = inventory and inventory.Items or {}
 
     local items_to_trade = {}
@@ -1429,9 +1327,6 @@ local function try_trade_rarity()
         set_status_msg("rarity", "Error: Tidak ada lagi " .. rarity_name .. " di inventory")
         config.enabled = false
         config.trade_rarity_enabled = false
-        if rarity_toggle_ctrl then
-            rarity_toggle_ctrl.set_state(false)
-        end
         save_config()
         return
     end
@@ -1509,9 +1404,6 @@ local function try_trade_rarity()
             if config.quantity > 0 and cache.stats.rarity.total_items >= config.quantity then
                 config.enabled = false
                 config.trade_rarity_enabled = false
-                if rarity_toggle_ctrl then
-                    rarity_toggle_ctrl.set_state(false)
-                end
                 save_config()
                 set_status_msg("rarity", string_format("Selesai! Berhasil mengirim %d/%d item", cache.stats.rarity.total_items, config.quantity))
                 return
@@ -1526,13 +1418,14 @@ local function try_trade_rarity()
     end
 end
 
--- Trade Enchants
+-- Trade Enchant Stone
 local function try_trade_enchant()
     cache.processed_trades = {}
     local target_player = find_target_player()
-    if not target_player or not player_data then
+    local pdata = get_player_data()
+    if not target_player or not pdata then
         local err_msg = "Error: Target player belum dipilih"
-        if config.trade_with ~= "" and player_data then
+        if config.trade_with ~= "" and pdata then
             err_msg = "Error: Target player tidak ditemukan"
         end
         set_status_msg("enchant", err_msg)
@@ -1543,33 +1436,25 @@ local function try_trade_enchant()
     if config.quantity > 0 and total_sent >= config.quantity then
         config.enabled = false
         config.trade_enchants_enabled = false
-        if enchant_toggle_ctrl then
-            enchant_toggle_ctrl.set_state(false)
-        end
         save_config()
         return
     end
 
-    local inventory = player_data:Get("Inventory")
+    local inventory = pdata:Get("Inventory")
     local player_data_items = inventory and inventory.Items or {}
 
     local items_to_trade = {}
     local limit = math_min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
-    for _, item in ipairs(player_data_items) do
-        if #items_to_trade >= limit then
-            break
-        end
 
-        if item and item.Id then
-            local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
-            if not (is_fav and not config.trade_favorited) then
-                local item_data = item_utility:GetItemData(item.Id)
-                if item_data and item_data.Data and item_data.Data.Type == "Enchant Stones" then
-                    local has_all_enchant = table_find(config.selected_items, "All") ~= nil
-                    if has_all_enchant or table_find(config.selected_items, item_data.Data.Name) then
-                        if not table_find(cache.processed_trades, item.UUID) then
-                            table_insert(items_to_trade, item)
-                        end
+    for _, itm in ipairs(player_data_items) do
+        if #items_to_trade >= limit then break end
+        if itm and itm.Id then
+            local data = item_utility:GetItemData(itm.Id)
+            if data and data.Data then
+                local is_enchant = (data.Data.Type == "Enchant Stones") or string_find(data.Data.Name, "Enchant", 1, true)
+                if is_enchant and should_trade_enchant_item(data, itm) then
+                    if not table_find(cache.processed_trades, itm.UUID) then
+                        table_insert(items_to_trade, itm)
                     end
                 end
             end
@@ -1577,13 +1462,10 @@ local function try_trade_enchant()
     end
 
     if #items_to_trade == 0 then
-        local item_name = get_mode_display_name("enchant")
-        set_status_msg("enchant", "Error: Tidak ada lagi " .. item_name .. " di inventory")
+        local enchant_name = get_mode_display_name("enchant")
+        set_status_msg("enchant", "Error: Tidak ada lagi " .. enchant_name .. " di inventory")
         config.enabled = false
         config.trade_enchants_enabled = false
-        if enchant_toggle_ctrl then
-            enchant_toggle_ctrl.set_state(false)
-        end
         save_config()
         return
     end
@@ -1599,15 +1481,13 @@ local function try_trade_enchant()
     end
 
     local added_items = {}
-    set_status_msg("enchant", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
+    set_status_msg("enchant", "Offer accepted! Adding " .. #items_to_trade .. " enchant stone(s)...")
     for _, item in ipairs(items_to_trade) do
         if not config.enabled or not is_trade_active() then break end
 
-        local item_data = item_utility:GetItemData(item.Id)
         local add_success = false
         for attempt = 1, 2 do
-            local pref_type = (item_data and item_data.Data and item_data.Data.Type) or "Items"
-            for _, cat_type in ipairs({pref_type, "Items", "Item", "Fish"}) do
+            for _, cat_type in ipairs({"Enchant Stones", "Items", "Item"}) do
                 local ok, res = pcall(function()
                     return trade_remotes.AddItem:InvokeServer(cat_type, item.UUID)
                 end)
@@ -1666,9 +1546,6 @@ local function try_trade_enchant()
             if config.quantity > 0 and cache.stats.enchant.total_items >= config.quantity then
                 config.enabled = false
                 config.trade_enchants_enabled = false
-                if enchant_toggle_ctrl then
-                    enchant_toggle_ctrl.set_state(false)
-                end
                 save_config()
                 set_status_msg("enchant", string_format("Selesai! Berhasil mengirim %d/%d enchant stone", cache.stats.enchant.total_items, config.quantity))
                 return
@@ -1687,9 +1564,10 @@ end
 local function try_trade_coin()
     cache.processed_trades = {}
     local target_player = find_target_player()
-    if not target_player or not player_data then
+    local pdata = get_player_data()
+    if not target_player or not pdata then
         local err_msg = "Error: Target player belum dipilih"
-        if config.trade_with ~= "" and player_data then
+        if config.trade_with ~= "" and pdata then
             err_msg = "Error: Target player tidak ditemukan"
         end
         set_status_msg("coin", err_msg)
@@ -1702,9 +1580,6 @@ local function try_trade_coin()
     if target_coins > 0 and already_sent >= target_coins then
         config.enabled = false
         config.trade_coin_enabled = false
-        if coin_toggle_ctrl then
-            coin_toggle_ctrl.set_state(false)
-        end
         save_config()
         set_status_msg("coin", string_format("Selesai! Berhasil mengirim %s/%s Coins", format_number(already_sent), format_number(target_coins)))
         return
@@ -1716,9 +1591,6 @@ local function try_trade_coin()
         set_status_msg("coin", "Error: Tidak ada lagi ikan yang tersedia di inventory")
         config.enabled = false
         config.trade_coin_enabled = false
-        if coin_toggle_ctrl then
-            coin_toggle_ctrl.set_state(false)
-        end
         save_config()
         return
     end
@@ -1806,9 +1678,6 @@ local function try_trade_coin()
             if config.trade_coin_target > 0 and cache.stats.coin.total_coins >= config.trade_coin_target then
                 config.enabled = false
                 config.trade_coin_enabled = false
-                if coin_toggle_ctrl then
-                    coin_toggle_ctrl.set_state(false)
-                end
                 save_config()
                 set_status_msg("coin", string_format("Selesai! Berhasil mengirim %s Coins (%d ikan)", format_number(cache.stats.coin.total_coins), cache.stats.coin.total_items))
                 return
@@ -1911,7 +1780,7 @@ local function create_ui()
         end)
     end
     if not parent_gui then
-        parent_gui = local_player:WaitForChild("PlayerGui")
+        parent_gui = player_gui or local_player:WaitForChild("PlayerGui", 5)
     end
 
     local function clear_old_guis(container)
@@ -1926,7 +1795,7 @@ local function create_ui()
     end
 
     clear_old_guis(parent_gui)
-    clear_old_guis(local_player:FindFirstChild("PlayerGui"))
+    if player_gui then clear_old_guis(player_gui) end
     if gethui then clear_old_guis(gethui()) end
     if core_gui then clear_old_guis(core_gui) end
 
@@ -1941,8 +1810,7 @@ local function create_ui()
         gui.Parent = parent_gui
     end)
     if not success_parent then
-        parent_gui = local_player:WaitForChild("PlayerGui")
-        gui.Parent = parent_gui
+        gui.Parent = player_gui or local_player:WaitForChild("PlayerGui", 5)
     end
 
     task_spawn(function()
@@ -1961,34 +1829,8 @@ local function create_ui()
     local enchant_fav_toggle = nil
     local rarity_fav_toggle = nil
 
-    local function sync_fav_toggles(active)
-        config.trade_favorited = active
-        save_config()
-        if byname_fav_toggle then byname_fav_toggle.set_state(active) end
-        if enchant_fav_toggle then enchant_fav_toggle.set_state(active) end
-        if rarity_fav_toggle then rarity_fav_toggle.set_state(active) end
-
-        cache.loaded_fish = get_owned_fish_options()
-        cache.loaded_enchants = get_owned_enchant_options()
-
-        if item_panel and item_panel.Visible and populate_items_panel and fish_dropdown_btn then
-            pcall(function() populate_items_panel(fish_dropdown_btn) end)
-        end
-        if enchant_panel and enchant_panel.Visible and populate_enchants_panel and enchant_dropdown_btn then
-            pcall(function() populate_enchants_panel(enchant_dropdown_btn) end)
-        end
-    end
-
-    local function sync_qty_boxes(val)
-        val = math_max(0, math_floor(tonumber(val) or 0))
-        config.quantity = val
-        save_config()
-        if qty_box and qty_box.Text ~= tostring(val) then qty_box.Text = tostring(val) end
-        if es_qty_box and es_qty_box.Text ~= tostring(val) then es_qty_box.Text = tostring(val) end
-        if r_qty_box and r_qty_box.Text ~= tostring(val) then r_qty_box.Text = tostring(val) end
-    end
-
     local function truncate_string(str, max_len)
+        if not str then return "" end
         if #str > max_len then
             return string_sub(str, 1, max_len - 2) .. ".."
         end
@@ -2028,9 +1870,10 @@ local function create_ui()
     local function get_owned_fish_options()
         local list = {}
         local counts = {}
-        local success, err = pcall(function()
-            if player_data then
-                local inventory = player_data:Get("Inventory")
+        pcall(function()
+            local pdata = get_player_data()
+            if pdata then
+                local inventory = pdata:Get("Inventory")
                 local items = inventory and inventory.Items or {}
                 for _, item in ipairs(items) do
                     if item.Id then
@@ -2076,8 +1919,8 @@ local function create_ui()
     local BTN_BG_COLOR = Color3_fromRGB(46, 50, 58)
     local BTN_HOVER_COLOR = Color3_fromRGB(60, 66, 76)
 
-    local font_face = Font.fromEnum(Enum.Font.SourceSans)
-    local font_bold = Font.fromEnum(Enum.Font.SourceSans)
+    local font_face = Enum.Font.SourceSans
+    local font_bold = Enum.Font.SourceSansBold
 
     local target_lbl
     local fish_dropdown_btn
@@ -2094,9 +1937,37 @@ local function create_ui()
     local coin_status_val_lbl = nil
     local populate_items_panel
     local populate_enchants_panel
+    local populate_rarity_panel
     local qty_box
     local es_qty_box
     local r_qty_box
+
+    local function sync_fav_toggles(active)
+        config.trade_favorited = active
+        save_config()
+        if byname_fav_toggle then byname_fav_toggle.set_state(active) end
+        if enchant_fav_toggle then enchant_fav_toggle.set_state(active) end
+        if rarity_fav_toggle then rarity_fav_toggle.set_state(active) end
+
+        cache.loaded_fish = get_owned_fish_options()
+        cache.loaded_enchants = get_owned_enchant_options()
+
+        if item_panel and item_panel.Visible and populate_items_panel and fish_dropdown_btn then
+            pcall(function() populate_items_panel(fish_dropdown_btn) end)
+        end
+        if enchant_panel and enchant_panel.Visible and populate_enchants_panel and enchant_dropdown_btn then
+            pcall(function() populate_enchants_panel(enchant_dropdown_btn) end)
+        end
+    end
+
+    local function sync_qty_boxes(val)
+        val = math_max(0, math_floor(tonumber(val) or 0))
+        config.quantity = val
+        save_config()
+        if qty_box and qty_box.Text ~= tostring(val) then qty_box.Text = tostring(val) end
+        if es_qty_box and es_qty_box.Text ~= tostring(val) then es_qty_box.Text = tostring(val) end
+        if r_qty_box and r_qty_box.Text ~= tostring(val) then r_qty_box.Text = tostring(val) end
+    end
 
     local main = Instance_new("Frame")
     main.Name = "MainFrame"
@@ -2132,9 +2003,9 @@ local function create_ui()
 
     close_detector.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            item_panel.Visible = false
-            enchant_panel.Visible = false
-            rarity_panel.Visible = false
+            if item_panel then item_panel.Visible = false end
+            if enchant_panel then enchant_panel.Visible = false end
+            if rarity_panel then rarity_panel.Visible = false end
             close_detector.Visible = false
         end
     end)
@@ -2167,7 +2038,7 @@ local function create_ui()
     ply_refresh.Text = "Refresh"
     ply_refresh.TextColor3 = ACCENT_COLOR
     ply_refresh.TextSize = 10
-    ply_refresh.FontFace = font_bold
+    ply_refresh.Font = font_bold
     ply_refresh.Active = true
     ply_refresh.ZIndex = 10
     ply_refresh.Parent = player_panel
@@ -2196,7 +2067,7 @@ local function create_ui()
     target_lbl.Text = truncate_string(config.trade_with ~= "" and config.trade_with or "None", 10)
     target_lbl.TextColor3 = ACCENT_COLOR
     target_lbl.TextSize = 10
-    target_lbl.FontFace = font_bold
+    target_lbl.Font = font_bold
     target_lbl.TextXAlignment = Enum.TextXAlignment.Center
     target_lbl.ZIndex = 10
     target_lbl.Parent = player_panel
@@ -2208,7 +2079,6 @@ local function create_ui()
     local target_lbl_stroke = Instance_new("UIStroke")
     target_lbl_stroke.Color = BORDER_COLOR
     target_lbl_stroke.Thickness = 1
-    target_lbl_stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     target_lbl_stroke.Parent = target_lbl
 
     local p_sep = Instance_new("Frame")
@@ -2237,7 +2107,7 @@ local function create_ui()
     p_layout.Parent = p_scroll
 
     local function populate_players_panel()
-        local success, err = pcall(function()
+        pcall(function()
             for _, child in ipairs(p_scroll:GetChildren()) do
                 if child:IsA("TextButton") then child:Destroy() end
             end
@@ -2268,7 +2138,7 @@ local function create_ui()
                 opt_lbl.Text = truncate_string(name, 10)
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                 opt_lbl.TextSize = 10
-                opt_lbl.FontFace = font_face
+                opt_lbl.Font = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
@@ -2349,7 +2219,7 @@ local function create_ui()
     item_search_box.PlaceholderColor3 = MUTED_COLOR
     item_search_box.TextColor3 = TEXT_COLOR
     item_search_box.TextSize = 10
-    item_search_box.FontFace = font_face
+    item_search_box.Font = font_face
     item_search_box.TextXAlignment = Enum.TextXAlignment.Center
     item_search_box.Active = true
     item_search_box.ZIndex = 10
@@ -2395,7 +2265,7 @@ local function create_ui()
     i_layout.Parent = i_scroll
 
     populate_items_panel = function(update_dropdown_btn)
-        local success, err = pcall(function()
+        pcall(function()
             for _, child in ipairs(i_scroll:GetChildren()) do
                 if child:IsA("TextButton") then child:Destroy() end
             end
@@ -2413,7 +2283,7 @@ local function create_ui()
 
             for _, opt in ipairs(options_list) do
                 local clean_opt = strip_quantity(opt)
-                if query == "" or string_find(string_lower(clean_opt), query) then
+                if query == "" or string_find(string_lower(clean_opt), query, 1, true) then
                     match_count = match_count + 1
                     local is_selected = table_find(config.selected_fish, clean_opt) ~= nil
                     local opt_btn = Instance_new("TextButton")
@@ -2436,7 +2306,7 @@ local function create_ui()
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                     opt_lbl.TextSize = 10
-                    opt_lbl.FontFace = font_face
+                    opt_lbl.Font = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
@@ -2481,12 +2351,14 @@ local function create_ui()
 
                         config.trade_fish_enabled = #config.selected_fish > 0
 
-                        if #config.selected_fish == 0 then
-                            update_dropdown_btn.Text = "Select Option"
-                        elseif #config.selected_fish == 1 then
-                            update_dropdown_btn.Text = tostring(config.selected_fish[1])
-                        else
-                            update_dropdown_btn.Text = tostring(#config.selected_fish) .. " selected"
+                        if update_dropdown_btn then
+                            if #config.selected_fish == 0 then
+                                update_dropdown_btn.Text = "Select Option"
+                            elseif #config.selected_fish == 1 then
+                                update_dropdown_btn.Text = tostring(config.selected_fish[1])
+                            else
+                                update_dropdown_btn.Text = tostring(#config.selected_fish) .. " selected"
+                            end
                         end
 
                         save_config()
@@ -2539,7 +2411,7 @@ local function create_ui()
     enchant_search_box.PlaceholderColor3 = MUTED_COLOR
     enchant_search_box.TextColor3 = TEXT_COLOR
     enchant_search_box.TextSize = 10
-    enchant_search_box.FontFace = font_face
+    enchant_search_box.Font = font_face
     enchant_search_box.TextXAlignment = Enum.TextXAlignment.Center
     enchant_search_box.Active = true
     enchant_search_box.ZIndex = 10
@@ -2585,7 +2457,7 @@ local function create_ui()
     en_layout.Parent = en_scroll
 
     populate_enchants_panel = function(update_dropdown_btn)
-        local success, err = pcall(function()
+        pcall(function()
             for _, child in ipairs(en_scroll:GetChildren()) do
                 if child:IsA("TextButton") then child:Destroy() end
             end
@@ -2603,7 +2475,7 @@ local function create_ui()
 
             for _, opt in ipairs(options_list) do
                 local clean_opt = strip_quantity(opt)
-                if query == "" or string_find(string_lower(clean_opt), query) then
+                if query == "" or string_find(string_lower(clean_opt), query, 1, true) then
                     match_count = match_count + 1
                     local is_selected = table_find(config.selected_items, clean_opt) ~= nil
 
@@ -2627,7 +2499,7 @@ local function create_ui()
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                     opt_lbl.TextSize = 10
-                    opt_lbl.FontFace = font_face
+                    opt_lbl.Font = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
@@ -2672,12 +2544,14 @@ local function create_ui()
 
                         config.trade_enchants_enabled = #config.selected_items > 0
 
-                        if #config.selected_items == 0 then
-                            update_dropdown_btn.Text = "Select Option"
-                        elseif #config.selected_items == 1 then
-                            update_dropdown_btn.Text = tostring(config.selected_items[1])
-                        else
-                            update_dropdown_btn.Text = tostring(#config.selected_items) .. " selected"
+                        if update_dropdown_btn then
+                            if #config.selected_items == 0 then
+                                update_dropdown_btn.Text = "Select Option"
+                            elseif #config.selected_items == 1 then
+                                update_dropdown_btn.Text = tostring(config.selected_items[1])
+                            else
+                                update_dropdown_btn.Text = tostring(#config.selected_items) .. " selected"
+                            end
                         end
 
                         save_config()
@@ -2728,7 +2602,7 @@ local function create_ui()
     r_title.Text = "Select Rarity"
     r_title.TextColor3 = ACCENT_COLOR
     r_title.TextSize = 10
-    r_title.FontFace = font_bold
+    r_title.Font = font_bold
     r_title.TextXAlignment = Enum.TextXAlignment.Center
     r_title.ZIndex = 10
     r_title.Parent = rarity_panel
@@ -2758,24 +2632,19 @@ local function create_ui()
     r_layout.Padding = UDim_new(0, 2)
     r_layout.Parent = r_scroll
 
-    local function populate_rarity_panel(update_dropdown_btn)
-        local success, err = pcall(function()
+    populate_rarity_panel = function(update_dropdown_btn)
+        pcall(function()
             for _, child in ipairs(r_scroll:GetChildren()) do
                 if child:IsA("TextButton") then child:Destroy() end
             end
 
-            local rarity_options = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" }
+            local tiers_list = { "All", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" }
             local match_count = 0
 
-            local options_list = {}
-            table_insert(options_list, "All")
-            for _, opt in ipairs(rarity_options) do
-                table_insert(options_list, opt)
-            end
-
-            for _, opt in ipairs(options_list) do
+            for _, opt in ipairs(tiers_list) do
                 match_count = match_count + 1
                 local is_selected = table_find(config.selected_tiers, opt) ~= nil
+
                 local opt_btn = Instance_new("TextButton")
                 opt_btn.Size = UDim2_new(1, -6, 0, 24)
                 opt_btn.BackgroundTransparency = is_selected and 0 or 1
@@ -2796,7 +2665,7 @@ local function create_ui()
                 opt_lbl.Text = opt
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                 opt_lbl.TextSize = 10
-                opt_lbl.FontFace = font_face
+                opt_lbl.Font = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
@@ -2841,12 +2710,14 @@ local function create_ui()
 
                     config.trade_rarity_enabled = #config.selected_tiers > 0
 
-                    if #config.selected_tiers == 0 then
-                        update_dropdown_btn.Text = "Select Option"
-                    elseif #config.selected_tiers == 1 then
-                        update_dropdown_btn.Text = tostring(config.selected_tiers[1])
-                    else
-                        update_dropdown_btn.Text = tostring(#config.selected_tiers) .. " selected"
+                    if update_dropdown_btn then
+                        if #config.selected_tiers == 0 then
+                            update_dropdown_btn.Text = "Select Option"
+                        elseif #config.selected_tiers == 1 then
+                            update_dropdown_btn.Text = tostring(config.selected_tiers[1])
+                        else
+                            update_dropdown_btn.Text = tostring(#config.selected_tiers) .. " selected"
+                        end
                     end
 
                     save_config()
@@ -2896,7 +2767,7 @@ local function create_ui()
     title_lbl.Text = "Keenan Trade Script"
     title_lbl.TextColor3 = ACCENT_COLOR
     title_lbl.TextSize = 11
-    title_lbl.FontFace = font_bold
+    title_lbl.Font = font_bold
     title_lbl.TextXAlignment = Enum.TextXAlignment.Left
     title_lbl.ZIndex = 26
     title_lbl.Parent = header
@@ -2924,7 +2795,6 @@ local function create_ui()
     floating_btn.BackgroundTransparency = 0
     floating_btn.Text = ""
     floating_btn.Active = true
-    floating_btn.Modal = true
     floating_btn.ZIndex = 20
     floating_btn.Visible = false
     floating_btn.Parent = gui
@@ -2946,7 +2816,7 @@ local function create_ui()
     icon_lbl.Text = "K"
     icon_lbl.TextColor3 = ACCENT_COLOR
     icon_lbl.TextSize = 22
-    icon_lbl.FontFace = font_bold
+    icon_lbl.Font = font_bold
     icon_lbl.ZIndex = 21
     icon_lbl.Visible = true
     icon_lbl.Parent = floating_btn
@@ -3006,7 +2876,6 @@ local function create_ui()
     min_btn.BorderSizePixel = 0
     min_btn.Text = ""
     min_btn.Active = true
-    min_btn.Modal = true
     min_btn.ZIndex = 27
     min_btn.Parent = header
 
@@ -3043,7 +2912,6 @@ local function create_ui()
     restore_btn.BorderSizePixel = 0
     restore_btn.Text = ""
     restore_btn.Active = true
-    restore_btn.Modal = true
     restore_btn.ZIndex = 27
     restore_btn.Parent = header
 
@@ -3140,9 +3008,8 @@ local function create_ui()
     close_btn.Text = "X"
     close_btn.TextColor3 = MUTED_COLOR
     close_btn.TextSize = 11
-    close_btn.FontFace = font_face
+    close_btn.Font = font_face
     close_btn.Active = true
-    close_btn.Modal = true
     close_btn.ZIndex = 27
     close_btn.Parent = header
 
@@ -3211,17 +3078,16 @@ local function create_ui()
         accordion_corner.CornerRadius = UDim_new(0, 5)
         accordion_corner.Parent = item_frame
 
-        local header = Instance_new("TextButton")
-        header.Size = UDim2_new(1, 0, 0, 26)
-        header.BackgroundTransparency = 1
-        header.Text = "  " .. title_text
-        header.TextColor3 = TEXT_COLOR
-        header.TextSize = 10
-        header.FontFace = font_bold
-        header.TextXAlignment = Enum.TextXAlignment.Left
-        header.Active = true
-        header.Modal = true
-        header.Parent = item_frame
+        local header_btn = Instance_new("TextButton")
+        header_btn.Size = UDim2_new(1, 0, 0, 26)
+        header_btn.BackgroundTransparency = 1
+        header_btn.Text = "  " .. title_text
+        header_btn.TextColor3 = TEXT_COLOR
+        header_btn.TextSize = 10
+        header_btn.Font = font_bold
+        header_btn.TextXAlignment = Enum.TextXAlignment.Left
+        header_btn.Active = true
+        header_btn.Parent = item_frame
 
         local chevron = Instance_new("TextLabel")
         chevron.Size = UDim2_new(0, 20, 1, 0)
@@ -3230,9 +3096,9 @@ local function create_ui()
         chevron.Text = "▼"
         chevron.TextColor3 = ACCENT_COLOR
         chevron.TextSize = 10
-        chevron.FontFace = font_face
+        chevron.Font = font_face
         chevron.TextXAlignment = Enum.TextXAlignment.Right
-        chevron.Parent = header
+        chevron.Parent = header_btn
 
         local content = Instance_new("Frame")
         content.Name = "Content"
@@ -3271,7 +3137,7 @@ local function create_ui()
             end
         end)
 
-        header.MouseButton1Click:Connect(toggle_expand)
+        header_btn.MouseButton1Click:Connect(toggle_expand)
 
         return content
     end
@@ -3289,7 +3155,7 @@ local function create_ui()
         lbl.Text = label_text
         lbl.TextColor3 = TEXT_COLOR
         lbl.TextSize = 10
-        lbl.FontFace = font_bold
+        lbl.Font = font_bold
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent = row
 
@@ -3413,7 +3279,7 @@ local function create_ui()
     status_title.Text = "Status"
     status_title.TextColor3 = ACCENT_COLOR
     status_title.TextSize = 10
-    status_title.FontFace = font_bold
+    status_title.Font = font_bold
     status_title.TextXAlignment = Enum.TextXAlignment.Left
     status_title.Parent = status_box
 
@@ -3425,7 +3291,7 @@ local function create_ui()
     status_val_lbl.Text = "Idle"
     status_val_lbl.TextColor3 = TEXT_COLOR
     status_val_lbl.TextSize = 10
-    status_val_lbl.FontFace = font_face
+    status_val_lbl.Font = font_face
     status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     status_val_lbl.TextWrapped = true
@@ -3445,7 +3311,7 @@ local function create_ui()
     item_lbl.Text = "Select Item"
     item_lbl.TextColor3 = TEXT_COLOR
     item_lbl.TextSize = 10
-    item_lbl.FontFace = font_bold
+    item_lbl.Font = font_bold
     item_lbl.TextXAlignment = Enum.TextXAlignment.Left
     item_lbl.Parent = item_row
 
@@ -3467,7 +3333,7 @@ local function create_ui()
     fish_dropdown_btn.Text = get_fish_dropdown_text()
     fish_dropdown_btn.TextColor3 = TEXT_COLOR
     fish_dropdown_btn.TextSize = 10
-    fish_dropdown_btn.FontFace = font_face
+    fish_dropdown_btn.Font = font_face
     fish_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     fish_dropdown_btn.Active = true
     fish_dropdown_btn.Parent = item_row
@@ -3493,13 +3359,13 @@ local function create_ui()
     fish_chevron.Text = "▼"
     fish_chevron.TextColor3 = ACCENT_COLOR
     fish_chevron.TextSize = 7
-    fish_chevron.FontFace = font_face
+    fish_chevron.Font = font_face
     fish_chevron.TextXAlignment = Enum.TextXAlignment.Right
     fish_chevron.Parent = fish_dropdown_btn
 
     fish_dropdown_btn.Activated:Connect(function()
-        item_search_box.Text = ""
         enchant_panel.Visible = false
+        rarity_panel.Visible = false
         item_panel.Visible = not item_panel.Visible
         close_detector.Visible = item_panel.Visible
         if item_panel.Visible then
@@ -3518,10 +3384,10 @@ local function create_ui()
     local amount_lbl = Instance_new("TextLabel")
     amount_lbl.Size = UDim2_new(0.45, 0, 1, 0)
     amount_lbl.BackgroundTransparency = 1
-    amount_lbl.Text = "Amount Fish Name"
+    amount_lbl.Text = "Amount Fish"
     amount_lbl.TextColor3 = TEXT_COLOR
     amount_lbl.TextSize = 10
-    amount_lbl.FontFace = font_bold
+    amount_lbl.Font = font_bold
     amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     amount_lbl.Parent = amount_row
 
@@ -3532,7 +3398,7 @@ local function create_ui()
     qty_box.Text = tostring(config.quantity)
     qty_box.TextColor3 = TEXT_COLOR
     qty_box.TextSize = 10
-    qty_box.FontFace = font_face
+    qty_box.Font = font_face
     qty_box.TextXAlignment = Enum.TextXAlignment.Center
     qty_box.ClearTextOnFocus = false
     qty_box.Parent = amount_row
@@ -3571,10 +3437,10 @@ local function create_ui()
     refresh_btn.LayoutOrder = 4
     refresh_btn.Size = UDim2_new(1, 0, 0, 26)
     refresh_btn.BackgroundColor3 = BTN_BG_COLOR
-    refresh_btn.Text = "Refresh Fish Items"
+    refresh_btn.Text = "Refresh Fish"
     refresh_btn.TextColor3 = ACCENT_COLOR
     refresh_btn.TextSize = 10
-    refresh_btn.FontFace = font_bold
+    refresh_btn.Font = font_bold
     refresh_btn.Active = true
     refresh_btn.Parent = byname_content
 
@@ -3594,14 +3460,14 @@ local function create_ui()
         refresh_btn.BackgroundColor3 = BTN_BG_COLOR
     end)
 
-    refresh_btn.Activated:Connect(function()
-        refresh_btn.Text = "Fish Items Refreshed!"
+    refresh_btn.MouseButton1Click:Connect(function()
+        refresh_btn.Text = "Fish Refreshed!"
         cache.loaded_fish = get_owned_fish_options()
         if item_panel.Visible then
             populate_items_panel(fish_dropdown_btn)
         end
         task_wait(1)
-        refresh_btn.Text = "Refresh Fish Items"
+        refresh_btn.Text = "Refresh Fish"
     end)
 
     byname_toggle_ctrl = create_toggle(byname_content, "Start Trade ByName", (config.enabled and config.trade_fish_enabled), function(active)
@@ -3673,7 +3539,7 @@ local function create_ui()
     enchant_status_title.Text = "Status"
     enchant_status_title.TextColor3 = ACCENT_COLOR
     enchant_status_title.TextSize = 10
-    enchant_status_title.FontFace = font_bold
+    enchant_status_title.Font = font_bold
     enchant_status_title.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_title.Parent = enchant_status_box
 
@@ -3685,29 +3551,29 @@ local function create_ui()
     enchant_status_val_lbl.Text = "Idle"
     enchant_status_val_lbl.TextColor3 = TEXT_COLOR
     enchant_status_val_lbl.TextSize = 10
-    enchant_status_val_lbl.FontFace = font_face
+    enchant_status_val_lbl.Font = font_face
     enchant_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     enchant_status_val_lbl.TextWrapped = true
     enchant_status_val_lbl.Parent = enchant_status_box
 
-    local stone_row = Instance_new("Frame")
-    stone_row.Name = "2_StoneRow"
-    stone_row.LayoutOrder = 2
-    stone_row.Size = UDim2_new(1, 0, 0, 22)
-    stone_row.BackgroundTransparency = 1
-    stone_row.Active = false
-    stone_row.Parent = enchant_content
+    local es_row = Instance_new("Frame")
+    es_row.Name = "2_ItemRow"
+    es_row.LayoutOrder = 2
+    es_row.Size = UDim2_new(1, 0, 0, 22)
+    es_row.BackgroundTransparency = 1
+    es_row.Active = false
+    es_row.Parent = enchant_content
 
-    local stone_lbl = Instance_new("TextLabel")
-    stone_lbl.Size = UDim2_new(0.45, 0, 1, 0)
-    stone_lbl.BackgroundTransparency = 1
-    stone_lbl.Text = "Stone Type"
-    stone_lbl.TextColor3 = TEXT_COLOR
-    stone_lbl.TextSize = 10
-    stone_lbl.FontFace = font_bold
-    stone_lbl.TextXAlignment = Enum.TextXAlignment.Left
-    stone_lbl.Parent = stone_row
+    local es_lbl = Instance_new("TextLabel")
+    es_lbl.Size = UDim2_new(0.45, 0, 1, 0)
+    es_lbl.BackgroundTransparency = 1
+    es_lbl.Text = "Select Enchant Stone"
+    es_lbl.TextColor3 = TEXT_COLOR
+    es_lbl.TextSize = 10
+    es_lbl.Font = font_bold
+    es_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    es_lbl.Parent = es_row
 
     enchant_dropdown_btn = Instance_new("TextButton")
     enchant_dropdown_btn.Size = UDim2_new(0.55, 0, 1, 0)
@@ -3727,10 +3593,10 @@ local function create_ui()
     enchant_dropdown_btn.Text = get_enchant_dropdown_text()
     enchant_dropdown_btn.TextColor3 = TEXT_COLOR
     enchant_dropdown_btn.TextSize = 10
-    enchant_dropdown_btn.FontFace = font_face
+    enchant_dropdown_btn.Font = font_face
     enchant_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     enchant_dropdown_btn.Active = true
-    enchant_dropdown_btn.Parent = stone_row
+    enchant_dropdown_btn.Parent = es_row
 
     local enchant_dropdown_c = Instance_new("UICorner")
     enchant_dropdown_c.CornerRadius = UDim_new(0, 4)
@@ -3753,13 +3619,13 @@ local function create_ui()
     enchant_chevron.Text = "▼"
     enchant_chevron.TextColor3 = ACCENT_COLOR
     enchant_chevron.TextSize = 7
-    enchant_chevron.FontFace = font_face
+    enchant_chevron.Font = font_face
     enchant_chevron.TextXAlignment = Enum.TextXAlignment.Right
     enchant_chevron.Parent = enchant_dropdown_btn
 
     enchant_dropdown_btn.Activated:Connect(function()
-        enchant_search_box.Text = ""
         item_panel.Visible = false
+        rarity_panel.Visible = false
         enchant_panel.Visible = not enchant_panel.Visible
         close_detector.Visible = enchant_panel.Visible
         if enchant_panel.Visible then
@@ -3778,10 +3644,10 @@ local function create_ui()
     local es_amount_lbl = Instance_new("TextLabel")
     es_amount_lbl.Size = UDim2_new(0.45, 0, 1, 0)
     es_amount_lbl.BackgroundTransparency = 1
-    es_amount_lbl.Text = "Amount Enchant Stone"
+    es_amount_lbl.Text = "Amount Stone"
     es_amount_lbl.TextColor3 = TEXT_COLOR
     es_amount_lbl.TextSize = 10
-    es_amount_lbl.FontFace = font_bold
+    es_amount_lbl.Font = font_bold
     es_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     es_amount_lbl.Parent = es_amount_row
 
@@ -3792,7 +3658,7 @@ local function create_ui()
     es_qty_box.Text = tostring(config.quantity)
     es_qty_box.TextColor3 = TEXT_COLOR
     es_qty_box.TextSize = 10
-    es_qty_box.FontFace = font_face
+    es_qty_box.Font = font_face
     es_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     es_qty_box.ClearTextOnFocus = false
     es_qty_box.Parent = es_amount_row
@@ -3831,10 +3697,10 @@ local function create_ui()
     es_refresh.LayoutOrder = 4
     es_refresh.Size = UDim2_new(1, 0, 0, 26)
     es_refresh.BackgroundColor3 = BTN_BG_COLOR
-    es_refresh.Text = "Check Enchant Stones"
+    es_refresh.Text = "Refresh Stone"
     es_refresh.TextColor3 = ACCENT_COLOR
     es_refresh.TextSize = 10
-    es_refresh.FontFace = font_bold
+    es_refresh.Font = font_bold
     es_refresh.Active = true
     es_refresh.Parent = enchant_content
 
@@ -3855,40 +3721,16 @@ local function create_ui()
     end)
 
     es_refresh.MouseButton1Click:Connect(function()
-        es_refresh.Text = "Enchant Stones Checked!"
+        es_refresh.Text = "Stone Refreshed!"
         cache.loaded_enchants = get_owned_enchant_options()
         if enchant_panel.Visible then
             populate_enchants_panel(enchant_dropdown_btn)
         end
-
-        local counts = get_inventory_enchants(true)
-        local status_lines = { "Inventory:" }
-        local sorted_names = {}
-        for name, _ in pairs(counts) do
-            table_insert(sorted_names, name)
-        end
-        table_sort(sorted_names)
-
-        for _, name in ipairs(sorted_names) do
-            local qty = counts[name]
-            local short_name = string_gsub(name, "%s*Enchant%s*Stone", "")
-            if short_name == "" then
-                short_name = "Enchant Stone"
-            end
-            table_insert(status_lines, short_name .. " x" .. qty)
-        end
-
-        cache.enchant_status_text = table_concat(status_lines, "\n")
-        cache.enchant_status_details = ""
-        if enchant_status_val_lbl then
-            enchant_status_val_lbl.Text = cache.enchant_status_text
-        end
-
         task_wait(1)
-        es_refresh.Text = "Check Enchant Stones"
+        es_refresh.Text = "Refresh Stone"
     end)
 
-    enchant_toggle_ctrl = create_toggle(enchant_content, "Start Trade EnchantStone", (config.enabled and config.trade_enchants_enabled), function(active)
+    enchant_toggle_ctrl = create_toggle(enchant_content, "Start Trade Enchant", (config.enabled and config.trade_enchants_enabled), function(active)
         if active then
             if es_qty_box and es_qty_box.Text ~= "" then
                 local num = tonumber(es_qty_box.Text)
@@ -3917,6 +3759,12 @@ local function create_ui()
     end)
     enchant_toggle_ctrl.Frame.LayoutOrder = 5
     enchant_toggle_ctrl.Frame.Name = "5_StartTradeToggle"
+
+    enchant_fav_toggle = create_toggle(enchant_content, "Trade Favorite Items", config.trade_favorited, function(active)
+        sync_fav_toggles(active)
+    end)
+    enchant_fav_toggle.Frame.LayoutOrder = 6
+    enchant_fav_toggle.Frame.Name = "6_FavToggle"
 
     -- Panel: Trade By Rarity
     local rarity_content = create_accordion(settings_panel, "Trade By Rarity")
@@ -3951,7 +3799,7 @@ local function create_ui()
     rarity_status_title.Text = "Status"
     rarity_status_title.TextColor3 = ACCENT_COLOR
     rarity_status_title.TextSize = 10
-    rarity_status_title.FontFace = font_bold
+    rarity_status_title.Font = font_bold
     rarity_status_title.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_title.Parent = rarity_status_box
 
@@ -3963,7 +3811,7 @@ local function create_ui()
     rarity_status_val_lbl.Text = "Idle"
     rarity_status_val_lbl.TextColor3 = TEXT_COLOR
     rarity_status_val_lbl.TextSize = 10
-    rarity_status_val_lbl.FontFace = font_face
+    rarity_status_val_lbl.Font = font_face
     rarity_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     rarity_status_val_lbl.TextWrapped = true
@@ -3983,7 +3831,7 @@ local function create_ui()
     r_lbl.Text = "Select Rarity"
     r_lbl.TextColor3 = TEXT_COLOR
     r_lbl.TextSize = 10
-    r_lbl.FontFace = font_bold
+    r_lbl.Font = font_bold
     r_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_lbl.Parent = r_row
 
@@ -4005,7 +3853,7 @@ local function create_ui()
     rarity_dropdown_btn.Text = get_rarity_dropdown_text()
     rarity_dropdown_btn.TextColor3 = TEXT_COLOR
     rarity_dropdown_btn.TextSize = 10
-    rarity_dropdown_btn.FontFace = font_face
+    rarity_dropdown_btn.Font = font_face
     rarity_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     rarity_dropdown_btn.Active = true
     rarity_dropdown_btn.Parent = r_row
@@ -4031,7 +3879,7 @@ local function create_ui()
     rarity_chevron.Text = "▼"
     rarity_chevron.TextColor3 = ACCENT_COLOR
     rarity_chevron.TextSize = 7
-    rarity_chevron.FontFace = font_face
+    rarity_chevron.Font = font_face
     rarity_chevron.TextXAlignment = Enum.TextXAlignment.Right
     rarity_chevron.Parent = rarity_dropdown_btn
 
@@ -4059,7 +3907,7 @@ local function create_ui()
     r_amount_lbl.Text = "Amount Fish Rarity"
     r_amount_lbl.TextColor3 = TEXT_COLOR
     r_amount_lbl.TextSize = 10
-    r_amount_lbl.FontFace = font_bold
+    r_amount_lbl.Font = font_bold
     r_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_amount_lbl.Parent = r_amount_row
 
@@ -4070,7 +3918,7 @@ local function create_ui()
     r_qty_box.Text = tostring(config.quantity)
     r_qty_box.TextColor3 = TEXT_COLOR
     r_qty_box.TextSize = 10
-    r_qty_box.FontFace = font_face
+    r_qty_box.Font = font_face
     r_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     r_qty_box.ClearTextOnFocus = false
     r_qty_box.Parent = r_amount_row
@@ -4112,7 +3960,7 @@ local function create_ui()
     r_refresh.Text = "Refresh Fish Rarity"
     r_refresh.TextColor3 = ACCENT_COLOR
     r_refresh.TextSize = 10
-    r_refresh.FontFace = font_bold
+    r_refresh.Font = font_bold
     r_refresh.Active = true
     r_refresh.Parent = rarity_content
 
@@ -4207,7 +4055,7 @@ local function create_ui()
     coin_status_title.Text = "Status"
     coin_status_title.TextColor3 = ACCENT_COLOR
     coin_status_title.TextSize = 10
-    coin_status_title.FontFace = font_bold
+    coin_status_title.Font = font_bold
     coin_status_title.TextXAlignment = Enum.TextXAlignment.Left
     coin_status_title.Parent = coin_status_box
 
@@ -4219,7 +4067,7 @@ local function create_ui()
     coin_status_val_lbl.Text = "Idle"
     coin_status_val_lbl.TextColor3 = TEXT_COLOR
     coin_status_val_lbl.TextSize = 10
-    coin_status_val_lbl.FontFace = font_face
+    coin_status_val_lbl.Font = font_face
     coin_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     coin_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     coin_status_val_lbl.TextWrapped = true
@@ -4239,7 +4087,7 @@ local function create_ui()
     coin_target_lbl.Text = "Target Coin Value"
     coin_target_lbl.TextColor3 = TEXT_COLOR
     coin_target_lbl.TextSize = 10
-    coin_target_lbl.FontFace = font_bold
+    coin_target_lbl.Font = font_bold
     coin_target_lbl.TextXAlignment = Enum.TextXAlignment.Left
     coin_target_lbl.Parent = coin_target_row
 
@@ -4250,7 +4098,7 @@ local function create_ui()
     coin_target_box.Text = format_number(config.trade_coin_target or 8000000)
     coin_target_box.TextColor3 = TEXT_COLOR
     coin_target_box.TextSize = 10
-    coin_target_box.FontFace = font_face
+    coin_target_box.Font = font_face
     coin_target_box.TextXAlignment = Enum.TextXAlignment.Center
     coin_target_box.ClearTextOnFocus = false
     coin_target_box.Parent = coin_target_row
@@ -4293,7 +4141,7 @@ local function create_ui()
     coin_check_btn.Text = "Check Bag Coin Worth"
     coin_check_btn.TextColor3 = ACCENT_COLOR
     coin_check_btn.TextSize = 10
-    coin_check_btn.FontFace = font_bold
+    coin_check_btn.Font = font_bold
     coin_check_btn.Active = true
     coin_check_btn.Parent = coin_content
 
@@ -4316,7 +4164,8 @@ local function create_ui()
     coin_check_btn.MouseButton1Click:Connect(function()
         local total_worth = 0
         local total_fish = 0
-        local inv = player_data and player_data:Get("Inventory")
+        local pdata = get_player_data()
+        local inv = pdata and pdata:Get("Inventory")
         local itms = inv and inv.Items or {}
         for _, itm in ipairs(itms) do
             local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
@@ -4465,11 +4314,11 @@ local function cleanup_all()
 
     pcall(function()
         local core = gethui and gethui() or core_gui
-        local old = core:FindFirstChild("KeenanHub_AutoTrade") or core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
+        local old = core and (core:FindFirstChild("KeenanHub_AutoTrade") or core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade"))
         if old then old:Destroy() end
     end)
     pcall(function()
-        local pgui = local_player:FindFirstChild("PlayerGui")
+        local pgui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
         local old = pgui and (pgui:FindFirstChild("KeenanHub_AutoTrade") or pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
         if old then old:Destroy() end
     end)
