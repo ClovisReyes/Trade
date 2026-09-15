@@ -40,6 +40,7 @@ local UDim_new       = UDim.new
 local Instance_new   = Instance.new
 local TweenInfo_new  = TweenInfo.new
 
+-- Previous Instance Cleanup
 if _G.KeenanHub_AutoTrade_Cleanup then
     pcall(_G.KeenanHub_AutoTrade_Cleanup)
 end
@@ -62,7 +63,6 @@ end
 local cloneref = cloneref or function(ref) return ref end
 
 local players               = cloneref(game:GetService("Players"))
-local local_player          = players.LocalPlayer
 local user_input_service    = cloneref(game:GetService("UserInputService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
 local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
@@ -78,41 +78,41 @@ pcall(function()
     core_gui = cloneref(game:GetService("CoreGui"))
 end)
 
-local player_gui = nil
-pcall(function()
-    player_gui = cloneref(local_player:WaitForChild("PlayerGui", 5))
-end)
-if not player_gui then
-    player_gui = local_player:FindFirstChild("PlayerGui")
-end
-
-local function safe_wait_child(parent, name, timeout)
-    if not parent then return nil end
-    local child = parent:FindFirstChild(name)
-    if child then return child end
-    local ok, res = pcall(function()
-        return parent:WaitForChild(name, timeout or 3)
+-- Safe LocalPlayer Resolver
+local local_player = players.LocalPlayer
+if not local_player then
+    pcall(function()
+        players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+        local_player = players.LocalPlayer
     end)
-    return ok and res or nil
+end
+while not local_player do
+    local_player = players.LocalPlayer
+    task_wait(0.1)
 end
 
-local variables = {
-    items        = safe_wait_child(replicated_storage, "Items", 4),
-    variants     = safe_wait_child(replicated_storage, "Variants", 4),
-    packages     = safe_wait_child(replicated_storage, "Packages", 4),
-    shared       = safe_wait_child(replicated_storage, "Shared", 4)
-}
+-- Game Folders & Modules
+local items_folder = replicated_storage:FindFirstChild("Items")
+local variants_folder = replicated_storage:FindFirstChild("Variants")
 
-local replion_pkg = variables.packages and safe_wait_child(variables.packages, "Replion", 4)
-local success_replion, replion_mod = pcall(function()
-    return replion_pkg and require(replion_pkg) or nil
+local replion_mod = nil
+pcall(function()
+    local replion_pkg = (replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("Replion"))
+        or replicated_storage:FindFirstChild("Replion", true)
+    if replion_pkg then
+        replion_mod = require(replion_pkg)
+    end
 end)
 
-local item_utility_mod = variables.shared and safe_wait_child(variables.shared, "ItemUtility", 4)
-local success_iu, item_utility = pcall(function()
-    return item_utility_mod and require(item_utility_mod) or nil
+local item_utility = nil
+pcall(function()
+    local iu_mod = (replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("ItemUtility"))
+        or replicated_storage:FindFirstChild("ItemUtility", true)
+    if iu_mod then
+        item_utility = require(iu_mod)
+    end
 end)
-if not success_iu or not item_utility then
+if not item_utility then
     item_utility = {
         GetItemData = function(_, id) return nil end
     }
@@ -121,27 +121,23 @@ end
 local player_data = nil
 local function get_player_data()
     if player_data then return player_data end
-    if success_replion and replion_mod and replion_mod.Client then
+    if replion_mod and replion_mod.Client then
         pcall(function()
             if replion_mod.Client.GetReplion then
-                player_data = replion_mod.Client:GetReplion("Data")
-            end
-            if not player_data and replion_mod.Client.WaitReplion then
-                player_data = replion_mod.Client:WaitReplion("Data", 2)
+                player_data = replion_mod.Client:GetReplion("Data") or replion_mod.Client:GetReplion("PlayerData")
             end
         end)
     end
     return player_data
 end
-pcall(get_player_data)
 
 -- Remotes
 local remote_map = {
-    SendTradeOffer     = "SendTradeOffer",
-    AddItem            = "AddItem",
-    SetReady           = "SetReady",
-    ConfirmTrade       = "ConfirmTrade",
-    TradeEnded         = "TradeEnded",
+    SendTradeOffer = "SendTradeOffer",
+    AddItem        = "AddItem",
+    SetReady       = "SetReady",
+    ConfirmTrade   = "ConfirmTrade",
+    TradeEnded     = "TradeEnded",
 }
 
 local _net_lookup = nil
@@ -234,48 +230,48 @@ local remotes = setmetatable({}, {
 
 local trade_remotes = remotes
 
--- Config & State
+-- Configuration & State
 local config = {
-    enabled             = false,
-    trade_favorited     = false,
-    quantity            = 0,
-    trade_with          = "",
+    enabled                = false,
+    trade_favorited        = false,
+    quantity               = 0,
+    trade_with             = "",
 
-    trade_fish_enabled  = false,
+    trade_fish_enabled     = false,
     trade_enchants_enabled = false,
-    trade_rarity_enabled = false,
-    trade_coin_enabled  = false,
-    trade_coin_target   = 8000000,
+    trade_rarity_enabled   = false,
+    trade_coin_enabled     = false,
+    trade_coin_target      = 8000000,
 
-    selected_fish       = {},
-    selected_tiers      = { "All" },
-    selected_mutations  = { "All" },
-    selected_items      = {},
+    selected_fish          = {},
+    selected_tiers         = { "All" },
+    selected_mutations     = { "All" },
+    selected_items         = {},
 }
 
 local cache = {
-    processed_trades    = {},
-    loaded_fish         = {},
-    loaded_mutations    = {},
-    loaded_enchants     = {},
-    loaded_tiers        = {},
+    processed_trades           = {},
+    loaded_fish                = {},
+    loaded_mutations           = {},
+    loaded_enchants            = {},
+    loaded_tiers               = {},
     loaded_variant_multipliers = {},
-    is_trading_active   = false,
-    loop_running        = false,
-    last_trade_time     = nil,
-    fish_status_text    = "Idle",
-    fish_status_details = "",
-    enchant_status_text = "Idle",
-    enchant_status_details = "",
-    rarity_status_text  = "Idle",
-    rarity_status_details = "",
-    coin_status_text    = "Idle",
-    coin_status_details = "",
+    is_trading_active          = false,
+    loop_running               = false,
+    last_trade_time            = nil,
+    fish_status_text           = "Idle",
+    fish_status_details        = "",
+    enchant_status_text        = "Idle",
+    enchant_status_details     = "",
+    rarity_status_text         = "Idle",
+    rarity_status_details      = "",
+    coin_status_text           = "Idle",
+    coin_status_details        = "",
     stats = {
-        fish = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
-        rarity = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
+        fish    = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
+        rarity  = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
         enchant = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
-        coin = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0, target_coins = 0 }
+        coin    = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
     },
 }
 
@@ -322,9 +318,9 @@ local function load_config()
         end
     end)
 end
-
 load_config()
 
+-- Enforce single active mode from saved state
 local active_modes = 0
 if config.trade_fish_enabled then active_modes = active_modes + 1 end
 if config.trade_enchants_enabled then active_modes = active_modes + 1 end
@@ -333,9 +329,7 @@ if config.trade_coin_enabled then active_modes = active_modes + 1 end
 
 if active_modes > 1 then
     local found = false
-    if config.trade_fish_enabled then
-        found = true
-    end
+    if config.trade_fish_enabled then found = true end
     if config.trade_enchants_enabled then
         if found then config.trade_enchants_enabled = false else found = true end
     end
@@ -348,53 +342,7 @@ if active_modes > 1 then
     save_config()
 end
 
--- Helpers
-local function click_gui_button(btn)
-    if not btn then return end
-    pcall(function()
-        if firesignal then
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.Activated)
-        elseif getconnections then
-            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
-                conn:Fire()
-            end
-        end
-    end)
-end
-
-local function get_inventory_enchants(bypass_favorited)
-    local enchants = {}
-    pcall(function()
-        local pdata = get_player_data()
-        if pdata then
-            local inventory = pdata:Get("Inventory")
-            local items = inventory and inventory.Items or {}
-            for _, item in ipairs(items) do
-                if item.Id then
-                    local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
-                    local include_item = true
-                    if not bypass_favorited and is_fav and not config.trade_favorited then
-                        include_item = false
-                    end
-
-                    if include_item then
-                        local data = item_utility:GetItemData(item.Id)
-                        if data and data.Data then
-                            local name = data.Data.Name
-                            local is_enchant = (data.Data.Type == "Enchant Stones") or string_find(name, "Enchant", 1, true)
-                            if is_enchant then
-                                enchants[name] = (enchants[name] or 0) + (item.Amount or 1)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-    return enchants
-end
-
+-- Math & String Utilities
 local function strip_quantity(str)
     return string_gsub(str, "%s*%(x%d+%)", "")
 end
@@ -427,7 +375,29 @@ local function parse_coin_input(str)
     return math_floor(val)
 end
 
--- Filters
+local function truncate_string(str, max_len)
+    if not str then return "" end
+    if #str > max_len then
+        return string_sub(str, 1, max_len - 2) .. ".."
+    end
+    return str
+end
+
+local function click_gui_button(btn)
+    if not btn then return end
+    pcall(function()
+        if firesignal then
+            firesignal(btn.MouseButton1Click)
+            firesignal(btn.Activated)
+        elseif getconnections then
+            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
+                conn:Fire()
+            end
+        end
+    end)
+end
+
+-- Tiers & Game Data
 local tier_mapping = {
     [1] = "common",
     [2] = "uncommon",
@@ -459,8 +429,8 @@ local function load_game_data()
         end
     end
 
-    if variables.variants then
-        for _, variant in ipairs(variables.variants:GetChildren()) do
+    if variants_folder then
+        for _, variant in ipairs(variants_folder:GetChildren()) do
             if variant:IsA("ModuleScript") then
                 local success, data = pcall(require, variant)
                 if success and type(data) == "table" then
@@ -488,6 +458,96 @@ local function load_game_data()
 end
 pcall(load_game_data)
 
+-- Inventory Helpers
+local function get_inventory_enchants(bypass_favorited)
+    local enchants = {}
+    pcall(function()
+        local pdata = get_player_data()
+        if pdata then
+            local inventory = pdata:Get("Inventory")
+            local items = inventory and inventory.Items or {}
+            for _, item in ipairs(items) do
+                if item.Id then
+                    local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
+                    local include_item = true
+                    if not bypass_favorited and is_fav and not config.trade_favorited then
+                        include_item = false
+                    end
+
+                    if include_item then
+                        local data = item_utility:GetItemData(item.Id)
+                        if data and data.Data then
+                            local name = data.Data.Name
+                            local is_enchant = (data.Data.Type == "Enchant Stones") or string_find(name, "Enchant", 1, true)
+                            if is_enchant then
+                                enchants[name] = (enchants[name] or 0) + (item.Amount or 1)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    return enchants
+end
+
+local function get_owned_enchant_options()
+    local list = {}
+    local counts = get_inventory_enchants(true)
+    for name, qty in pairs(counts) do
+        table_insert(list, name .. " (x" .. qty .. ")")
+    end
+    table_sort(list)
+    return list
+end
+
+local function get_owned_fish_options()
+    local list = {}
+    local counts = {}
+    pcall(function()
+        local pdata = get_player_data()
+        if pdata then
+            local inventory = pdata:Get("Inventory")
+            local items = inventory and inventory.Items or {}
+            for _, item in ipairs(items) do
+                if item.Id then
+                    local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
+                    local include_item = true
+                    if is_fav and not config.trade_favorited then
+                        include_item = false
+                    end
+
+                    if include_item then
+                        local data = item_utility:GetItemData(item.Id)
+                        if data and data.Data then
+                            local name = data.Data.Name
+                            if data.Data.Type == "Fish" then
+                                counts[name] = (counts[name] or 0) + (item.Amount or 1)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    for name, qty in pairs(counts) do
+        table_insert(list, name .. " (x" .. qty .. ")")
+    end
+    table_sort(list)
+    return list
+end
+
+local function get_other_players()
+    local list = {}
+    for _, p in ipairs(players:GetPlayers()) do
+        if p ~= local_player then
+            table_insert(list, p.Name)
+        end
+    end
+    table_sort(list)
+    return list
+end
+
 -- Player Target
 local function find_target_player()
     if config.trade_with == "" then return nil end
@@ -509,6 +569,7 @@ local function find_target_player()
     return nil
 end
 
+-- Item Metadata & Value Resolvers
 local function get_item_mutation(item)
     if not item then return "None" end
     local meta = item.Metadata
@@ -708,14 +769,12 @@ local function should_trade_fish(item_data, inventory_item)
         end
     end
 
-    local should_trade = name_match and mutation_match
-
     local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
     if is_fav and not config.trade_favorited then
-        should_trade = false
+        return false
     end
 
-    return should_trade
+    return name_match and mutation_match
 end
 
 local function should_trade_fish_by_rarity(item_data, inventory_item)
@@ -759,20 +818,17 @@ local function should_trade_fish_by_rarity(item_data, inventory_item)
         end
     end
 
-    local should_trade = rarity_match and mutation_match
-
     local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
     if is_fav and not config.trade_favorited then
-        should_trade = false
+        return false
     end
 
-    return should_trade
+    return rarity_match and mutation_match
 end
 
 local function should_trade_enchant_item(item_data, inventory_item)
     if not config.enabled then return false end
 
-    local name_match = false
     local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
     if is_fav and not config.trade_favorited then
         return false
@@ -787,15 +843,15 @@ local function should_trade_enchant_item(item_data, inventory_item)
         local enchant_name = string_lower(item_data.Data.Name)
         for _, selected_name in ipairs(config.selected_items) do
             if enchant_name == string_lower(selected_name) then
-                name_match = true
-                break
+                return true
             end
         end
     end
 
-    return name_match
+    return false
 end
 
+-- Status Handling
 local function set_status_msg(mode, text, details)
     if mode == "fish" then
         cache.fish_status_text = text
@@ -870,12 +926,8 @@ local function update_mode_status(mode)
     set_status_msg(mode, main_text, details)
 end
 
+-- Round Robin Collectors
 local function collect_round_robin(items_pool, selected_names, max_limit)
-    local selected_lookup = {}
-    for _, name in ipairs(selected_names) do
-        selected_lookup[string_lower(name)] = true
-    end
-
     local buckets = {}
     for _, name in ipairs(selected_names) do
         buckets[string_lower(name)] = {}
@@ -981,8 +1033,9 @@ local function collect_round_robin_rarity(items_pool, selected_tiers, max_limit)
     return result
 end
 
+-- Trading Network Engine
 local function is_trade_active()
-    local pgui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
+    local pgui = local_player:FindFirstChild("PlayerGui")
     if not pgui then return false end
     local trade_ui = pgui:FindFirstChild("Trade")
     if not trade_ui then return false end
@@ -992,7 +1045,7 @@ end
 
 local function decline_active_trade()
     pcall(function()
-        local pgui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
+        local pgui = local_player:FindFirstChild("PlayerGui")
         local trade_ui = pgui and pgui:FindFirstChild("Trade")
         if trade_ui then
             for _, btn in ipairs(trade_ui:GetDescendants()) do
@@ -1069,7 +1122,7 @@ local function wait_for_trade_end(mode, chat_listener)
             break
         end
 
-        local pgui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
+        local pgui = local_player:FindFirstChild("PlayerGui")
         local trade_ui = pgui and pgui:FindFirstChild("Trade")
         local main_frame = trade_ui and trade_ui:FindFirstChild("Main")
 
@@ -1132,7 +1185,7 @@ local function start_trade_session(target_player, mode)
     return true
 end
 
--- Trade by Name
+-- Mode 1: Trade By Name
 local function try_trade_fish()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -1275,7 +1328,7 @@ local function try_trade_fish()
     end
 end
 
--- Trade by Rarity
+-- Mode 2: Trade By Rarity
 local function try_trade_rarity()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -1418,7 +1471,7 @@ local function try_trade_rarity()
     end
 end
 
--- Trade Enchant Stone
+-- Mode 3: Trade Enchant Stone
 local function try_trade_enchant()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -1560,7 +1613,7 @@ local function try_trade_enchant()
     end
 end
 
--- Trade by Coin Target
+-- Mode 4: Trade By Coin Target
 local function try_trade_coin()
     cache.processed_trades = {}
     local target_player = find_target_player()
@@ -1765,39 +1818,42 @@ pcall(function()
     end
 end)
 
--- UI Setup
-local function create_ui()
-    local parent_gui = nil
-    if gethui then
-        pcall(function() parent_gui = gethui() end)
-    end
-    if not parent_gui and core_gui then
-        pcall(function()
-            local test_gui = Instance_new("ScreenGui")
-            test_gui.Parent = core_gui
-            test_gui:Destroy()
-            parent_gui = core_gui
-        end)
-    end
-    if not parent_gui then
-        parent_gui = player_gui or local_player:WaitForChild("PlayerGui", 5)
-    end
+-- UI Setup & Components
+local function clear_old_guis()
+    local names = { "KeenanHub_AutoTrade", "NoirHub_AutoTrade", "AutoTrade" }
+    local containers = {}
+    if gethui then pcall(function() table_insert(containers, gethui()) end) end
+    if core_gui then pcall(function() table_insert(containers, core_gui) end) end
+    local pgui = local_player and local_player:FindFirstChild("PlayerGui")
+    if pgui then table_insert(containers, pgui) end
 
-    local function clear_old_guis(container)
-        if not container then return end
+    for _, cont in ipairs(containers) do
         pcall(function()
-            for _, child in ipairs(container:GetChildren()) do
-                if child.Name == "KeenanHub_AutoTrade" or child.Name == "NoirHub_AutoTrade" or child.Name == "AutoTrade" then
-                    pcall(function() child:Destroy() end)
+            for _, child in ipairs(cont:GetChildren()) do
+                for _, n in ipairs(names) do
+                    if child.Name == n then
+                        child:Destroy()
+                    end
                 end
             end
         end)
     end
+end
 
-    clear_old_guis(parent_gui)
-    if player_gui then clear_old_guis(player_gui) end
-    if gethui then clear_old_guis(gethui()) end
-    if core_gui then clear_old_guis(core_gui) end
+local function create_ui()
+    clear_old_guis()
+
+    local pgui = local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 10)
+
+    -- Universal UI Container Attachment:
+    -- On Android mobile/cloudphones, PlayerGui is 100% rendered reliably.
+    local parent_container = pgui
+    if not parent_container and core_gui then
+        parent_container = core_gui
+    end
+    if not parent_container and gethui then
+        pcall(function() parent_container = gethui() end)
+    end
 
     local gui = Instance_new("ScreenGui")
     gui.Name = "KeenanHub_AutoTrade"
@@ -1805,12 +1861,12 @@ local function create_ui()
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 2147483647
+    gui.Enabled = true
+    gui.Parent = parent_container
 
-    local success_parent = pcall(function()
-        gui.Parent = parent_gui
-    end)
-    if not success_parent then
-        gui.Parent = player_gui or local_player:WaitForChild("PlayerGui", 5)
+    -- Backup ensure attachment
+    if not gui.Parent then
+        pcall(function() gui.Parent = pgui end)
     end
 
     task_spawn(function()
@@ -1825,17 +1881,26 @@ local function create_ui()
         end
     end)
 
-    local byname_fav_toggle = nil
-    local enchant_fav_toggle = nil
-    local rarity_fav_toggle = nil
+    -- Preload item caches
+    cache.loaded_fish = get_owned_fish_options()
+    cache.loaded_enchants = get_owned_enchant_options()
 
-    local function truncate_string(str, max_len)
-        if not str then return "" end
-        if #str > max_len then
-            return string_sub(str, 1, max_len - 2) .. ".."
-        end
-        return str
-    end
+    -- Theme Palette
+    local BG_COLOR        = Color3_fromRGB(28, 30, 34)
+    local SIDEBAR_COLOR   = Color3_fromRGB(20, 22, 25)
+    local ACCENT_COLOR    = Color3_fromRGB(250, 204, 21)
+    local ACCENT_HOVER    = Color3_fromRGB(253, 224, 71)
+    local TEXT_COLOR      = Color3_fromRGB(235, 238, 242)
+    local MUTED_COLOR     = Color3_fromRGB(140, 146, 158)
+    local CARD_COLOR      = Color3_fromRGB(36, 39, 44)
+    local TOGGLE_ON_COLOR = Color3_fromRGB(250, 204, 21)
+    local INPUT_BG_COLOR  = Color3_fromRGB(18, 20, 23)
+    local BORDER_COLOR    = Color3_fromRGB(58, 63, 72)
+    local BTN_BG_COLOR    = Color3_fromRGB(46, 50, 58)
+    local BTN_HOVER_COLOR = Color3_fromRGB(60, 66, 76)
+
+    local font_face = Enum.Font.SourceSans
+    local font_bold = Enum.Font.SourceSansBold
 
     local function safe_set_scroll(scroll)
         pcall(function()
@@ -1846,101 +1911,38 @@ local function create_ui()
         end)
     end
 
-    local function get_other_players()
-        local list = {}
-        for _, p in ipairs(players:GetPlayers()) do
-            if p ~= local_player then
-                table_insert(list, p.Name)
-            end
-        end
-        table_sort(list)
-        return list
-    end
+    -- UI Element References for Synchronization
+    local byname_fav_toggle   = nil
+    local enchant_fav_toggle  = nil
+    local rarity_fav_toggle   = nil
 
-    local function get_owned_enchant_options()
-        local list = {}
-        local counts = get_inventory_enchants(true)
-        for name, qty in pairs(counts) do
-            table_insert(list, name .. " (x" .. qty .. ")")
-        end
-        table_sort(list)
-        return list
-    end
+    local byname_toggle_ctrl  = nil
+    local enchant_toggle_ctrl = nil
+    local rarity_toggle_ctrl  = nil
+    local coin_toggle_ctrl    = nil
 
-    local function get_owned_fish_options()
-        local list = {}
-        local counts = {}
-        pcall(function()
-            local pdata = get_player_data()
-            if pdata then
-                local inventory = pdata:Get("Inventory")
-                local items = inventory and inventory.Items or {}
-                for _, item in ipairs(items) do
-                    if item.Id then
-                        local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
-                        local include_item = true
-                        if is_fav and not config.trade_favorited then
-                            include_item = false
-                        end
+    local qty_box             = nil
+    local es_qty_box          = nil
+    local r_qty_box           = nil
 
-                        if include_item then
-                            local data = item_utility:GetItemData(item.Id)
-                            if data and data.Data then
-                                local name = data.Data.Name
-                                if data.Data.Type == "Fish" then
-                                    counts[name] = (counts[name] or 0) + (item.Amount or 1)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-        for name, qty in pairs(counts) do
-            table_insert(list, name .. " (x" .. qty .. ")")
-        end
-        table_sort(list)
-        return list
-    end
+    local target_lbl          = nil
+    local fish_dropdown_btn   = nil
+    local enchant_dropdown_btn= nil
+    local rarity_dropdown_btn = nil
+    local close_detector      = nil
+    local player_panel        = nil
+    local item_panel          = nil
+    local enchant_panel       = nil
+    local rarity_panel        = nil
 
-    cache.loaded_fish = get_owned_fish_options()
-    cache.loaded_enchants = get_owned_enchant_options()
-
-    local BG_COLOR = Color3_fromRGB(28, 30, 34)
-    local SIDEBAR_COLOR = Color3_fromRGB(20, 22, 25)
-    local ACCENT_COLOR = Color3_fromRGB(250, 204, 21)
-    local ACCENT_HOVER = Color3_fromRGB(253, 224, 71)
-    local TEXT_COLOR = Color3_fromRGB(235, 238, 242)
-    local MUTED_COLOR = Color3_fromRGB(140, 146, 158)
-    local CARD_COLOR = Color3_fromRGB(36, 39, 44)
-    local TOGGLE_ON_COLOR = Color3_fromRGB(250, 204, 21)
-    local INPUT_BG_COLOR = Color3_fromRGB(18, 20, 23)
-    local BORDER_COLOR = Color3_fromRGB(58, 63, 72)
-    local BTN_BG_COLOR = Color3_fromRGB(46, 50, 58)
-    local BTN_HOVER_COLOR = Color3_fromRGB(60, 66, 76)
-
-    local font_face = Enum.Font.SourceSans
-    local font_bold = Enum.Font.SourceSansBold
-
-    local target_lbl
-    local fish_dropdown_btn
-    local enchant_dropdown_btn
-    local rarity_dropdown_btn
-    local close_detector
-    local player_panel
-    local item_panel
-    local enchant_panel
-    local rarity_panel
-    local status_val_lbl = nil
-    local enchant_status_val_lbl = nil
+    local status_val_lbl        = nil
+    local enchant_status_val_lbl= nil
     local rarity_status_val_lbl = nil
-    local coin_status_val_lbl = nil
-    local populate_items_panel
-    local populate_enchants_panel
-    local populate_rarity_panel
-    local qty_box
-    local es_qty_box
-    local r_qty_box
+    local coin_status_val_lbl   = nil
+
+    local populate_items_panel   = nil
+    local populate_enchants_panel= nil
+    local populate_rarity_panel  = nil
 
     local function sync_fav_toggles(active)
         config.trade_favorited = active
@@ -1969,6 +1971,27 @@ local function create_ui()
         if r_qty_box and r_qty_box.Text ~= tostring(val) then r_qty_box.Text = tostring(val) end
     end
 
+    local function sync_mode_toggles(active_mode)
+        if active_mode ~= "fish" and byname_toggle_ctrl then
+            byname_toggle_ctrl.set_state(false, false)
+            config.trade_fish_enabled = false
+        end
+        if active_mode ~= "enchant" and enchant_toggle_ctrl then
+            enchant_toggle_ctrl.set_state(false, false)
+            config.trade_enchants_enabled = false
+        end
+        if active_mode ~= "rarity" and rarity_toggle_ctrl then
+            rarity_toggle_ctrl.set_state(false, false)
+            config.trade_rarity_enabled = false
+        end
+        if active_mode ~= "coin" and coin_toggle_ctrl then
+            coin_toggle_ctrl.set_state(false, false)
+            config.trade_coin_enabled = false
+        end
+        save_config()
+    end
+
+    -- Main Window Frame
     local main = Instance_new("Frame")
     main.Name = "MainFrame"
     main.Size = UDim2_new(0, 250, 0, 200)
@@ -1989,6 +2012,7 @@ local function create_ui()
     main_corner.CornerRadius = UDim_new(0, 6)
     main_corner.Parent = main
 
+    -- Close Overlay Detector
     close_detector = Instance_new("TextButton")
     close_detector.Name = "CloseDetector"
     close_detector.Size = UDim2_new(0, 5000, 0, 5000)
@@ -2010,6 +2034,7 @@ local function create_ui()
         end
     end)
 
+    -- Right Sidebar: Player Selection Panel
     player_panel = Instance_new("Frame")
     player_panel.Name = "PlayerSelectionPanel"
     player_panel.Size = UDim2_new(0, 100, 1, 0)
@@ -2186,9 +2211,9 @@ local function create_ui()
         task_wait(1)
         ply_refresh.Text = "Refresh"
     end)
-
     populate_players_panel()
 
+    -- Fish Selection Overlay Panel
     item_panel = Instance_new("Frame")
     item_panel.Name = "ItemSelectionPanel"
     item_panel.Size = UDim2_new(0, 150, 1, -34)
@@ -2381,6 +2406,7 @@ local function create_ui()
         end)
     end)
 
+    -- Enchant Selection Overlay Panel
     enchant_panel = Instance_new("Frame")
     enchant_panel.Name = "EnchantSelectionPanel"
     enchant_panel.Size = UDim2_new(0, 150, 1, -34)
@@ -2574,6 +2600,7 @@ local function create_ui()
         end)
     end)
 
+    -- Rarity Selection Overlay Panel
     rarity_panel = Instance_new("Frame")
     rarity_panel.Name = "RaritySelectionPanel"
     rarity_panel.Size = UDim2_new(0, 150, 1, -34)
@@ -2729,6 +2756,7 @@ local function create_ui()
         end)
     end
 
+    -- Header Bar & Draggability
     local header = Instance_new("Frame")
     header.Name = "HeaderBar"
     header.Size = UDim2_new(1, 0, 0, 24)
@@ -2787,6 +2815,7 @@ local function create_ui()
         end
     end)
 
+    -- Floating Restore Button
     local floating_btn = Instance_new("TextButton")
     floating_btn.Name = "FloatingRestore"
     floating_btn.Size = UDim2_new(0, 42, 0, 42)
@@ -2868,6 +2897,7 @@ local function create_ui()
         end
     end)
 
+    -- Window Controls: Minimize, Maximize, Close
     local min_btn = Instance_new("TextButton")
     min_btn.Name = "MinimizeBtn"
     min_btn.Size = UDim2_new(0, 18, 0, 18)
@@ -3026,6 +3056,7 @@ local function create_ui()
         end
     end)
 
+    -- Settings Scroll Area
     local container = Instance_new("Frame")
     container.Name = "Content"
     container.Size = UDim2_new(1, -12, 1, -34)
@@ -3058,7 +3089,7 @@ local function create_ui()
     settings_layout.Padding = UDim_new(0, 6)
     settings_layout.Parent = settings_panel
 
-    -- UI Builders
+    -- UI Component Creators
     local function create_accordion(parent, title_text)
         local item_frame = Instance_new("Frame")
         item_frame.Size = UDim2_new(1, 0, 0, 26)
@@ -3146,7 +3177,7 @@ local function create_ui()
         local row = Instance_new("Frame")
         row.Size = UDim2_new(1, 0, 0, 22)
         row.BackgroundTransparency = 1
-        row.Active = true
+        row.Active = false
         row.Parent = parent
 
         local lbl = Instance_new("TextLabel")
@@ -3221,32 +3252,7 @@ local function create_ui()
         }
     end
 
-    local byname_toggle_ctrl
-    local enchant_toggle_ctrl
-    local rarity_toggle_ctrl
-    local coin_toggle_ctrl
-
-    local function sync_mode_toggles(active_mode)
-        if active_mode ~= "fish" and byname_toggle_ctrl then
-            byname_toggle_ctrl.set_state(false, false)
-            config.trade_fish_enabled = false
-        end
-        if active_mode ~= "enchant" and enchant_toggle_ctrl then
-            enchant_toggle_ctrl.set_state(false, false)
-            config.trade_enchants_enabled = false
-        end
-        if active_mode ~= "rarity" and rarity_toggle_ctrl then
-            rarity_toggle_ctrl.set_state(false, false)
-            config.trade_rarity_enabled = false
-        end
-        if active_mode ~= "coin" and coin_toggle_ctrl then
-            coin_toggle_ctrl.set_state(false, false)
-            config.trade_coin_enabled = false
-        end
-        save_config()
-    end
-
-    -- Panel: Trade By Name
+    -- Accordion 1: Trade By Name
     local byname_content = create_accordion(settings_panel, "Trade By Name")
     local status_box = Instance_new("Frame")
     status_box.Name = "1_StatusBox"
@@ -3506,7 +3512,7 @@ local function create_ui()
     byname_fav_toggle.Frame.LayoutOrder = 6
     byname_fav_toggle.Frame.Name = "6_FavToggle"
 
-    -- Panel: Trade Enchant Stone
+    -- Accordion 2: Trade Enchant Stone
     local enchant_content = create_accordion(settings_panel, "Trade Enchant Stone")
     local enchant_status_box = Instance_new("Frame")
     enchant_status_box.Name = "1_StatusBox"
@@ -3766,7 +3772,7 @@ local function create_ui()
     enchant_fav_toggle.Frame.LayoutOrder = 6
     enchant_fav_toggle.Frame.Name = "6_FavToggle"
 
-    -- Panel: Trade By Rarity
+    -- Accordion 3: Trade By Rarity
     local rarity_content = create_accordion(settings_panel, "Trade By Rarity")
     local rarity_status_box = Instance_new("Frame")
     rarity_status_box.Name = "1_StatusBox"
@@ -4022,7 +4028,7 @@ local function create_ui()
     rarity_fav_toggle.Frame.LayoutOrder = 6
     rarity_fav_toggle.Frame.Name = "6_FavToggle"
 
-    -- Panel: Trade By Coin
+    -- Accordion 4: Trade By Coin
     local coin_content = create_accordion(settings_panel, "Trade By Coin")
     local coin_status_box = Instance_new("Frame")
     coin_status_box.Name = "1_StatusBox"
@@ -4276,7 +4282,7 @@ local function create_ui()
     end)
 end
 
--- Cleanup & Init
+-- Cleanup Handler
 local function cleanup_all()
     is_running = false
     config.enabled = false
@@ -4312,16 +4318,7 @@ local function cleanup_all()
     end
     script_connections = {}
 
-    pcall(function()
-        local core = gethui and gethui() or core_gui
-        local old = core and (core:FindFirstChild("KeenanHub_AutoTrade") or core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade"))
-        if old then old:Destroy() end
-    end)
-    pcall(function()
-        local pgui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
-        local old = pgui and (pgui:FindFirstChild("KeenanHub_AutoTrade") or pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
-        if old then old:Destroy() end
-    end)
+    clear_old_guis()
 
     _G.AutoTradeConfig = nil
     _G.AutoTradeCache = nil
@@ -4333,4 +4330,5 @@ end
 _G.KeenanHub_AutoTrade_Cleanup = cleanup_all
 _G.NoirHub_AutoTrade_Cleanup = cleanup_all
 
-pcall(create_ui)
+-- Launch
+create_ui()
