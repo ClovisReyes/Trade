@@ -63,7 +63,7 @@ local cloneref = cloneref or function(ref) return ref end
 
 local players               = cloneref(game:GetService("Players"))
 local local_player          = players.LocalPlayer
-local player_gui            = cloneref(local_player:WaitForChild("PlayerGui"))
+local player_gui            = local_player and (local_player:FindFirstChild("PlayerGui") or (pcall(function() return local_player:WaitForChild("PlayerGui", 5) end) and local_player:FindFirstChild("PlayerGui")))
 local user_input_service    = cloneref(game:GetService("UserInputService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
 local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
@@ -71,16 +71,48 @@ local http_service          = cloneref(game:GetService("HttpService"))
 local text_chat_service     = pcall(function() return cloneref(game:GetService("TextChatService")) end) and cloneref(game:GetService("TextChatService")) or nil
 local core_gui              = pcall(function() return cloneref(game:GetService("CoreGui")) end) and cloneref(game:GetService("CoreGui")) or nil
 
+local function safe_get_child(parent, name, timeout)
+    if not parent then return nil end
+    local child = parent:FindFirstChild(name)
+    if not child and parent.WaitForChild then
+        pcall(function()
+            child = parent:WaitForChild(name, timeout or 3)
+        end)
+    end
+    return child
+end
+
+local packages_folder = safe_get_child(replicated_storage, "Packages", 3)
+local shared_folder = safe_get_child(replicated_storage, "Shared", 3)
+
 local variables = {
-    items                   = replicated_storage:WaitForChild("Items"),
-    variants                = replicated_storage:WaitForChild("Variants"),
-    replion                 = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
-    item_utility            = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility")
+    items                   = safe_get_child(replicated_storage, "Items", 3),
+    variants                = safe_get_child(replicated_storage, "Variants", 3),
+    replion                 = safe_get_child(packages_folder, "Replion", 3),
+    item_utility            = safe_get_child(shared_folder, "ItemUtility", 3)
 }
 
 local success_replion, replion_mod = pcall(require, variables.replion)
-local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
-local item_utility = require(variables.item_utility)
+local player_data = nil
+if success_replion and replion_mod and replion_mod.Client then
+    pcall(function()
+        player_data = replion_mod.Client:GetReplion("Data")
+    end)
+    if not player_data then
+        pcall(function()
+            task_spawn(function()
+                player_data = replion_mod.Client:WaitReplion("Data")
+            end)
+        end)
+    end
+end
+
+local success_iu, item_utility = pcall(require, variables.item_utility)
+if not success_iu or not item_utility then
+    item_utility = {
+        GetItemData = function(_, id) return nil end
+    }
+end
 
 -- Remotes
 local remote_map = {
@@ -96,23 +128,45 @@ local function get_net_lookup()
     if _net_lookup then return _net_lookup end
     _net_lookup = {}
 
-    local net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"].net
-    local children = net_folder:GetChildren()
+    pcall(function()
+        local packages = replicated_storage:FindFirstChild("Packages")
+        local index = packages and packages:FindFirstChild("_Index")
+        local net_folder = nil
+        if index then
+            for _, child in ipairs(index:GetChildren()) do
+                if string_find(child.Name, "sleitnick_net", 1, true) then
+                    net_folder = child:FindFirstChild("net")
+                    if net_folder then break end
+                end
+            end
+        end
+        if not net_folder then
+            for _, desc in ipairs(replicated_storage:GetDescendants()) do
+                if desc.Name == "net" and desc:IsA("Folder") then
+                    net_folder = desc
+                    break
+                end
+            end
+        end
 
-    for i, v in ipairs(children) do
-        for _, logical_name in pairs(remote_map) do
-            if string_find(v.Name, logical_name, 1, true) then
-                for j = i + 1, #children do
-                    local next_obj = children[j]
-                    if string_match(next_obj.Name, "^RF/") or string_match(next_obj.Name, "^RE/") then
-                        _net_lookup[logical_name] = next_obj
+        if net_folder then
+            local children = net_folder:GetChildren()
+            for i, v in ipairs(children) do
+                for _, logical_name in pairs(remote_map) do
+                    if string_find(v.Name, logical_name, 1, true) then
+                        for j = i + 1, #children do
+                            local next_obj = children[j]
+                            if string_match(next_obj.Name, "^RF/") or string_match(next_obj.Name, "^RE/") then
+                                _net_lookup[logical_name] = next_obj
+                                break
+                            end
+                        end
                         break
                     end
                 end
-                break
             end
         end
-    end
+    end)
 
     return _net_lookup
 end
@@ -385,18 +439,20 @@ local function load_game_data()
 
     cache.loaded_variant_multipliers = {}
 
-    for _, variant in ipairs(variables.variants:GetChildren()) do
-        if variant:IsA("ModuleScript") then
-            local success, data = pcall(require, variant)
-            if success and type(data) == "table" then
-                local mult = tonumber(data.SellMultiplier or (data.Data and data.Data.SellMultiplier)) or 1
-                local name = (data.Data and data.Data.Name) or variant.Name
-                if name then
-                    cache.loaded_variant_multipliers[string_lower(name)] = mult
-                    cache.loaded_variant_multipliers[name] = mult
-                end
-                if data.Data and data.Data.Id then
-                    cache.loaded_variant_multipliers[data.Data.Id] = mult
+    if variables.variants then
+        for _, variant in ipairs(variables.variants:GetChildren()) do
+            if variant:IsA("ModuleScript") then
+                local success, data = pcall(require, variant)
+                if success and type(data) == "table" then
+                    local mult = tonumber(data.SellMultiplier or (data.Data and data.Data.SellMultiplier)) or 1
+                    local name = (data.Data and data.Data.Name) or variant.Name
+                    if name then
+                        cache.loaded_variant_multipliers[string_lower(name)] = mult
+                        cache.loaded_variant_multipliers[name] = mult
+                    end
+                    if data.Data and data.Data.Id then
+                        cache.loaded_variant_multipliers[data.Data.Id] = mult
+                    end
                 end
             end
         end
@@ -405,14 +461,16 @@ local function load_game_data()
         cache.loaded_variant_multipliers["shiny"] = 1.5
     end
 
-    for _, item in ipairs(variables.items:GetDescendants()) do
-        if item:IsA("ModuleScript") then
-            local success, item_data = pcall(require, item)
-            if success and type(item_data) == "table" and item_data.Data then
-                if item_data.Data.Type == "Fish" then
-                    cache.loaded_fish[item_data.Data.Name] = item_data.Data
-                elseif item_data.Data.Type == "Enchant Stones" then
-                    cache.loaded_enchants[item_data.Data.Name] = item_data.Data
+    if variables.items then
+        for _, item in ipairs(variables.items:GetDescendants()) do
+            if item:IsA("ModuleScript") then
+                local success, item_data = pcall(require, item)
+                if success and type(item_data) == "table" and item_data.Data then
+                    if item_data.Data.Type == "Fish" then
+                        cache.loaded_fish[item_data.Data.Name] = item_data.Data
+                    elseif item_data.Data.Type == "Enchant Stones" then
+                        cache.loaded_enchants[item_data.Data.Name] = item_data.Data
+                    end
                 end
             end
         end
@@ -1956,7 +2014,12 @@ local function create_ui()
         end)
     end
     if not parent_gui then
-        parent_gui = local_player:WaitForChild("PlayerGui")
+        pcall(function()
+            parent_gui = local_player and (local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 5))
+        end)
+    end
+    if not parent_gui then
+        parent_gui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
     end
 
     local function clear_old_guis(container)
@@ -1971,7 +2034,7 @@ local function create_ui()
     end
 
     clear_old_guis(parent_gui)
-    clear_old_guis(local_player:FindFirstChild("PlayerGui"))
+    clear_old_guis(local_player and local_player:FindFirstChild("PlayerGui"))
     if gethui then clear_old_guis(gethui()) end
     if core_gui then clear_old_guis(core_gui) end
 
@@ -1986,8 +2049,10 @@ local function create_ui()
         gui.Parent = parent_gui
     end)
     if not success_parent then
-        parent_gui = local_player:WaitForChild("PlayerGui")
-        gui.Parent = parent_gui
+        pcall(function()
+            parent_gui = local_player and (local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 3))
+            gui.Parent = parent_gui
+        end)
     end
 
     task_spawn(function()
@@ -2121,8 +2186,8 @@ local function create_ui()
     local BTN_BG_COLOR = Color3_fromRGB(46, 50, 58)     -- Terminal Button Gray
     local BTN_HOVER_COLOR = Color3_fromRGB(60, 66, 76)  -- Terminal Button Hover Gray
 
-    local font_face = Font.fromEnum(Enum.Font.SourceSans)
-    local font_bold = Font.fromEnum(Enum.Font.SourceSans)
+    local font_face = Enum.Font.SourceSans
+    local font_bold = Enum.Font.SourceSansBold
 
     local target_lbl
     local fish_dropdown_btn
@@ -2212,7 +2277,7 @@ local function create_ui()
     ply_refresh.Text = "Refresh"
     ply_refresh.TextColor3 = ACCENT_COLOR
     ply_refresh.TextSize = 10
-    ply_refresh.FontFace = font_bold
+    ply_refresh.Font = font_bold
     ply_refresh.Active = true
     ply_refresh.ZIndex = 10
     ply_refresh.Parent = player_panel
@@ -2241,7 +2306,7 @@ local function create_ui()
     target_lbl.Text = truncate_string(config.trade_with ~= "" and config.trade_with or "None", 10)
     target_lbl.TextColor3 = ACCENT_COLOR
     target_lbl.TextSize = 10
-    target_lbl.FontFace = font_bold
+    target_lbl.Font = font_bold
     target_lbl.TextXAlignment = Enum.TextXAlignment.Center
     target_lbl.ZIndex = 10
     target_lbl.Parent = player_panel
@@ -2313,7 +2378,7 @@ local function create_ui()
                 opt_lbl.Text = truncate_string(name, 10)
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                 opt_lbl.TextSize = 10
-                opt_lbl.FontFace = font_face
+                opt_lbl.Font = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
@@ -2394,7 +2459,7 @@ local function create_ui()
     item_search_box.PlaceholderColor3 = MUTED_COLOR
     item_search_box.TextColor3 = TEXT_COLOR
     item_search_box.TextSize = 10
-    item_search_box.FontFace = font_face
+    item_search_box.Font = font_face
     item_search_box.TextXAlignment = Enum.TextXAlignment.Center
     item_search_box.Active = true
     item_search_box.ZIndex = 10
@@ -2481,7 +2546,7 @@ local function create_ui()
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                     opt_lbl.TextSize = 10
-                    opt_lbl.FontFace = font_face
+                    opt_lbl.Font = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
@@ -2584,7 +2649,7 @@ local function create_ui()
     enchant_search_box.PlaceholderColor3 = MUTED_COLOR
     enchant_search_box.TextColor3 = TEXT_COLOR
     enchant_search_box.TextSize = 10
-    enchant_search_box.FontFace = font_face
+    enchant_search_box.Font = font_face
     enchant_search_box.TextXAlignment = Enum.TextXAlignment.Center
     enchant_search_box.Active = true
     enchant_search_box.ZIndex = 10
@@ -2672,7 +2737,7 @@ local function create_ui()
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                     opt_lbl.TextSize = 10
-                    opt_lbl.FontFace = font_face
+                    opt_lbl.Font = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
@@ -2773,7 +2838,7 @@ local function create_ui()
     r_title.Text = "Select Rarity"
     r_title.TextColor3 = ACCENT_COLOR
     r_title.TextSize = 10
-    r_title.FontFace = font_bold
+    r_title.Font = font_bold
     r_title.TextXAlignment = Enum.TextXAlignment.Center
     r_title.ZIndex = 10
     r_title.Parent = rarity_panel
@@ -2841,7 +2906,7 @@ local function create_ui()
                 opt_lbl.Text = opt
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                 opt_lbl.TextSize = 10
-                opt_lbl.FontFace = font_face
+                opt_lbl.Font = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
@@ -2941,7 +3006,7 @@ local function create_ui()
     title_lbl.Text = "Keenan Trade Script"
     title_lbl.TextColor3 = ACCENT_COLOR
     title_lbl.TextSize = 11
-    title_lbl.FontFace = font_bold
+    title_lbl.Font = font_bold
     title_lbl.TextXAlignment = Enum.TextXAlignment.Left
     title_lbl.ZIndex = 26
     title_lbl.Parent = header
@@ -2991,7 +3056,7 @@ local function create_ui()
     icon_lbl.Text = "K"
     icon_lbl.TextColor3 = ACCENT_COLOR
     icon_lbl.TextSize = 22
-    icon_lbl.FontFace = font_bold
+    icon_lbl.Font = font_bold
     icon_lbl.ZIndex = 21
     icon_lbl.Visible = true
     icon_lbl.Parent = floating_btn
@@ -3185,7 +3250,7 @@ local function create_ui()
     close_btn.Text = "X"
     close_btn.TextColor3 = MUTED_COLOR
     close_btn.TextSize = 11
-    close_btn.FontFace = font_face
+    close_btn.Font = font_face
     close_btn.Active = true
     close_btn.Modal = true
     close_btn.ZIndex = 27
@@ -3262,7 +3327,7 @@ local function create_ui()
         header.Text = "  " .. title_text
         header.TextColor3 = TEXT_COLOR
         header.TextSize = 10
-        header.FontFace = font_bold
+        header.Font = font_bold
         header.TextXAlignment = Enum.TextXAlignment.Left
         header.Active = true
         header.Modal = true
@@ -3275,7 +3340,7 @@ local function create_ui()
         chevron.Text = "▼"
         chevron.TextColor3 = ACCENT_COLOR
         chevron.TextSize = 10
-        chevron.FontFace = font_face
+        chevron.Font = font_face
         chevron.TextXAlignment = Enum.TextXAlignment.Right
         chevron.Parent = header
 
@@ -3334,7 +3399,7 @@ local function create_ui()
         lbl.Text = label_text
         lbl.TextColor3 = TEXT_COLOR
         lbl.TextSize = 10
-        lbl.FontFace = font_bold
+        lbl.Font = font_bold
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent = row
 
@@ -3458,7 +3523,7 @@ local function create_ui()
     status_title.Text = "Status"
     status_title.TextColor3 = ACCENT_COLOR
     status_title.TextSize = 10
-    status_title.FontFace = font_bold
+    status_title.Font = font_bold
     status_title.TextXAlignment = Enum.TextXAlignment.Left
     status_title.Parent = status_box
 
@@ -3470,7 +3535,7 @@ local function create_ui()
     status_val_lbl.Text = "Idle"
     status_val_lbl.TextColor3 = TEXT_COLOR
     status_val_lbl.TextSize = 10
-    status_val_lbl.FontFace = font_face
+    status_val_lbl.Font = font_face
     status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     status_val_lbl.TextWrapped = true
@@ -3490,7 +3555,7 @@ local function create_ui()
     item_lbl.Text = "Select Item"
     item_lbl.TextColor3 = TEXT_COLOR
     item_lbl.TextSize = 10
-    item_lbl.FontFace = font_bold
+    item_lbl.Font = font_bold
     item_lbl.TextXAlignment = Enum.TextXAlignment.Left
     item_lbl.Parent = item_row
 
@@ -3512,7 +3577,7 @@ local function create_ui()
     fish_dropdown_btn.Text = get_fish_dropdown_text()
     fish_dropdown_btn.TextColor3 = TEXT_COLOR
     fish_dropdown_btn.TextSize = 10
-    fish_dropdown_btn.FontFace = font_face
+    fish_dropdown_btn.Font = font_face
     fish_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     fish_dropdown_btn.Active = true
     fish_dropdown_btn.Parent = item_row
@@ -3538,7 +3603,7 @@ local function create_ui()
     fish_chevron.Text = "▼"
     fish_chevron.TextColor3 = ACCENT_COLOR
     fish_chevron.TextSize = 7
-    fish_chevron.FontFace = font_face
+    fish_chevron.Font = font_face
     fish_chevron.TextXAlignment = Enum.TextXAlignment.Right
     fish_chevron.Parent = fish_dropdown_btn
 
@@ -3566,7 +3631,7 @@ local function create_ui()
     amount_lbl.Text = "Amount Fish Name"
     amount_lbl.TextColor3 = TEXT_COLOR
     amount_lbl.TextSize = 10
-    amount_lbl.FontFace = font_bold
+    amount_lbl.Font = font_bold
     amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     amount_lbl.Parent = amount_row
 
@@ -3577,7 +3642,7 @@ local function create_ui()
     qty_box.Text = tostring(config.quantity)
     qty_box.TextColor3 = TEXT_COLOR
     qty_box.TextSize = 10
-    qty_box.FontFace = font_face
+    qty_box.Font = font_face
     qty_box.TextXAlignment = Enum.TextXAlignment.Center
     qty_box.ClearTextOnFocus = false
     qty_box.Parent = amount_row
@@ -3619,7 +3684,7 @@ local function create_ui()
     refresh_btn.Text = "Refresh Fish Items"
     refresh_btn.TextColor3 = ACCENT_COLOR
     refresh_btn.TextSize = 10
-    refresh_btn.FontFace = font_bold
+    refresh_btn.Font = font_bold
     refresh_btn.Active = true
     refresh_btn.Parent = byname_content
 
@@ -3718,7 +3783,7 @@ local function create_ui()
     enchant_status_title.Text = "Status"
     enchant_status_title.TextColor3 = ACCENT_COLOR
     enchant_status_title.TextSize = 10
-    enchant_status_title.FontFace = font_bold
+    enchant_status_title.Font = font_bold
     enchant_status_title.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_title.Parent = enchant_status_box
 
@@ -3730,7 +3795,7 @@ local function create_ui()
     enchant_status_val_lbl.Text = "Idle"
     enchant_status_val_lbl.TextColor3 = TEXT_COLOR
     enchant_status_val_lbl.TextSize = 10
-    enchant_status_val_lbl.FontFace = font_face
+    enchant_status_val_lbl.Font = font_face
     enchant_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     enchant_status_val_lbl.TextWrapped = true
@@ -3750,7 +3815,7 @@ local function create_ui()
     stone_lbl.Text = "Stone Type"
     stone_lbl.TextColor3 = TEXT_COLOR
     stone_lbl.TextSize = 10
-    stone_lbl.FontFace = font_bold
+    stone_lbl.Font = font_bold
     stone_lbl.TextXAlignment = Enum.TextXAlignment.Left
     stone_lbl.Parent = stone_row
 
@@ -3772,7 +3837,7 @@ local function create_ui()
     enchant_dropdown_btn.Text = get_enchant_dropdown_text()
     enchant_dropdown_btn.TextColor3 = TEXT_COLOR
     enchant_dropdown_btn.TextSize = 10
-    enchant_dropdown_btn.FontFace = font_face
+    enchant_dropdown_btn.Font = font_face
     enchant_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     enchant_dropdown_btn.Active = true
     enchant_dropdown_btn.Parent = stone_row
@@ -3798,7 +3863,7 @@ local function create_ui()
     enchant_chevron.Text = "▼"
     enchant_chevron.TextColor3 = ACCENT_COLOR
     enchant_chevron.TextSize = 7
-    enchant_chevron.FontFace = font_face
+    enchant_chevron.Font = font_face
     enchant_chevron.TextXAlignment = Enum.TextXAlignment.Right
     enchant_chevron.Parent = enchant_dropdown_btn
 
@@ -3826,7 +3891,7 @@ local function create_ui()
     es_amount_lbl.Text = "Amount Enchant Stone"
     es_amount_lbl.TextColor3 = TEXT_COLOR
     es_amount_lbl.TextSize = 10
-    es_amount_lbl.FontFace = font_bold
+    es_amount_lbl.Font = font_bold
     es_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     es_amount_lbl.Parent = es_amount_row
 
@@ -3837,7 +3902,7 @@ local function create_ui()
     es_qty_box.Text = tostring(config.quantity)
     es_qty_box.TextColor3 = TEXT_COLOR
     es_qty_box.TextSize = 10
-    es_qty_box.FontFace = font_face
+    es_qty_box.Font = font_face
     es_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     es_qty_box.ClearTextOnFocus = false
     es_qty_box.Parent = es_amount_row
@@ -3879,7 +3944,7 @@ local function create_ui()
     es_refresh.Text = "Check Enchant Stones"
     es_refresh.TextColor3 = ACCENT_COLOR
     es_refresh.TextSize = 10
-    es_refresh.FontFace = font_bold
+    es_refresh.Font = font_bold
     es_refresh.Active = true
     es_refresh.Parent = enchant_content
 
@@ -3996,7 +4061,7 @@ local function create_ui()
     rarity_status_title.Text = "Status"
     rarity_status_title.TextColor3 = ACCENT_COLOR
     rarity_status_title.TextSize = 10
-    rarity_status_title.FontFace = font_bold
+    rarity_status_title.Font = font_bold
     rarity_status_title.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_title.Parent = rarity_status_box
 
@@ -4008,7 +4073,7 @@ local function create_ui()
     rarity_status_val_lbl.Text = "Idle"
     rarity_status_val_lbl.TextColor3 = TEXT_COLOR
     rarity_status_val_lbl.TextSize = 10
-    rarity_status_val_lbl.FontFace = font_face
+    rarity_status_val_lbl.Font = font_face
     rarity_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     rarity_status_val_lbl.TextWrapped = true
@@ -4028,7 +4093,7 @@ local function create_ui()
     r_lbl.Text = "Select Rarity"
     r_lbl.TextColor3 = TEXT_COLOR
     r_lbl.TextSize = 10
-    r_lbl.FontFace = font_bold
+    r_lbl.Font = font_bold
     r_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_lbl.Parent = r_row
 
@@ -4050,7 +4115,7 @@ local function create_ui()
     rarity_dropdown_btn.Text = get_rarity_dropdown_text()
     rarity_dropdown_btn.TextColor3 = TEXT_COLOR
     rarity_dropdown_btn.TextSize = 10
-    rarity_dropdown_btn.FontFace = font_face
+    rarity_dropdown_btn.Font = font_face
     rarity_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     rarity_dropdown_btn.Active = true
     rarity_dropdown_btn.Parent = r_row
@@ -4076,7 +4141,7 @@ local function create_ui()
     rarity_chevron.Text = "▼"
     rarity_chevron.TextColor3 = ACCENT_COLOR
     rarity_chevron.TextSize = 7
-    rarity_chevron.FontFace = font_face
+    rarity_chevron.Font = font_face
     rarity_chevron.TextXAlignment = Enum.TextXAlignment.Right
     rarity_chevron.Parent = rarity_dropdown_btn
 
@@ -4104,7 +4169,7 @@ local function create_ui()
     r_amount_lbl.Text = "Amount Fish Rarity"
     r_amount_lbl.TextColor3 = TEXT_COLOR
     r_amount_lbl.TextSize = 10
-    r_amount_lbl.FontFace = font_bold
+    r_amount_lbl.Font = font_bold
     r_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_amount_lbl.Parent = r_amount_row
 
@@ -4115,7 +4180,7 @@ local function create_ui()
     r_qty_box.Text = tostring(config.quantity)
     r_qty_box.TextColor3 = TEXT_COLOR
     r_qty_box.TextSize = 10
-    r_qty_box.FontFace = font_face
+    r_qty_box.Font = font_face
     r_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     r_qty_box.ClearTextOnFocus = false
     r_qty_box.Parent = r_amount_row
@@ -4157,7 +4222,7 @@ local function create_ui()
     r_refresh.Text = "Refresh Fish Rarity"
     r_refresh.TextColor3 = ACCENT_COLOR
     r_refresh.TextSize = 10
-    r_refresh.FontFace = font_bold
+    r_refresh.Font = font_bold
     r_refresh.Active = true
     r_refresh.Parent = rarity_content
 
@@ -4252,7 +4317,7 @@ local function create_ui()
     coin_status_title.Text = "Status"
     coin_status_title.TextColor3 = ACCENT_COLOR
     coin_status_title.TextSize = 10
-    coin_status_title.FontFace = font_bold
+    coin_status_title.Font = font_bold
     coin_status_title.TextXAlignment = Enum.TextXAlignment.Left
     coin_status_title.Parent = coin_status_box
 
@@ -4264,7 +4329,7 @@ local function create_ui()
     coin_status_val_lbl.Text = "Idle"
     coin_status_val_lbl.TextColor3 = TEXT_COLOR
     coin_status_val_lbl.TextSize = 10
-    coin_status_val_lbl.FontFace = font_face
+    coin_status_val_lbl.Font = font_face
     coin_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     coin_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     coin_status_val_lbl.TextWrapped = true
@@ -4284,7 +4349,7 @@ local function create_ui()
     coin_target_lbl.Text = "Target Coin Value"
     coin_target_lbl.TextColor3 = TEXT_COLOR
     coin_target_lbl.TextSize = 10
-    coin_target_lbl.FontFace = font_bold
+    coin_target_lbl.Font = font_bold
     coin_target_lbl.TextXAlignment = Enum.TextXAlignment.Left
     coin_target_lbl.Parent = coin_target_row
 
@@ -4295,7 +4360,7 @@ local function create_ui()
     coin_target_box.Text = format_number(config.trade_coin_target or 8000000)
     coin_target_box.TextColor3 = TEXT_COLOR
     coin_target_box.TextSize = 10
-    coin_target_box.FontFace = font_face
+    coin_target_box.Font = font_face
     coin_target_box.TextXAlignment = Enum.TextXAlignment.Center
     coin_target_box.ClearTextOnFocus = false
     coin_target_box.Parent = coin_target_row
@@ -4338,7 +4403,7 @@ local function create_ui()
     coin_check_btn.Text = "Check Bag Coin Worth"
     coin_check_btn.TextColor3 = ACCENT_COLOR
     coin_check_btn.TextSize = 10
-    coin_check_btn.FontFace = font_bold
+    coin_check_btn.Font = font_bold
     coin_check_btn.Active = true
     coin_check_btn.Parent = coin_content
 
@@ -4531,6 +4596,16 @@ _G.NoirHub_AutoTrade_Cleanup = cleanup_all
 
 local success, err = pcall(create_ui)
 if not success then
-    log_debug("UI Creation Error: " .. tostring(err))
+    warn("[Keenan AutoTrade Error] UI Creation Error: " .. tostring(err))
+    print("[Keenan AutoTrade Error] UI Creation Error: " .. tostring(err))
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Keenan AutoTrade Error",
+            Text = tostring(err):sub(1, 100),
+            Duration = 10
+        })
+    end)
+else
+    print("[Keenan AutoTrade] UI Loaded Successfully!")
 end
 pcall(log_inventory_fish)
