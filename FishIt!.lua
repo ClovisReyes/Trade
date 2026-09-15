@@ -38,17 +38,26 @@ local UDim_new       = UDim.new
 local Instance_new   = Instance.new
 local TweenInfo_new  = TweenInfo.new
 
--- Previous Instance Cleanup
+-- Stealth Previous Instance Cleanup
+local CLEANUP_KEY = "_net_session_cln"
+local SCRIPT_ID_KEY = "_net_session_seq"
+
+if _G[CLEANUP_KEY] then
+    pcall(_G[CLEANUP_KEY])
+    _G[CLEANUP_KEY] = nil
+end
 if _G.KeenanHub_AutoTrade_Cleanup then
     pcall(_G.KeenanHub_AutoTrade_Cleanup)
+    _G.KeenanHub_AutoTrade_Cleanup = nil
 end
 if _G.NoirHub_AutoTrade_Cleanup then
     pcall(_G.NoirHub_AutoTrade_Cleanup)
+    _G.NoirHub_AutoTrade_Cleanup = nil
 end
 
 local is_running = true
 local script_id = os_clock()
-_G.KeenanHub_AutoTrade_ScriptID = script_id
+_G[SCRIPT_ID_KEY] = script_id
 
 local script_connections = {}
 local function track_conn(conn)
@@ -272,8 +281,6 @@ local cache = {
     },
 }
 
-_G.AutoTradeConfig = config
-_G.AutoTradeCache = cache
 
 local function save_config()
     pcall(function()
@@ -1752,7 +1759,7 @@ local function run_auto_trade_loop()
     cache.loop_running = true
 
     task_spawn(function()
-        while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
+        while is_running and _G[SCRIPT_ID_KEY] == script_id do
             if config.enabled and config.trade_fish_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -1765,7 +1772,7 @@ local function run_auto_trade_loop()
     end)
 
     task_spawn(function()
-        while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
+        while is_running and _G[SCRIPT_ID_KEY] == script_id do
             if config.enabled and config.trade_rarity_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -1778,7 +1785,7 @@ local function run_auto_trade_loop()
     end)
 
     task_spawn(function()
-        while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
+        while is_running and _G[SCRIPT_ID_KEY] == script_id do
             if config.enabled and config.trade_enchants_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -1795,7 +1802,7 @@ local function run_auto_trade_loop()
     end)
 
     task_spawn(function()
-        while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
+        while is_running and _G[SCRIPT_ID_KEY] == script_id do
             if config.enabled and config.trade_coin_enabled then
                 if not cache.is_trading_active then
                     cache.is_trading_active = true
@@ -1807,17 +1814,6 @@ local function run_auto_trade_loop()
         end
     end)
 end
-_G.run_auto_trade_loop = run_auto_trade_loop
-
-local trade_ended_conn = nil
-pcall(function()
-    if trade_remotes and trade_remotes.TradeEnded then
-        trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
-            cache.last_trade_time = tick()
-        end)
-        track_conn(trade_ended_conn)
-    end
-end)
 
 -- UI Setup & Components
 local function clear_old_guis()
@@ -1831,10 +1827,22 @@ local function clear_old_guis()
     for _, cont in ipairs(containers) do
         pcall(function()
             for _, child in ipairs(cont:GetChildren()) do
-                for _, n in ipairs(names) do
-                    if child.Name == n then
-                        child:Destroy()
+                local should_destroy = false
+                pcall(function()
+                    if child:GetAttribute("KH_ID") == true then
+                        should_destroy = true
                     end
+                end)
+                if not should_destroy then
+                    for _, n in ipairs(names) do
+                        if child.Name == n then
+                            should_destroy = true
+                            break
+                        end
+                    end
+                end
+                if should_destroy then
+                    pcall(function() child:Destroy() end)
                 end
             end
         end)
@@ -1844,40 +1852,44 @@ end
 local function create_ui()
     clear_old_guis()
 
-    local pgui = local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 10)
-
-    -- Universal UI Container Attachment:
-    -- On Android mobile/cloudphones, PlayerGui is 100% rendered reliably.
-    local parent_container = pgui
+    local parent_container = nil
+    if gethui then
+        pcall(function() parent_container = gethui() end)
+    end
     if not parent_container and core_gui then
         parent_container = core_gui
     end
-    if not parent_container and gethui then
-        pcall(function() parent_container = gethui() end)
+    if not parent_container then
+        parent_container = local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 10)
     end
 
     local gui = Instance_new("ScreenGui")
-    gui.Name = "KeenanHub_AutoTrade"
+    gui.Name = "InGameMenu_" .. string_format("%05d", math_floor(os_clock() * 1000) % 90000 + 10000)
+    gui:SetAttribute("KH_ID", true)
     gui.ResetOnSpawn = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 2147483647
     gui.Enabled = true
-    gui.Parent = parent_container
 
-    -- Backup ensure attachment
-    if not gui.Parent then
-        pcall(function() gui.Parent = pgui end)
+    if syn and syn.protect_gui then
+        pcall(syn.protect_gui, gui)
+    elseif protectgui then
+        pcall(protectgui, gui)
+    elseif protect_gui then
+        pcall(protect_gui, gui)
     end
 
+    gui.Parent = parent_container
+
     gui.Destroying:Connect(function()
-        if is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id then
+        if is_running and _G[SCRIPT_ID_KEY] == script_id then
             pcall(cleanup_all)
         end
     end)
 
     task_spawn(function()
-        while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
+        while is_running and _G[SCRIPT_ID_KEY] == script_id do
             task_wait(1)
             pcall(function()
                 if gui and gui.Parent then
@@ -2220,22 +2232,6 @@ local function create_ui()
     end)
     populate_players_panel()
 
-    track_conn(players.PlayerRemoving:Connect(function(leaving_player)
-        if config.trade_with == leaving_player.Name then
-            config.trade_with = ""
-            if target_lbl then target_lbl.Text = "None" end
-            save_config()
-        end
-        if player_panel and player_panel.Visible then
-            populate_players_panel()
-        end
-    end))
-
-    track_conn(players.PlayerAdded:Connect(function()
-        if player_panel and player_panel.Visible then
-            populate_players_panel()
-        end
-    end))
 
     -- Fish Selection Overlay Panel
     item_panel = Instance_new("Frame")
@@ -3087,9 +3083,7 @@ local function create_ui()
     end)
 
     close_btn.MouseButton1Click:Connect(function()
-        if _G.KeenanHub_AutoTrade_Cleanup then
-            pcall(_G.KeenanHub_AutoTrade_Cleanup)
-        end
+        pcall(cleanup_all)
     end)
 
     -- Settings Scroll Area
@@ -4336,13 +4330,8 @@ local function cleanup_all()
         pcall(decline_active_trade)
     end
 
-    _G.KeenanHub_AutoTrade_ScriptID = nil
+    _G[SCRIPT_ID_KEY] = nil
     script_id = nil
-
-    if trade_ended_conn then
-        pcall(function() trade_ended_conn:Disconnect() end)
-        trade_ended_conn = nil
-    end
 
     for _, c in ipairs(script_connections) do
         pcall(function()
@@ -4359,15 +4348,12 @@ local function cleanup_all()
 
     clear_old_guis()
 
-    _G.AutoTradeConfig = nil
-    _G.AutoTradeCache = nil
-    _G.run_auto_trade_loop = nil
+    _G[CLEANUP_KEY] = nil
     _G.KeenanHub_AutoTrade_Cleanup = nil
     _G.NoirHub_AutoTrade_Cleanup = nil
 end
 
-_G.KeenanHub_AutoTrade_Cleanup = cleanup_all
-_G.NoirHub_AutoTrade_Cleanup = cleanup_all
+_G[CLEANUP_KEY] = cleanup_all
 
 -- Launch
 create_ui()
