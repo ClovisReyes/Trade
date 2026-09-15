@@ -13,10 +13,8 @@ local table_find    = table.find
 local table_insert  = table.insert
 local table_remove  = table.remove
 local table_sort    = table.sort
-local table_concat  = table.concat
 
 local string_lower  = string.lower
-local string_upper  = string.upper
 local string_sub    = string.sub
 local string_find   = string.find
 local string_gsub   = string.gsub
@@ -92,7 +90,6 @@ while not local_player do
 end
 
 -- Game Folders & Modules
-local items_folder = replicated_storage:FindFirstChild("Items")
 local variants_folder = replicated_storage:FindFirstChild("Variants")
 
 local replion_mod = nil
@@ -241,7 +238,7 @@ local config = {
     trade_enchants_enabled = false,
     trade_rarity_enabled   = false,
     trade_coin_enabled     = false,
-    trade_coin_target      = 8000000,
+    trade_coin_target      = 0,
 
     selected_fish          = {},
     selected_tiers         = { "All" },
@@ -900,7 +897,7 @@ local function get_mode_display_name(mode)
             return tostring(#config.selected_items) .. " enchant terpilih"
         end
     elseif mode == "coin" then
-        return string_format("Target: %s Coins", format_number(config.trade_coin_target or 8000000))
+        return string_format("Target: %s Coins", format_number(config.trade_coin_target or 0))
     end
     return "item"
 end
@@ -911,7 +908,7 @@ local function update_mode_status(mode)
 
     local details = string_format("Sent: %d | Last: %d | Fails: %d", s.total_items, s.last_items, s.failed)
     if mode == "coin" then
-        details = string_format("Sent: %s / %s Coins (%d fish) | Fails: %d", format_number(s.total_coins), format_number(config.trade_coin_target or 8000000), s.total_items, s.failed)
+        details = string_format("Sent: %s / %s Coins (%d fish) | Fails: %d", format_number(s.total_coins), format_number(config.trade_coin_target or 0), s.total_items, s.failed)
     end
 
     local main_text = "Idle"
@@ -1084,6 +1081,10 @@ local function listen_for_trade_completion(on_completed)
         disconnect = function()
             if conn then
                 pcall(function() conn:Disconnect() end)
+                local idx = table_find(script_connections, conn)
+                if idx then
+                    table_remove(script_connections, idx)
+                end
                 conn = nil
             end
         end
@@ -1627,7 +1628,7 @@ local function try_trade_coin()
         return
     end
 
-    local target_coins = config.trade_coin_target or 8000000
+    local target_coins = config.trade_coin_target or 0
     local already_sent = cache.stats.coin.total_coins or 0
 
     if target_coins > 0 and already_sent >= target_coins then
@@ -1868,6 +1869,12 @@ local function create_ui()
     if not gui.Parent then
         pcall(function() gui.Parent = pgui end)
     end
+
+    gui.Destroying:Connect(function()
+        if is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id then
+            pcall(cleanup_all)
+        end
+    end)
 
     task_spawn(function()
         while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
@@ -2212,6 +2219,23 @@ local function create_ui()
         ply_refresh.Text = "Refresh"
     end)
     populate_players_panel()
+
+    track_conn(players.PlayerRemoving:Connect(function(leaving_player)
+        if config.trade_with == leaving_player.Name then
+            config.trade_with = ""
+            if target_lbl then target_lbl.Text = "None" end
+            save_config()
+        end
+        if player_panel and player_panel.Visible then
+            populate_players_panel()
+        end
+    end))
+
+    track_conn(players.PlayerAdded:Connect(function()
+        if player_panel and player_panel.Visible then
+            populate_players_panel()
+        end
+    end))
 
     -- Fish Selection Overlay Panel
     item_panel = Instance_new("Frame")
@@ -2804,8 +2828,15 @@ local function create_ui()
     header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging, drag_start, start_pos = true, input.Position, main.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            local change_conn
+            change_conn = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    if change_conn then
+                        change_conn:Disconnect()
+                        change_conn = nil
+                    end
+                end
             end)
         end
     end)
@@ -2854,10 +2885,15 @@ local function create_ui()
     floating_btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             f_dragging, f_drag_start, f_start_pos = false, input.Position, floating_btn.Position
-            input.Changed:Connect(function()
+            local f_change_conn
+            f_change_conn = input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     f_dragging = false
                     f_drag_start = nil
+                    if f_change_conn then
+                        f_change_conn:Disconnect()
+                        f_change_conn = nil
+                    end
                 end
             end)
         end
@@ -4101,7 +4137,7 @@ local function create_ui()
     coin_target_box.Size = UDim2_new(0.55, 0, 1, 0)
     coin_target_box.Position = UDim2_new(0.45, 0, 0, 0)
     coin_target_box.BackgroundColor3 = INPUT_BG_COLOR
-    coin_target_box.Text = format_number(config.trade_coin_target or 8000000)
+    coin_target_box.Text = format_number(config.trade_coin_target or 0)
     coin_target_box.TextColor3 = TEXT_COLOR
     coin_target_box.TextSize = 10
     coin_target_box.Font = font_face
@@ -4121,8 +4157,11 @@ local function create_ui()
     coin_target_box:GetPropertyChangedSignal("Text"):Connect(function()
         local text = coin_target_box.Text
         local parsed = parse_coin_input(text)
-        if parsed and parsed > 0 then
+        if parsed and parsed >= 0 then
             config.trade_coin_target = parsed
+            save_config()
+        elseif text == "" then
+            config.trade_coin_target = 0
             save_config()
         end
     end)
@@ -4130,12 +4169,12 @@ local function create_ui()
     coin_target_box.FocusLost:Connect(function()
         local text = coin_target_box.Text
         local parsed = parse_coin_input(text)
-        if parsed and parsed > 0 then
+        if parsed and parsed >= 0 then
             config.trade_coin_target = parsed
             coin_target_box.Text = format_number(parsed)
             save_config()
         else
-            coin_target_box.Text = format_number(config.trade_coin_target or 8000000)
+            coin_target_box.Text = format_number(config.trade_coin_target or 0)
         end
     end)
 
@@ -4185,8 +4224,8 @@ local function create_ui()
         end
 
         local worth_str = format_number(total_worth)
-        coin_check_btn.Text = string_format("Bag: %d Fish = %s Coins", total_fish, worth_str)
-        set_status_msg("coin", string_format("Bag Inventory Worth: %s Coins across %d fish", worth_str, total_fish))
+        coin_check_btn.Text = string_format("Worth: %s Coins", worth_str)
+        set_status_msg("coin", string_format("Inventory Worth: %s Coins", worth_str))
         task_delay(4, function()
             if coin_check_btn and coin_check_btn.Parent then
                 coin_check_btn.Text = "Check Bag Coin Worth"
