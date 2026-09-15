@@ -1,5 +1,5 @@
--- Keenan Hub - Fish It Sell Script Hunter & Price Extractor (Ultra Fast & Lightweight)
--- Non-freezing async scanner for ItemUtility, Modules, and Merchant UI.
+-- Keenan Hub - Fish It Sell Script Hunter & Exact Price Extractor + Trade Simulator
+-- Fully integrates exact SellPrice + Variant Multipliers with live Coin Target Trade Simulator.
 
 local ipairs        = ipairs
 local pairs         = pairs
@@ -25,6 +25,9 @@ local string_format = string.format
 local string_match  = string.match
 
 local math_floor    = math.floor
+local math_ceil     = math.ceil
+local math_max      = math.max
+local math_min      = math.min
 
 local Color3_fromRGB = Color3.fromRGB
 local UDim2_new      = UDim2.new
@@ -72,40 +75,33 @@ local function format_number(n)
     return formatted
 end
 
-local function safe_serialize(obj, max_depth, current_depth)
-    current_depth = current_depth or 1
-    max_depth = max_depth or 2
-    if current_depth > max_depth then return "\"...\"" end
+local function format_compact(n)
+    local num = tonumber(n) or 0
+    if num >= 1e12 then return string_format("%.2fT", num / 1e12) end
+    if num >= 1e9  then return string_format("%.2fB", num / 1e9) end
+    if num >= 1e6  then return string_format("%.2fM", num / 1e6) end
+    if num >= 1e3  then return string_format("%.2fK", num / 1e3) end
+    return format_number(num)
+end
 
-    local t = type(obj)
-    if t == "nil" then return "nil"
-    elseif t == "boolean" or t == "number" then return tostring(obj)
-    elseif t == "string" then return string_format("%q", obj)
-    elseif t == "table" then
-        local is_array = #obj > 0
-        local parts = {}
-        if is_array then
-            for i, v in ipairs(obj) do
-                if i > 8 then table_insert(parts, "..."); break end
-                table_insert(parts, safe_serialize(v, max_depth, current_depth + 1))
-            end
-            return "[" .. table_concat(parts, ", ") .. "]"
-        else
-            local count = 0
-            for k, v in pairs(obj) do
-                count = count + 1
-                if count > 8 then table_insert(parts, "\"...\" : \"...\""); break end
-                table_insert(parts, string_format("%q: %s", tostring(k), safe_serialize(v, max_depth, current_depth + 1)))
-            end
-            return "{" .. table_concat(parts, ", ") .. "}"
-        end
-    else
-        return string_format("\"[%s]\"", tostring(obj))
+local function parse_coin_input(str)
+    if not str or str == "" then return 0 end
+    local clean = string_gsub(string_lower(str), "[%s,%$]", "")
+    local num, suffix = string_match(clean, "^([%d%.]+)([kmbte]?)$")
+    if not num then
+        num = string_match(clean, "^([%d%.]+)")
     end
+    local val = tonumber(num) or 0
+    if suffix == "k" then val = val * 1e3
+    elseif suffix == "m" then val = val * 1e6
+    elseif suffix == "b" then val = val * 1e9
+    elseif suffix == "t" then val = val * 1e12
+    end
+    return math_floor(val)
 end
 
 -- ============================================================================
--- FAST SCANNER LOGIC (No lag, No getgc freeze)
+-- PRICE ENGINE & VARIANT CACHE
 -- ============================================================================
 
 local shared_folder = replicated_storage:FindFirstChild("Shared")
@@ -114,217 +110,259 @@ local item_utility = shared_folder and shared_folder:FindFirstChild("ItemUtility
 local replion_mod = packages_folder and packages_folder:FindFirstChild("Replion") and pcall(require, packages_folder.Replion) and require(packages_folder.Replion) or nil
 local player_data = replion_mod and replion_mod.Client and pcall(function() return replion_mod.Client:WaitReplion("Data") end) and replion_mod.Client:WaitReplion("Data") or nil
 
-local function run_fast_scan()
-    local report = {
-        merchant_gui = {},
-        item_utility_methods = {},
-        sample_fish_calls = {},
-        item_modules = {},
-        variant_modules = {},
-        tier_data = {},
-        sample_inventory_fish = {},
-        total_items = 0,
-        total_fish = 0,
-    }
-
-    -- 1. Scan PlayerGui specifically for Sell Dialog
-    pcall(function()
-        for _, obj in ipairs(player_gui:GetDescendants()) do
-            if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-                local txt = obj.Text or ""
-                local low = string_lower(txt)
-                if string_find(low, "sell") or string_find(low, "coins") or string_find(low, "items for") then
-                    table_insert(report.merchant_gui, {
-                        text = txt,
-                        path = obj:GetFullName(),
-                    })
-                end
-            end
-        end
-    end)
-
-    -- 2. Test ItemUtility
-    if item_utility and type(item_utility) == "table" then
-        -- List all exported functions
-        for k, v in pairs(item_utility) do
-            if type(v) == "function" then
-                table_insert(report.item_utility_methods, k)
-            end
-        end
-        table_sort(report.item_utility_methods)
-
-        -- Test sample item IDs (Elshark: 269, Ruby: 243, Enchant: 10)
-        local test_ids = { 269, 243, 10 }
-        for _, id in ipairs(test_ids) do
-            local res_entry = { id = id, calls = {} }
-            for _, fn_name in ipairs({"GetFish", "GetItemData", "GetFishIdentifiers", "GetVariantData"}) do
-                local fn = item_utility[fn_name]
-                if type(fn) == "function" then
-                    local ok, val = pcall(fn, item_utility, id)
-                    if not ok or val == nil then
-                        ok, val = pcall(fn, id)
-                    end
-                    if ok and val ~= nil then
-                        res_entry.calls[fn_name] = safe_serialize(val, 2)
-                    end
-                end
-            end
-            table_insert(report.sample_fish_calls, res_entry)
-        end
-
-        -- Test zero-arg calls (GetFish(), GetVariants(), GetFishIdentifiers())
-        for _, fn_name in ipairs({"GetFish", "GetVariants", "GetFishIdentifiers", "GetAllItems"}) do
-            local fn = item_utility[fn_name]
-            if type(fn) == "function" then
-                local ok, val = pcall(fn, item_utility)
-                if not ok or val == nil then ok, val = pcall(fn) end
-                if ok and val ~= nil then
-                    local count = 0
-                    local preview_keys = {}
-                    if type(val) == "table" then
-                        for k in pairs(val) do
-                            count = count + 1
-                            if count <= 4 then table_insert(preview_keys, tostring(k)) end
-                        end
-                        report.item_utility_methods[fn_name .. "()"] = string_format("Table with %d entries (keys: %s)", count, table_concat(preview_keys, ", "))
-                    else
-                        report.item_utility_methods[fn_name .. "()"] = tostring(val)
-                    end
-                end
-            end
-        end
-    end
-
-    -- 3. Scan Sample Modules in ReplicatedStorage.Items
-    local items_f = replicated_storage:FindFirstChild("Items")
-    if items_f then
-        local count = 0
-        for _, mod in ipairs(items_f:GetDescendants()) do
-            if mod:IsA("ModuleScript") and count < 4 then
-                local ok, data = pcall(require, mod)
-                if ok and type(data) == "table" and data.Data and data.Data.Type == "Fish" then
-                    count = count + 1
-                    table_insert(report.item_modules, {
-                        name = mod.Name,
-                        full_data = safe_serialize(data, 2)
-                    })
-                end
-            end
-        end
-    end
-
-    -- 4. Scan Sample Variants in ReplicatedStorage.Variants
+local variant_multipliers = {}
+local function load_variants()
+    variant_multipliers = {}
     local vars_f = replicated_storage:FindFirstChild("Variants")
     if vars_f then
-        local count = 0
         for _, mod in ipairs(vars_f:GetDescendants()) do
-            if mod:IsA("ModuleScript") and count < 4 then
+            if mod:IsA("ModuleScript") then
                 local ok, data = pcall(require, mod)
                 if ok and type(data) == "table" then
-                    count = count + 1
-                    table_insert(report.variant_modules, {
-                        name = mod.Name,
-                        data = safe_serialize(data, 2)
+                    local mult = tonumber(data.SellMultiplier or (data.Data and data.Data.SellMultiplier)) or 1
+                    local name = (data.Data and data.Data.Name) or mod.Name
+                    variant_multipliers[string_lower(name)] = mult
+                    variant_multipliers[name] = mult
+                    if data.Data and data.Data.Id then
+                        variant_multipliers[data.Data.Id] = mult
+                    end
+                end
+            end
+        end
+    end
+    if not variant_multipliers["shiny"] then
+        variant_multipliers["shiny"] = 1.5
+    end
+end
+pcall(load_variants)
+
+local function calculate_fish_coin_value(item)
+    if not item or not item.Id then return 0, 0, 1 end
+    local item_info = item_utility and item_utility.GetItemData and pcall(function() return item_utility:GetItemData(item.Id) end) and item_utility:GetItemData(item.Id)
+    if not item_info or not item_info.Data or item_info.Data.Type ~= "Fish" then
+        return 0, 0, 1
+    end
+
+    local base_price = tonumber(item_info.SellPrice) or 0
+    if base_price <= 0 then
+        local tier = tonumber(item_info.Data.Tier) or 1
+        base_price = (tier >= 7 and 250000) or (tier == 6 and 50000) or (tier == 5 and 15000) or (tier == 4 and 5000) or 1000
+    end
+
+    local mult = 1
+    local meta = item.Metadata
+    if meta then
+        if meta.VariantId and meta.VariantId ~= "" and meta.VariantId ~= "None" then
+            local vname = tostring(meta.VariantId)
+            local vmult = variant_multipliers[string_lower(vname)] or variant_multipliers[vname]
+            if vmult then
+                mult = mult * vmult
+            end
+        end
+        if meta.Shiny == true or meta.Shiny == 1 or (type(meta.Shiny) == "string" and string_lower(meta.Shiny) == "true") then
+            if not meta.VariantId or string_lower(tostring(meta.VariantId)) ~= "shiny" then
+                mult = mult * (variant_multipliers["shiny"] or 1.5)
+            end
+        end
+    end
+
+    local final_price = math_floor(base_price * mult)
+    return final_price, base_price, mult
+end
+
+-- ============================================================================
+-- SIMULATION ENGINE: Trade by Coin Selection
+-- ============================================================================
+
+local function simulate_coin_trade(target_coins)
+    local result = {
+        target = target_coins,
+        total_bag_value = 0,
+        total_bag_fish = 0,
+        unlocked_fish_count = 0,
+        unlocked_fish_value = 0,
+        selected_fish = {},
+        selected_total_value = 0,
+        trades = {},
+        excess = 0,
+        excess_percent = 0,
+        status = "OK",
+        status_message = ""
+    }
+
+    if not player_data then
+        result.status = "ERROR"
+        result.status_message = "Player inventory data not ready!"
+        return result
+    end
+
+    local inv_ok, inv = pcall(function() return player_data:Get("Inventory") end)
+    local items = (inv_ok and inv and inv.Items) or {}
+
+    local candidate_pool = {}
+
+    for _, itm in ipairs(items) do
+        if itm.Id then
+            local val, base_p, mult = calculate_fish_coin_value(itm)
+            if val > 0 then
+                result.total_bag_fish = result.total_bag_fish + 1
+                result.total_bag_value = result.total_bag_value + val
+
+                local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
+                if not is_fav then
+                    result.unlocked_fish_count = result.unlocked_fish_count + 1
+                    result.unlocked_fish_value = result.unlocked_fish_value + val
+
+                    local item_info = item_utility:GetItemData(itm.Id)
+                    table_insert(candidate_pool, {
+                        raw = itm,
+                        id = itm.Id,
+                        uuid = itm.UUID,
+                        name = item_info.Data.Name,
+                        tier = item_info.Data.Tier,
+                        weight = (itm.Metadata and itm.Metadata.Weight) or 0,
+                        variant = (itm.Metadata and itm.Metadata.VariantId) or "None",
+                        shiny = (itm.Metadata and itm.Metadata.Shiny == true),
+                        value = val,
+                        base_price = base_p,
+                        multiplier = mult
                     })
                 end
             end
         end
     end
 
-    -- 5. Scan ReplicatedStorage.Tiers
-    local tiers_mod = replicated_storage:FindFirstChild("Tiers")
-    if tiers_mod and tiers_mod:IsA("ModuleScript") then
-        local ok, data = pcall(require, tiers_mod)
-        if ok and type(data) == "table" then
-            report.tier_data = safe_serialize(data, 2)
+    if target_coins <= 0 then
+        result.status = "IDLE"
+        result.status_message = "Enter a coin amount (e.g. 8,000,000 or 8M) to simulate!"
+        return result
+    end
+
+    if result.unlocked_fish_value < target_coins then
+        result.status = "INSUFFICIENT"
+        result.status_message = string_format("Not enough unlocked fish worth! You have %s coins available (Target: %s coins).", format_number(result.unlocked_fish_value), format_number(target_coins))
+        return result
+    end
+
+    -- Smart Selection Algorithm:
+    -- 1. Sort pool by price descending (big fish first) to close bulk distance
+    table_sort(candidate_pool, function(a, b) return a.value > b.value end)
+
+    local chosen = {}
+    local current_sum = 0
+    local used_indices = {}
+
+    -- Step 1: Greedy bulk filling up to target
+    for i, fish in ipairs(candidate_pool) do
+        if current_sum + fish.value <= target_coins then
+            table_insert(chosen, fish)
+            current_sum = current_sum + fish.value
+            used_indices[i] = true
+            if current_sum == target_coins then
+                break
+            end
         end
     end
 
-    -- 6. Sample 5 real fish from inventory
-    if player_data then
-        local inv_ok, inv = pcall(function() return player_data:Get("Inventory") end)
-        local items = (inv_ok and inv and inv.Items) or {}
-        report.total_items = #items
+    -- Step 2: If deficit remains, find the single smallest fish that covers the deficit
+    if current_sum < target_coins then
+        local deficit = target_coins - current_sum
+        local best_single_idx = nil
+        local best_single_val = math.huge
 
-        local fish_count = 0
-        local sample_count = 0
-        for _, itm in ipairs(items) do
-            if itm.Id then
-                local d = item_utility and item_utility.GetItemData and pcall(function() return item_utility:GetItemData(itm.Id).Data end) and item_utility:GetItemData(itm.Id).Data or {}
-                if d.Type == "Fish" then
-                    fish_count = fish_count + 1
-                    if sample_count < 5 then
-                        sample_count = sample_count + 1
-                        table_insert(report.sample_inventory_fish, {
-                            name = d.Name,
-                            id = itm.Id,
-                            tier = d.Tier,
-                            metadata = itm.Metadata,
-                            item_data = d,
-                            favorited = itm.Favorited
-                        })
-                    end
+        for i, fish in ipairs(candidate_pool) do
+            if not used_indices[i] then
+                if fish.value >= deficit and fish.value < best_single_val then
+                    best_single_val = fish.value
+                    best_single_idx = i
                 end
             end
         end
-        report.total_fish = fish_count
+
+        if best_single_idx then
+            table_insert(chosen, candidate_pool[best_single_idx])
+            current_sum = current_sum + candidate_pool[best_single_idx].value
+            used_indices[best_single_idx] = true
+        else
+            -- If no single fish covers deficit, take remaining fish from smallest to largest
+            local remaining_small = {}
+            for i, fish in ipairs(candidate_pool) do
+                if not used_indices[i] then
+                    table_insert(remaining_small, { idx = i, fish = fish })
+                end
+            end
+            table_sort(remaining_small, function(a, b) return a.fish.value < b.fish.value end)
+
+            for _, entry in ipairs(remaining_small) do
+                table_insert(chosen, entry.fish)
+                current_sum = current_sum + entry.fish.value
+                used_indices[entry.idx] = true
+                if current_sum >= target_coins then
+                    break
+                end
+            end
+        end
     end
 
-    return report
+    result.selected_fish = chosen
+    result.selected_total_value = current_sum
+    result.excess = current_sum - target_coins
+    result.excess_percent = target_coins > 0 and ((result.excess / target_coins) * 100) or 0
+
+    -- Batch into 20-item trade sessions
+    local current_batch = {}
+    local batch_sum = 0
+    for _, fish in ipairs(chosen) do
+        table_insert(current_batch, fish)
+        batch_sum = batch_sum + fish.value
+        if #current_batch == 20 then
+            table_insert(result.trades, { items = current_batch, subtotal = batch_sum })
+            current_batch = {}
+            batch_sum = 0
+        end
+    end
+    if #current_batch > 0 then
+        table_insert(result.trades, { items = current_batch, subtotal = batch_sum })
+    end
+
+    return result
 end
 
 -- ============================================================================
 -- FORMATTERS
 -- ============================================================================
 
-local function format_report_tab(report)
+local current_target = 8000000
+
+local function format_simulation_output(sim)
     local lines = {}
-    table_insert(lines, "=== KEENAN HUB - FISH IT SELL ENGINE SCAN ===")
-    table_insert(lines, string_format("Total Bag Items: %s | Total Fish: %s", format_number(report.total_items), format_number(report.total_fish)))
+    table_insert(lines, "=== KEENAN HUB - TRADE BY COIN SIMULATOR ===")
+    table_insert(lines, string_format("Target Amount:   %s Coins (%s)", format_number(sim.target), format_compact(sim.target)))
+    table_insert(lines, string_format("Total Bag Worth: %s Coins (%s) across %s fish", format_number(sim.total_bag_value), format_compact(sim.total_bag_value), format_number(sim.total_bag_fish)))
+    table_insert(lines, string_format("Unlocked Worth:  %s Coins (in %s unfavorited fish)", format_number(sim.unlocked_fish_value), format_number(sim.unlocked_fish_count)))
     table_insert(lines, "")
 
-    table_insert(lines, "--- [1] MERCHANT SELL PROMPTS IN PLAYER GUI ---")
-    if #report.merchant_gui == 0 then
-        table_insert(lines, " (Tidak ada dialog merchant yang aktif)")
-        table_insert(lines, " Tips: Dekati NPC Merchant -> Buka prompt jual -> Klik '🔄 Scan'")
-    else
-        for idx, g in ipairs(report.merchant_gui) do
-            table_insert(lines, string_format(" %02d. Text: %q", idx, g.text))
-            table_insert(lines, "     Path: " .. g.path)
+    if sim.status ~= "OK" then
+        table_insert(lines, "⚠️ STATUS: " .. sim.status)
+        table_insert(lines, " " .. sim.status_message)
+        return table_concat(lines, "\n")
+    end
+
+    table_insert(lines, "--- [1] SIMULATION RESULT SUMMARY ---")
+    table_insert(lines, string_format(" • Total Selected Value: %s Coins (%s)", format_number(sim.selected_total_value), format_compact(sim.selected_total_value)))
+    table_insert(lines, string_format(" • Total Fish Used:      %d fish", #sim.selected_fish))
+    table_insert(lines, string_format(" • Total Trade Sessions: %d trade(s) (Max 20 items per trade)", #sim.trades))
+    table_insert(lines, string_format(" • Excess (Over Target): +%s Coins (+%.2f%%)", format_number(sim.excess), sim.excess_percent))
+    table_insert(lines, "")
+
+    table_insert(lines, "--- [2] TRADE SESSIONS BREAKDOWN (20 Items/Trade) ---")
+    for t_idx, trade in ipairs(sim.trades) do
+        table_insert(lines, string_format(" ▶ [TRADE #%d] %d Fish | Subtotal: %s Coins", t_idx, #trade.items, format_number(trade.subtotal)))
+        for i_idx, f in ipairs(trade.items) do
+            local var_str = (f.variant ~= "None" and (" [" .. f.variant .. "]")) or ""
+            local shiny_str = (f.shiny and " [Shiny]") or ""
+            table_insert(lines, string_format("    %02d. %-22s | Tier %s%s%s -> %s Coins", i_idx, f.name, tostring(f.tier), var_str, shiny_str, format_number(f.value)))
         end
-    end
-    table_insert(lines, "")
-
-    table_insert(lines, "--- [2] ITEM UTILITY FUNCTION RETURNS ---")
-    for _, item in ipairs(report.sample_fish_calls) do
-        table_insert(lines, string_format(" • Testing Item ID %d:", item.id))
-        for fn_name, res in pairs(item.calls) do
-            table_insert(lines, string_format("     %s -> %s", fn_name, res))
-        end
-        table_insert(lines, "")
-    end
-
-    table_insert(lines, "--- [3] REPLICATEDSTORAGE FISH MODULES ---")
-    for idx, m in ipairs(report.item_modules) do
-        table_insert(lines, string_format(" %02d. %s: %s", idx, m.name, m.full_data))
-    end
-    table_insert(lines, "")
-
-    table_insert(lines, "--- [4] REPLICATEDSTORAGE VARIANTS (Mutasi) ---")
-    for idx, v in ipairs(report.variant_modules) do
-        table_insert(lines, string_format(" %02d. %s: %s", idx, v.name, v.data))
-    end
-    table_insert(lines, "")
-
-    table_insert(lines, "--- [5] REPLICATEDSTORAGE TIERS ---")
-    table_insert(lines, " " .. tostring(report.tier_data))
-    table_insert(lines, "")
-
-    table_insert(lines, "--- [6] SAMPLE 5 INVENTORY FISH RAW METADATA ---")
-    for idx, s in ipairs(report.sample_inventory_fish) do
-        table_insert(lines, string_format(" [%02d] %s (ID: %d | Tier: %s | Fav: %s)", idx, s.name, s.id, tostring(s.tier), tostring(s.favorited)))
-        table_insert(lines, "      Metadata: " .. safe_serialize(s.metadata, 2))
-        table_insert(lines, "      ItemData: " .. safe_serialize(s.item_data, 2))
         table_insert(lines, "")
     end
 
@@ -332,7 +370,7 @@ local function format_report_tab(report)
 end
 
 -- ============================================================================
--- GUI CREATION (Mobile-Friendly, Top Action Buttons)
+-- GUI CREATION (Mobile/Cloudphone Friendly, Top Controls)
 -- ============================================================================
 
 local gui = Instance_new("ScreenGui")
@@ -355,11 +393,11 @@ _G.KeenanHub_CoinDebug_Cleanup = function()
     pcall(function() gui:Destroy() end)
 end
 
--- Compact window (480 x 300)
+-- Main Window (490 x 320)
 local main = Instance_new("Frame")
 main.Name = "HunterWindow"
-main.Size = UDim2_new(0, 480, 0, 300)
-main.Position = UDim2_new(0.5, -240, 0.5, -150)
+main.Size = UDim2_new(0, 490, 0, 320)
+main.Position = UDim2_new(0.5, -245, 0.5, -160)
 main.BackgroundColor3 = BG_COLOR
 main.BorderSizePixel = 0
 main.Active = true
@@ -387,20 +425,20 @@ header_corner.CornerRadius = UDim_new(0, 8)
 header_corner.Parent = header
 
 local title_lbl = Instance_new("TextLabel")
-title_lbl.Size = UDim2_new(1, -200, 1, 0)
+title_lbl.Size = UDim2_new(1, -160, 1, 0)
 title_lbl.Position = UDim2_new(0, 10, 0, 0)
 title_lbl.BackgroundTransparency = 1
-title_lbl.Text = "Keenan Hub - Sell Engine Hunter"
+title_lbl.Text = "Keenan Hub - Exact Price & Trade Simulator"
 title_lbl.TextColor3 = ACCENT_COLOR
 title_lbl.TextSize = 11
 title_lbl.FontFace = font_bold
 title_lbl.TextXAlignment = Enum.TextXAlignment.Left
 title_lbl.Parent = header
 
--- Header Buttons Container
+-- Header Buttons
 local header_btns = Instance_new("Frame")
-header_btns.Size = UDim2_new(0, 180, 1, -6)
-header_btns.Position = UDim2_new(1, -185, 0, 3)
+header_btns.Size = UDim2_new(0, 150, 1, -6)
+header_btns.Position = UDim2_new(1, -155, 0, 3)
 header_btns.BackgroundTransparency = 1
 header_btns.Parent = header
 
@@ -410,7 +448,7 @@ h_layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
 h_layout.Padding = UDim_new(0, 5)
 h_layout.Parent = header_btns
 
-local function make_header_btn(text, color, width, callback)
+local function make_btn(parent, text, color, width, callback)
     local btn = Instance_new("TextButton")
     btn.Size = UDim2_new(0, width, 1, 0)
     btn.BackgroundColor3 = CARD_COLOR
@@ -418,7 +456,7 @@ local function make_header_btn(text, color, width, callback)
     btn.TextColor3 = color
     btn.TextSize = 10
     btn.FontFace = font_bold
-    btn.Parent = header_btns
+    btn.Parent = parent
 
     local c = Instance_new("UICorner")
     c.CornerRadius = UDim_new(0, 4)
@@ -433,8 +471,7 @@ local function make_header_btn(text, color, width, callback)
     return btn
 end
 
--- Close Button
-local close_btn = make_header_btn("X", ERROR_COLOR, 24, function()
+make_btn(header_btns, "X", ERROR_COLOR, 24, function()
     _G.KeenanHub_CoinDebug_Cleanup()
 end)
 
@@ -455,10 +492,108 @@ header.InputChanged:Connect(function(input)
     end
 end)
 
+-- Target Input Bar
+local input_bar = Instance_new("Frame")
+input_bar.Size = UDim2_new(1, -16, 0, 26)
+input_bar.Position = UDim2_new(0, 8, 0, 36)
+input_bar.BackgroundTransparency = 1
+input_bar.Parent = main
+
+local input_lbl = Instance_new("TextLabel")
+input_lbl.Size = UDim2_new(0, 65, 1, 0)
+input_lbl.BackgroundTransparency = 1
+input_lbl.Text = "Target Coins:"
+input_lbl.TextColor3 = MUTED_COLOR
+input_lbl.TextSize = 10
+input_lbl.FontFace = font_face
+input_lbl.TextXAlignment = Enum.TextXAlignment.Left
+input_lbl.Parent = input_bar
+
+local target_input = Instance_new("TextBox")
+target_input.Size = UDim2_new(0, 110, 1, 0)
+target_input.Position = UDim2_new(0, 70, 0, 0)
+target_input.BackgroundColor3 = INPUT_BG_COLOR
+target_input.TextColor3 = ACCENT_COLOR
+target_input.Text = "8,000,000"
+target_input.TextSize = 10
+target_input.FontFace = font_bold
+target_input.ClearTextOnFocus = false
+target_input.Parent = input_bar
+
+local input_c = Instance_new("UICorner")
+input_c.CornerRadius = UDim_new(0, 4)
+input_c.Parent = target_input
+
+local input_s = Instance_new("UIStroke")
+input_s.Color = BORDER_COLOR
+input_s.Thickness = 1
+input_s.Parent = target_input
+
+local calc_btn = Instance_new("TextButton")
+calc_btn.Size = UDim2_new(0, 75, 1, 0)
+calc_btn.Position = UDim2_new(0, 185, 0, 0)
+calc_btn.BackgroundColor3 = CARD_COLOR
+calc_btn.Text = "⚡ Simulate"
+calc_btn.TextColor3 = ACCENT_COLOR
+calc_btn.TextSize = 10
+calc_btn.FontFace = font_bold
+calc_btn.Parent = input_bar
+
+local calc_c = Instance_new("UICorner")
+calc_c.CornerRadius = UDim_new(0, 4)
+calc_c.Parent = calc_btn
+
+local calc_s = Instance_new("UIStroke")
+calc_s.Color = BORDER_COLOR
+calc_s.Thickness = 1
+calc_s.Parent = calc_btn
+
+-- Presets
+local presets_frame = Instance_new("Frame")
+presets_frame.Size = UDim2_new(0, 130, 1, 0)
+presets_frame.Position = UDim2_new(0, 265, 0, 0)
+presets_frame.BackgroundTransparency = 1
+presets_frame.Parent = input_bar
+
+local p_layout = Instance_new("UIListLayout")
+p_layout.FillDirection = Enum.FillDirection.Horizontal
+p_layout.Padding = UDim_new(0, 4)
+p_layout.Parent = presets_frame
+
+local function make_preset(text, val)
+    local btn = Instance_new("TextButton")
+    btn.Size = UDim2_new(0, 38, 1, 0)
+    btn.BackgroundColor3 = CARD_COLOR
+    btn.Text = text
+    btn.TextColor3 = TEXT_COLOR
+    btn.TextSize = 10
+    btn.FontFace = font_face
+    btn.Parent = presets_frame
+
+    local c = Instance_new("UICorner")
+    c.CornerRadius = UDim_new(0, 4)
+    c.Parent = btn
+
+    local s = Instance_new("UIStroke")
+    s.Color = BORDER_COLOR
+    s.Thickness = 1
+    s.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        target_input.Text = format_number(val)
+        current_target = val
+        if _G.RunSim then _G.RunSim() end
+    end)
+end
+
+make_preset("1M", 1000000)
+make_preset("8M", 8000000)
+make_preset("50M", 50000000)
+
 -- Content Viewer Box
 local viewer_frame = Instance_new("Frame")
-viewer_frame.Size = UDim2_new(1, -16, 1, -44)
-viewer_frame.Position = UDim2_new(0, 8, 0, 36)
+viewer_frame.Size = UDim2_new(1, -16, 1, -72)
+viewer_frame.Position = UDim2_new(0, 8, 0, 66)
 viewer_frame.BackgroundColor3 = INPUT_BG_COLOR
 viewer_frame.BorderSizePixel = 0
 viewer_frame.Parent = main
@@ -494,7 +629,7 @@ display_box.TextYAlignment = Enum.TextYAlignment.Top
 display_box.ClearTextOnFocus = false
 display_box.TextEditable = false
 display_box.MultiLine = true
-display_box.Text = "⏳ Memulai pemindaian ringan (Scanning game data)..."
+display_box.Text = "⏳ Menghitung simulasi koin (Calculating)..."
 display_box.Parent = viewer_scroll
 
 display_box:GetPropertyChangedSignal("TextBounds"):Connect(function()
@@ -502,45 +637,38 @@ display_box:GetPropertyChangedSignal("TextBounds"):Connect(function()
     display_box.Size = UDim2_new(1, -10, 0, display_box.TextBounds.Y + 10)
 end)
 
--- Header Action Buttons
-local scan_btn
-local copy_btn
-
-local current_report = nil
-
-local function do_scan()
-    display_box.Text = "⏳ Sedang memindai data game (Scanning)..."
+local function run_simulation_update()
+    local target = parse_coin_input(target_input.Text)
+    current_target = target
+    display_box.Text = "⏳ Menghitung simulasi trade untuk " .. format_number(target) .. " Coins..."
     task.spawn(function()
         task.wait(0.05)
-        local ok, rep = pcall(run_fast_scan)
-        if ok and rep then
-            current_report = rep
-            local formatted = format_report_tab(rep)
-            display_box.Text = formatted
-            viewer_scroll.CanvasPosition = Vector2.new(0, 0)
-        else
-            display_box.Text = "❌ Gagal memindai: " .. tostring(rep)
-        end
+        local sim = simulate_coin_trade(target)
+        display_box.Text = format_simulation_output(sim)
+        viewer_scroll.CanvasPosition = Vector2.new(0, 0)
     end)
 end
+_G.RunSim = run_simulation_update
 
-copy_btn = make_header_btn("📋 Copy", TEXT_COLOR, 60, function()
+calc_btn.MouseButton1Click:Connect(run_simulation_update)
+target_input.FocusLost:Connect(function(enterPressed)
+    if enterPressed then run_simulation_update() end
+end)
+
+local copy_btn = make_btn(header_btns, "📋 Copy", TEXT_COLOR, 50, function()
     local set_clip = setclipboard or toclipboard or (Clipboard and Clipboard.set)
     if set_clip then
         set_clip(display_box.Text)
-        copy_btn.Text = "✅ Copied!"
-        task.delay(1.5, function()
-            pcall(function() copy_btn.Text = "📋 Copy" end)
-        end)
     end
 end)
 
-scan_btn = make_header_btn("🔄 Scan", ACCENT_COLOR, 60, function()
-    do_scan()
+make_btn(header_btns, "🔄", ACCENT_COLOR, 24, function()
+    load_variants()
+    run_simulation_update()
 end)
 
--- Start initial scan non-blocking
+-- Run initial simulation
 task.spawn(function()
-    task.wait(0.2)
-    do_scan()
+    task.wait(0.15)
+    run_simulation_update()
 end)
