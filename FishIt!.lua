@@ -278,11 +278,6 @@ local function save_config()
     end)
 end
 
-local function log_debug(msg)
-    if _G.KeenanTradeDebugLog then
-        pcall(_G.KeenanTradeDebugLog, tostring(msg))
-    end
-end
 
 local function load_config()
     pcall(function()
@@ -875,68 +870,6 @@ local function collect_round_robin_names(player_data_items, selected_fish, limit
     return items_to_trade
 end
 
-local function log_inventory_fish()
-    local log_lines = {}
-    table_insert(log_lines, "=== CURRENT INVENTORY FISH LOG ===")
-
-    local fish_count = 0
-    local match_count = 0
-
-    local success, err = pcall(function()
-        if player_data then
-            local inventory = player_data:Get("Inventory")
-            local items = inventory and inventory.Items or {}
-
-            if #items == 0 then
-                table_insert(log_lines, "No items found in inventory.")
-                return
-            end
-
-            for _, item in ipairs(items) do
-                if item.Id then
-                    local data = item_utility:GetItemData(item.Id)
-                    if data and data.Data and data.Data.Type == "Fish" then
-                        fish_count = fish_count + 1
-                        local fish_name = data.Data.Name
-                        local tier = data.Data.Tier or "Unknown"
-                        local mutation = get_item_mutation(item)
-                        local shiny_str = is_item_shiny(item) and " [Shiny]" or ""
-                        local big_str = is_item_big(item) and " [Big]" or ""
-                        local is_favorited = item.Favorited and " [Favorited]" or ""
-                        local matches = should_trade_fish(data, item)
-                        local matches_filter = matches and " [MATCHES FILTER]" or ""
-                        if matches then
-                            match_count = match_count + 1
-                        end
-                        table_insert(log_lines, string_format("[%d] %s | Tier: %s | Mutation: %s%s%s%s%s | UUID: %s",
-                            fish_count, fish_name, tier, mutation, shiny_str, big_str, is_favorited, matches_filter, item.UUID))
-                    end
-                end
-            end
-
-            if fish_count == 0 then
-                table_insert(log_lines, "No fish items found in inventory.")
-            else
-                table_insert(log_lines, string_format("Total fish found: %d | Matches Filter: %d", fish_count, match_count))
-            end
-        else
-            table_insert(log_lines, "Player data (replion) is not loaded.")
-        end
-    end)
-
-    if not success then
-        table_insert(log_lines, "Error logging inventory: " .. tostring(err))
-    end
-    table_insert(log_lines, "==================================")
-
-    local log_text = table_concat(log_lines, "\n")
-
-    pcall(function()
-        if writefile then
-            writefile("trade_inventory_log.txt", log_text)
-        end
-    end)
-end
 
 -- Trade Handlers
 local function decline_active_trade()
@@ -1928,8 +1861,6 @@ end
 local function run_auto_trade_loop()
     if cache.loop_running then return end
     cache.loop_running = true
-
-    log_inventory_fish()
 
     task_spawn(function()
         while is_running and _G.KeenanHub_AutoTrade_ScriptID == script_id do
@@ -4594,18 +4525,4 @@ end
 _G.KeenanHub_AutoTrade_Cleanup = cleanup_all
 _G.NoirHub_AutoTrade_Cleanup = cleanup_all
 
-local success, err = pcall(create_ui)
-if not success then
-    warn("[Keenan AutoTrade Error] UI Creation Error: " .. tostring(err))
-    print("[Keenan AutoTrade Error] UI Creation Error: " .. tostring(err))
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "Keenan AutoTrade Error",
-            Text = tostring(err):sub(1, 100),
-            Duration = 10
-        })
-    end)
-else
-    print("[Keenan AutoTrade] UI Loaded Successfully!")
-end
-pcall(log_inventory_fish)
+pcall(create_ui)
