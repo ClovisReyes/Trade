@@ -63,7 +63,7 @@ local cloneref = cloneref or function(ref) return ref end
 
 local players               = cloneref(game:GetService("Players"))
 local local_player          = players.LocalPlayer
-local player_gui            = local_player and (local_player:FindFirstChild("PlayerGui") or (pcall(function() return local_player:WaitForChild("PlayerGui", 5) end) and local_player:FindFirstChild("PlayerGui")))
+local player_gui            = cloneref(local_player:WaitForChild("PlayerGui"))
 local user_input_service    = cloneref(game:GetService("UserInputService"))
 local tween_service         = cloneref(game:GetService("TweenService"))
 local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
@@ -71,42 +71,15 @@ local http_service          = cloneref(game:GetService("HttpService"))
 local text_chat_service     = pcall(function() return cloneref(game:GetService("TextChatService")) end) and cloneref(game:GetService("TextChatService")) or nil
 local core_gui              = pcall(function() return cloneref(game:GetService("CoreGui")) end) and cloneref(game:GetService("CoreGui")) or nil
 
-local function safe_get_child(parent, name, timeout)
-    if not parent then return nil end
-    local child = parent:FindFirstChild(name)
-    if not child and parent.WaitForChild then
-        pcall(function()
-            child = parent:WaitForChild(name, timeout or 3)
-        end)
-    end
-    return child
-end
-
-local packages_folder = safe_get_child(replicated_storage, "Packages", 3)
-local shared_folder = safe_get_child(replicated_storage, "Shared", 3)
-
 local variables = {
-    items                   = safe_get_child(replicated_storage, "Items", 3),
-    variants                = safe_get_child(replicated_storage, "Variants", 3),
-    replion                 = safe_get_child(packages_folder, "Replion", 3),
-    item_utility            = safe_get_child(shared_folder, "ItemUtility", 3)
+    items                   = replicated_storage:WaitForChild("Items"),
+    variants                = replicated_storage:WaitForChild("Variants"),
+    replion                 = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
+    item_utility            = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility")
 }
 
 local success_replion, replion_mod = pcall(require, variables.replion)
-local player_data = nil
-if success_replion and replion_mod and replion_mod.Client then
-    pcall(function()
-        player_data = replion_mod.Client:GetReplion("Data")
-    end)
-    if not player_data then
-        pcall(function()
-            task_spawn(function()
-                player_data = replion_mod.Client:WaitReplion("Data")
-            end)
-        end)
-    end
-end
-
+local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
 local success_iu, item_utility = pcall(require, variables.item_utility)
 if not success_iu or not item_utility then
     item_utility = {
@@ -129,9 +102,8 @@ local function get_net_lookup()
     _net_lookup = {}
 
     pcall(function()
-        local packages = replicated_storage:FindFirstChild("Packages")
-        local index = packages and packages:FindFirstChild("_Index")
         local net_folder = nil
+        local index = replicated_storage.Packages:FindFirstChild("_Index")
         if index then
             for _, child in ipairs(index:GetChildren()) do
                 if string_find(child.Name, "sleitnick_net", 1, true) then
@@ -140,13 +112,8 @@ local function get_net_lookup()
                 end
             end
         end
-        if not net_folder then
-            for _, desc in ipairs(replicated_storage:GetDescendants()) do
-                if desc.Name == "net" and desc:IsA("Folder") then
-                    net_folder = desc
-                    break
-                end
-            end
+        if not net_folder and replicated_storage.Packages:FindFirstChild("_Index") and replicated_storage.Packages._Index:FindFirstChild("sleitnick_net@0.2.0") then
+            net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"]:FindFirstChild("net")
         end
 
         if net_folder then
@@ -234,7 +201,9 @@ local config = {
 local cache = {
     processed_trades    = {},
     loaded_fish         = {},
+    loaded_mutations    = {},
     loaded_enchants     = {},
+    loaded_tiers        = {},
     loaded_variant_multipliers = {},
     is_trading_active   = false,
     loop_running        = false,
@@ -270,14 +239,12 @@ local function save_config()
             temp_config.trade_enchants_enabled = false
             temp_config.trade_rarity_enabled = false
             temp_config.trade_coin_enabled = false
-            temp_config.trade_coin_target = config.trade_coin_target
 
             local data = http_service:JSONEncode(temp_config)
             writefile("Keenan_AutoTrade_Config.json", data)
         end
     end)
 end
-
 
 local function load_config()
     pcall(function()
@@ -359,7 +326,7 @@ local function get_inventory_enchants(bypass_favorited)
                         local data = item_utility:GetItemData(item.Id)
                         if data and data.Data then
                             local name = data.Data.Name
-                            local is_enchant = (data.Data.Type == "Enchant Stones")
+                            local is_enchant = (data.Data.Type == "Enchant Stones") or string_find(name, "Enchant", 1, true)
                             if is_enchant then
                                 enchants[name] = (enchants[name] or 0) + (item.Amount or 1)
                             end
@@ -404,6 +371,7 @@ local function parse_coin_input(str)
     return math_floor(val)
 end
 
+-- Filters
 local tier_mapping = {
     [1] = "common",
     [2] = "uncommon",
@@ -420,6 +388,9 @@ local tier_mapping = {
 }
 
 local function load_game_data()
+    cache.loaded_tiers = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" }
+    cache.loaded_variant_multipliers = {}
+
     local tiers_mod = replicated_storage:FindFirstChild("Tiers")
     if tiers_mod and tiers_mod:IsA("ModuleScript") then
         local success, tiers_data = pcall(require, tiers_mod)
@@ -432,8 +403,6 @@ local function load_game_data()
         end
     end
 
-    cache.loaded_variant_multipliers = {}
-
     if variables.variants then
         for _, variant in ipairs(variables.variants:GetChildren()) do
             if variant:IsA("ModuleScript") then
@@ -442,6 +411,7 @@ local function load_game_data()
                     local mult = tonumber(data.SellMultiplier or (data.Data and data.Data.SellMultiplier)) or 1
                     local name = (data.Data and data.Data.Name) or variant.Name
                     if name then
+                        table_insert(cache.loaded_mutations, name)
                         cache.loaded_variant_multipliers[string_lower(name)] = mult
                         cache.loaded_variant_multipliers[name] = mult
                     end
@@ -452,9 +422,13 @@ local function load_game_data()
             end
         end
     end
+    if not table_find(cache.loaded_mutations, "Shiny") then
+        table_insert(cache.loaded_mutations, "Shiny")
+    end
     if not cache.loaded_variant_multipliers["shiny"] then
         cache.loaded_variant_multipliers["shiny"] = 1.5
     end
+    table_sort(cache.loaded_mutations)
 
     if variables.items then
         for _, item in ipairs(variables.items:GetDescendants()) do
@@ -472,129 +446,6 @@ local function load_game_data()
     end
 end
 pcall(load_game_data)
-
-local function calculate_fish_coin_value(item)
-    if not item or not item.Id then return 0 end
-    local item_info = item_utility:GetItemData(item.Id)
-    if not item_info or not item_info.Data or item_info.Data.Type ~= "Fish" then
-        return 0
-    end
-
-    local base_price = tonumber(item_info.SellPrice) or 0
-    if base_price <= 0 then
-        local tier = tonumber(item_info.Data.Tier) or 1
-        base_price = (tier >= 7 and 250000) or (tier == 6 and 50000) or (tier == 5 and 15000) or (tier == 4 and 5000) or 1000
-    end
-
-    local mult = 1
-    local meta = item.Metadata
-    if meta then
-        if meta.VariantId and meta.VariantId ~= "" and meta.VariantId ~= "None" then
-            local vname = tostring(meta.VariantId)
-            local vmult = cache.loaded_variant_multipliers[string_lower(vname)] or cache.loaded_variant_multipliers[vname]
-            if vmult then
-                mult = mult * vmult
-            end
-        end
-        if meta.Shiny == true or meta.Shiny == 1 or (type(meta.Shiny) == "string" and string_lower(meta.Shiny) == "true") then
-            if not meta.VariantId or string_lower(tostring(meta.VariantId)) ~= "shiny" then
-                mult = mult * (cache.loaded_variant_multipliers["shiny"] or 1.5)
-            end
-        end
-        if meta.Big == true or meta.Big == 1 or meta.Giant == true or meta.Giant == 1 or (type(meta.Big) == "string" and string_lower(meta.Big) == "true") then
-            mult = mult * 1.5
-        end
-    end
-
-    return math_floor(base_price * mult)
-end
-
-local function select_fish_for_coin_trade(target_coins, already_sent_coins)
-    if not player_data then return {}, 0 end
-    local remaining_deficit = target_coins - already_sent_coins
-    if remaining_deficit <= 0 then return {}, 0 end
-
-    local inventory = player_data:Get("Inventory")
-    local items = inventory and inventory.Items or {}
-
-    local candidate_pool = {}
-    for _, itm in ipairs(items) do
-        if itm and itm.Id and not table_find(cache.processed_trades, itm.UUID) then
-            local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
-            if not is_fav then
-                local val = calculate_fish_coin_value(itm)
-                if val > 0 then
-                    table_insert(candidate_pool, {
-                        item = itm,
-                        value = val
-                    })
-                end
-            end
-        end
-    end
-
-    if #candidate_pool == 0 then return {}, 0 end
-
-    -- Sort candidates descending by value (largest fish first for bulk filling)
-    table_sort(candidate_pool, function(a, b) return a.value > b.value end)
-
-    local chosen = {}
-    local current_sum = 0
-    local used_indices = {}
-
-    -- Step 1: Bulk greedily fill up to remaining deficit
-    for i, entry in ipairs(candidate_pool) do
-        if #chosen >= 20 then break end
-        if current_sum + entry.value <= remaining_deficit then
-            table_insert(chosen, entry.item)
-            current_sum = current_sum + entry.value
-            used_indices[i] = true
-            if current_sum == remaining_deficit then break end
-        end
-    end
-
-    -- Step 2: If deficit remains and we have room in the 20-item trade window,
-    -- pick the single smallest fish that covers the remaining deficit (or small fish sequentially)
-    if current_sum < remaining_deficit and #chosen < 20 then
-        local deficit_left = remaining_deficit - current_sum
-        local best_single_idx = nil
-        local best_single_val = math_huge
-
-        for i, entry in ipairs(candidate_pool) do
-            if not used_indices[i] then
-                if entry.value >= deficit_left and entry.value < best_single_val then
-                    best_single_val = entry.value
-                    best_single_idx = i
-                end
-            end
-        end
-
-        if best_single_idx then
-            table_insert(chosen, candidate_pool[best_single_idx].item)
-            current_sum = current_sum + candidate_pool[best_single_idx].value
-            used_indices[best_single_idx] = true
-        else
-            -- If no single fish covers deficit, take remaining fish from smallest to largest
-            local remaining_small = {}
-            for i, entry in ipairs(candidate_pool) do
-                if not used_indices[i] then
-                    table_insert(remaining_small, { idx = i, entry = entry })
-                end
-            end
-            table_sort(remaining_small, function(a, b) return a.entry.value < b.entry.value end)
-
-            for _, s_entry in ipairs(remaining_small) do
-                if #chosen >= 20 then break end
-                table_insert(chosen, s_entry.entry.item)
-                current_sum = current_sum + s_entry.entry.value
-                used_indices[s_entry.idx] = true
-                if current_sum >= remaining_deficit then break end
-            end
-        end
-    end
-
-    return chosen, current_sum
-end
 
 -- Player Target
 local function find_target_player()
@@ -654,6 +505,124 @@ local function is_item_big(item)
     return string_find(mut, "big") ~= nil or string_find(mut, "giant") ~= nil
 end
 
+local function calculate_fish_coin_value(item)
+    if not item or not item.Id then return 0 end
+    local item_info = item_utility:GetItemData(item.Id)
+    if not item_info or not item_info.Data or item_info.Data.Type ~= "Fish" then
+        return 0
+    end
+
+    local base_price = tonumber(item_info.SellPrice) or 0
+    if base_price <= 0 then
+        local tier = tonumber(item_info.Data.Tier) or 1
+        base_price = (tier >= 7 and 250000) or (tier == 6 and 50000) or (tier == 5 and 15000) or (tier == 4 and 5000) or 1000
+    end
+
+    local mult = 1
+    local meta = item.Metadata
+    if meta then
+        if meta.VariantId and meta.VariantId ~= "" and meta.VariantId ~= "None" then
+            local vname = tostring(meta.VariantId)
+            local vmult = cache.loaded_variant_multipliers[string_lower(vname)] or cache.loaded_variant_multipliers[vname]
+            if vmult then
+                mult = mult * vmult
+            end
+        end
+        if is_item_shiny(item) then
+            if not meta.VariantId or string_lower(tostring(meta.VariantId)) ~= "shiny" then
+                mult = mult * (cache.loaded_variant_multipliers["shiny"] or 1.5)
+            end
+        end
+        if is_item_big(item) then
+            mult = mult * 1.5
+        end
+    end
+
+    return math_floor(base_price * mult)
+end
+
+local function select_fish_for_coin_trade(target_coins, already_sent_coins)
+    if not player_data then return {}, 0 end
+    local remaining_deficit = target_coins - already_sent_coins
+    if remaining_deficit <= 0 then return {}, 0 end
+
+    local inventory = player_data:Get("Inventory")
+    local items = inventory and inventory.Items or {}
+
+    local candidate_pool = {}
+    for _, itm in ipairs(items) do
+        if itm and itm.Id and not table_find(cache.processed_trades, itm.UUID) then
+            local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
+            if not is_fav then
+                local val = calculate_fish_coin_value(itm)
+                if val > 0 then
+                    table_insert(candidate_pool, {
+                        item = itm,
+                        value = val
+                    })
+                end
+            end
+        end
+    end
+
+    if #candidate_pool == 0 then return {}, 0 end
+
+    table_sort(candidate_pool, function(a, b) return a.value > b.value end)
+
+    local chosen = {}
+    local current_sum = 0
+    local used_indices = {}
+
+    for i, entry in ipairs(candidate_pool) do
+        if #chosen >= 20 then break end
+        if current_sum + entry.value <= remaining_deficit then
+            table_insert(chosen, entry.item)
+            current_sum = current_sum + entry.value
+            used_indices[i] = true
+            if current_sum == remaining_deficit then break end
+        end
+    end
+
+    if current_sum < remaining_deficit and #chosen < 20 then
+        local deficit_left = remaining_deficit - current_sum
+        local best_single_idx = nil
+        local best_single_val = math_huge
+
+        for i, entry in ipairs(candidate_pool) do
+            if not used_indices[i] then
+                if entry.value >= deficit_left and entry.value < best_single_val then
+                    best_single_val = entry.value
+                    best_single_idx = i
+                end
+            end
+        end
+
+        if best_single_idx then
+            table_insert(chosen, candidate_pool[best_single_idx].item)
+            current_sum = current_sum + candidate_pool[best_single_idx].value
+            used_indices[best_single_idx] = true
+        else
+            local remaining_small = {}
+            for i, entry in ipairs(candidate_pool) do
+                if not used_indices[i] then
+                    table_insert(remaining_small, { idx = i, entry = entry })
+                end
+            end
+            table_sort(remaining_small, function(a, b) return a.entry.value < b.entry.value end)
+
+            for _, s_entry in ipairs(remaining_small) do
+                if #chosen >= 20 then break end
+                table_insert(chosen, s_entry.entry.item)
+                current_sum = current_sum + s_entry.entry.value
+                used_indices[s_entry.idx] = true
+                if current_sum >= remaining_deficit then break end
+            end
+        end
+    end
+
+    return chosen, current_sum
+end
+
 local function should_trade_fish(item_data, inventory_item)
     if not config.enabled then return false end
 
@@ -697,7 +666,7 @@ local function should_trade_fish(item_data, inventory_item)
         should_trade = false
     end
 
-    return should_trade;
+    return should_trade
 end
 
 local function should_trade_fish_by_rarity(item_data, inventory_item)
@@ -748,7 +717,7 @@ local function should_trade_fish_by_rarity(item_data, inventory_item)
         should_trade = false
     end
 
-    return should_trade;
+    return should_trade
 end
 
 -- Round Robin Selection
@@ -870,7 +839,6 @@ local function collect_round_robin_names(player_data_items, selected_fish, limit
     return items_to_trade
 end
 
-
 -- Trade Handlers
 local function decline_active_trade()
     pcall(function()
@@ -926,8 +894,6 @@ local function verify_items_sent(added_items)
     end
     return sent_count
 end
-
-
 
 local function listen_for_trade_completion(on_completed)
     local completed = false
@@ -1296,7 +1262,7 @@ local function try_trade_fish()
             if #items_to_trade >= limit then break end
             if fish_item and fish_item.Id then
                 local fish_data = item_utility:GetItemData(fish_item.Id)
-                if fish_data and fish_data.Data.Type == "Fish" then
+                if fish_data and fish_data.Data and fish_data.Data.Type == "Fish" then
                     if should_trade_fish(fish_data, fish_item) then
                         if not table_find(cache.processed_trades, fish_item.UUID) then
                             table_insert(items_to_trade, fish_item)
@@ -1447,7 +1413,7 @@ local function try_trade_rarity()
             if #items_to_trade >= limit then break end
             if fish_item and fish_item.Id then
                 local fish_data = item_utility:GetItemData(fish_item.Id)
-                if fish_data and fish_data.Data.Type == "Fish" then
+                if fish_data and fish_data.Data and fish_data.Data.Type == "Fish" then
                     if should_trade_fish_by_rarity(fish_data, fish_item) then
                         if not table_find(cache.processed_trades, fish_item.UUID) then
                             table_insert(items_to_trade, fish_item)
@@ -1945,12 +1911,7 @@ local function create_ui()
         end)
     end
     if not parent_gui then
-        pcall(function()
-            parent_gui = local_player and (local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 5))
-        end)
-    end
-    if not parent_gui then
-        parent_gui = player_gui or (local_player and local_player:FindFirstChild("PlayerGui"))
+        parent_gui = local_player:WaitForChild("PlayerGui")
     end
 
     local function clear_old_guis(container)
@@ -1965,7 +1926,7 @@ local function create_ui()
     end
 
     clear_old_guis(parent_gui)
-    clear_old_guis(local_player and local_player:FindFirstChild("PlayerGui"))
+    clear_old_guis(local_player:FindFirstChild("PlayerGui"))
     if gethui then clear_old_guis(gethui()) end
     if core_gui then clear_old_guis(core_gui) end
 
@@ -1980,10 +1941,8 @@ local function create_ui()
         gui.Parent = parent_gui
     end)
     if not success_parent then
-        pcall(function()
-            parent_gui = local_player and (local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 3))
-            gui.Parent = parent_gui
-        end)
+        parent_gui = local_player:WaitForChild("PlayerGui")
+        gui.Parent = parent_gui
     end
 
     task_spawn(function()
@@ -2104,21 +2063,21 @@ local function create_ui()
     cache.loaded_fish = get_owned_fish_options()
     cache.loaded_enchants = get_owned_enchant_options()
 
-    local BG_COLOR = Color3_fromRGB(28, 30, 34)         -- Solid Terminal Slate Gray
-    local SIDEBAR_COLOR = Color3_fromRGB(20, 22, 25)    -- Solid Terminal Charcoal Gray
-    local ACCENT_COLOR = Color3_fromRGB(250, 204, 21)   -- Keenan Yellow Accent (#FACC15)
-    local ACCENT_HOVER = Color3_fromRGB(253, 224, 71)   -- Light Yellow Hover
-    local TEXT_COLOR = Color3_fromRGB(235, 238, 242)    -- Terminal Off-White Text
-    local MUTED_COLOR = Color3_fromRGB(140, 146, 158)   -- Terminal Muted Gray Text
-    local CARD_COLOR = Color3_fromRGB(36, 39, 44)       -- Solid Terminal Card Gray
-    local TOGGLE_ON_COLOR = Color3_fromRGB(250, 204, 21)-- Terminal Active Yellow Toggle
-    local INPUT_BG_COLOR = Color3_fromRGB(18, 20, 23)   -- Solid Terminal Black/Dark Gray
-    local BORDER_COLOR = Color3_fromRGB(58, 63, 72)     -- Terminal Border Gray
-    local BTN_BG_COLOR = Color3_fromRGB(46, 50, 58)     -- Terminal Button Gray
-    local BTN_HOVER_COLOR = Color3_fromRGB(60, 66, 76)  -- Terminal Button Hover Gray
+    local BG_COLOR = Color3_fromRGB(28, 30, 34)
+    local SIDEBAR_COLOR = Color3_fromRGB(20, 22, 25)
+    local ACCENT_COLOR = Color3_fromRGB(250, 204, 21)
+    local ACCENT_HOVER = Color3_fromRGB(253, 224, 71)
+    local TEXT_COLOR = Color3_fromRGB(235, 238, 242)
+    local MUTED_COLOR = Color3_fromRGB(140, 146, 158)
+    local CARD_COLOR = Color3_fromRGB(36, 39, 44)
+    local TOGGLE_ON_COLOR = Color3_fromRGB(250, 204, 21)
+    local INPUT_BG_COLOR = Color3_fromRGB(18, 20, 23)
+    local BORDER_COLOR = Color3_fromRGB(58, 63, 72)
+    local BTN_BG_COLOR = Color3_fromRGB(46, 50, 58)
+    local BTN_HOVER_COLOR = Color3_fromRGB(60, 66, 76)
 
-    local font_face = Enum.Font.SourceSans
-    local font_bold = Enum.Font.SourceSansBold
+    local font_face = Font.fromEnum(Enum.Font.SourceSans)
+    local font_bold = Font.fromEnum(Enum.Font.SourceSans)
 
     local target_lbl
     local fish_dropdown_btn
@@ -2208,7 +2167,7 @@ local function create_ui()
     ply_refresh.Text = "Refresh"
     ply_refresh.TextColor3 = ACCENT_COLOR
     ply_refresh.TextSize = 10
-    ply_refresh.Font = font_bold
+    ply_refresh.FontFace = font_bold
     ply_refresh.Active = true
     ply_refresh.ZIndex = 10
     ply_refresh.Parent = player_panel
@@ -2237,7 +2196,7 @@ local function create_ui()
     target_lbl.Text = truncate_string(config.trade_with ~= "" and config.trade_with or "None", 10)
     target_lbl.TextColor3 = ACCENT_COLOR
     target_lbl.TextSize = 10
-    target_lbl.Font = font_bold
+    target_lbl.FontFace = font_bold
     target_lbl.TextXAlignment = Enum.TextXAlignment.Center
     target_lbl.ZIndex = 10
     target_lbl.Parent = player_panel
@@ -2309,7 +2268,7 @@ local function create_ui()
                 opt_lbl.Text = truncate_string(name, 10)
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                 opt_lbl.TextSize = 10
-                opt_lbl.Font = font_face
+                opt_lbl.FontFace = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
@@ -2390,7 +2349,7 @@ local function create_ui()
     item_search_box.PlaceholderColor3 = MUTED_COLOR
     item_search_box.TextColor3 = TEXT_COLOR
     item_search_box.TextSize = 10
-    item_search_box.Font = font_face
+    item_search_box.FontFace = font_face
     item_search_box.TextXAlignment = Enum.TextXAlignment.Center
     item_search_box.Active = true
     item_search_box.ZIndex = 10
@@ -2477,7 +2436,7 @@ local function create_ui()
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                     opt_lbl.TextSize = 10
-                    opt_lbl.Font = font_face
+                    opt_lbl.FontFace = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
@@ -2580,7 +2539,7 @@ local function create_ui()
     enchant_search_box.PlaceholderColor3 = MUTED_COLOR
     enchant_search_box.TextColor3 = TEXT_COLOR
     enchant_search_box.TextSize = 10
-    enchant_search_box.Font = font_face
+    enchant_search_box.FontFace = font_face
     enchant_search_box.TextXAlignment = Enum.TextXAlignment.Center
     enchant_search_box.Active = true
     enchant_search_box.ZIndex = 10
@@ -2668,7 +2627,7 @@ local function create_ui()
                     opt_lbl.Text = opt
                     opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                     opt_lbl.TextSize = 10
-                    opt_lbl.Font = font_face
+                    opt_lbl.FontFace = font_face
                     opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                     opt_lbl.ZIndex = 13
                     opt_lbl.Parent = opt_btn
@@ -2769,7 +2728,7 @@ local function create_ui()
     r_title.Text = "Select Rarity"
     r_title.TextColor3 = ACCENT_COLOR
     r_title.TextSize = 10
-    r_title.Font = font_bold
+    r_title.FontFace = font_bold
     r_title.TextXAlignment = Enum.TextXAlignment.Center
     r_title.ZIndex = 10
     r_title.Parent = rarity_panel
@@ -2837,7 +2796,7 @@ local function create_ui()
                 opt_lbl.Text = opt
                 opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
                 opt_lbl.TextSize = 10
-                opt_lbl.Font = font_face
+                opt_lbl.FontFace = font_face
                 opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
                 opt_lbl.ZIndex = 13
                 opt_lbl.Parent = opt_btn
@@ -2937,7 +2896,7 @@ local function create_ui()
     title_lbl.Text = "Keenan Trade Script"
     title_lbl.TextColor3 = ACCENT_COLOR
     title_lbl.TextSize = 11
-    title_lbl.Font = font_bold
+    title_lbl.FontFace = font_bold
     title_lbl.TextXAlignment = Enum.TextXAlignment.Left
     title_lbl.ZIndex = 26
     title_lbl.Parent = header
@@ -2987,7 +2946,7 @@ local function create_ui()
     icon_lbl.Text = "K"
     icon_lbl.TextColor3 = ACCENT_COLOR
     icon_lbl.TextSize = 22
-    icon_lbl.Font = font_bold
+    icon_lbl.FontFace = font_bold
     icon_lbl.ZIndex = 21
     icon_lbl.Visible = true
     icon_lbl.Parent = floating_btn
@@ -3181,7 +3140,7 @@ local function create_ui()
     close_btn.Text = "X"
     close_btn.TextColor3 = MUTED_COLOR
     close_btn.TextSize = 11
-    close_btn.Font = font_face
+    close_btn.FontFace = font_face
     close_btn.Active = true
     close_btn.Modal = true
     close_btn.ZIndex = 27
@@ -3258,7 +3217,7 @@ local function create_ui()
         header.Text = "  " .. title_text
         header.TextColor3 = TEXT_COLOR
         header.TextSize = 10
-        header.Font = font_bold
+        header.FontFace = font_bold
         header.TextXAlignment = Enum.TextXAlignment.Left
         header.Active = true
         header.Modal = true
@@ -3271,7 +3230,7 @@ local function create_ui()
         chevron.Text = "▼"
         chevron.TextColor3 = ACCENT_COLOR
         chevron.TextSize = 10
-        chevron.Font = font_face
+        chevron.FontFace = font_face
         chevron.TextXAlignment = Enum.TextXAlignment.Right
         chevron.Parent = header
 
@@ -3330,7 +3289,7 @@ local function create_ui()
         lbl.Text = label_text
         lbl.TextColor3 = TEXT_COLOR
         lbl.TextSize = 10
-        lbl.Font = font_bold
+        lbl.FontFace = font_bold
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent = row
 
@@ -3454,7 +3413,7 @@ local function create_ui()
     status_title.Text = "Status"
     status_title.TextColor3 = ACCENT_COLOR
     status_title.TextSize = 10
-    status_title.Font = font_bold
+    status_title.FontFace = font_bold
     status_title.TextXAlignment = Enum.TextXAlignment.Left
     status_title.Parent = status_box
 
@@ -3466,7 +3425,7 @@ local function create_ui()
     status_val_lbl.Text = "Idle"
     status_val_lbl.TextColor3 = TEXT_COLOR
     status_val_lbl.TextSize = 10
-    status_val_lbl.Font = font_face
+    status_val_lbl.FontFace = font_face
     status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     status_val_lbl.TextWrapped = true
@@ -3486,7 +3445,7 @@ local function create_ui()
     item_lbl.Text = "Select Item"
     item_lbl.TextColor3 = TEXT_COLOR
     item_lbl.TextSize = 10
-    item_lbl.Font = font_bold
+    item_lbl.FontFace = font_bold
     item_lbl.TextXAlignment = Enum.TextXAlignment.Left
     item_lbl.Parent = item_row
 
@@ -3508,7 +3467,7 @@ local function create_ui()
     fish_dropdown_btn.Text = get_fish_dropdown_text()
     fish_dropdown_btn.TextColor3 = TEXT_COLOR
     fish_dropdown_btn.TextSize = 10
-    fish_dropdown_btn.Font = font_face
+    fish_dropdown_btn.FontFace = font_face
     fish_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     fish_dropdown_btn.Active = true
     fish_dropdown_btn.Parent = item_row
@@ -3534,7 +3493,7 @@ local function create_ui()
     fish_chevron.Text = "▼"
     fish_chevron.TextColor3 = ACCENT_COLOR
     fish_chevron.TextSize = 7
-    fish_chevron.Font = font_face
+    fish_chevron.FontFace = font_face
     fish_chevron.TextXAlignment = Enum.TextXAlignment.Right
     fish_chevron.Parent = fish_dropdown_btn
 
@@ -3562,7 +3521,7 @@ local function create_ui()
     amount_lbl.Text = "Amount Fish Name"
     amount_lbl.TextColor3 = TEXT_COLOR
     amount_lbl.TextSize = 10
-    amount_lbl.Font = font_bold
+    amount_lbl.FontFace = font_bold
     amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     amount_lbl.Parent = amount_row
 
@@ -3573,7 +3532,7 @@ local function create_ui()
     qty_box.Text = tostring(config.quantity)
     qty_box.TextColor3 = TEXT_COLOR
     qty_box.TextSize = 10
-    qty_box.Font = font_face
+    qty_box.FontFace = font_face
     qty_box.TextXAlignment = Enum.TextXAlignment.Center
     qty_box.ClearTextOnFocus = false
     qty_box.Parent = amount_row
@@ -3615,7 +3574,7 @@ local function create_ui()
     refresh_btn.Text = "Refresh Fish Items"
     refresh_btn.TextColor3 = ACCENT_COLOR
     refresh_btn.TextSize = 10
-    refresh_btn.Font = font_bold
+    refresh_btn.FontFace = font_bold
     refresh_btn.Active = true
     refresh_btn.Parent = byname_content
 
@@ -3714,7 +3673,7 @@ local function create_ui()
     enchant_status_title.Text = "Status"
     enchant_status_title.TextColor3 = ACCENT_COLOR
     enchant_status_title.TextSize = 10
-    enchant_status_title.Font = font_bold
+    enchant_status_title.FontFace = font_bold
     enchant_status_title.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_title.Parent = enchant_status_box
 
@@ -3726,7 +3685,7 @@ local function create_ui()
     enchant_status_val_lbl.Text = "Idle"
     enchant_status_val_lbl.TextColor3 = TEXT_COLOR
     enchant_status_val_lbl.TextSize = 10
-    enchant_status_val_lbl.Font = font_face
+    enchant_status_val_lbl.FontFace = font_face
     enchant_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     enchant_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     enchant_status_val_lbl.TextWrapped = true
@@ -3746,7 +3705,7 @@ local function create_ui()
     stone_lbl.Text = "Stone Type"
     stone_lbl.TextColor3 = TEXT_COLOR
     stone_lbl.TextSize = 10
-    stone_lbl.Font = font_bold
+    stone_lbl.FontFace = font_bold
     stone_lbl.TextXAlignment = Enum.TextXAlignment.Left
     stone_lbl.Parent = stone_row
 
@@ -3768,7 +3727,7 @@ local function create_ui()
     enchant_dropdown_btn.Text = get_enchant_dropdown_text()
     enchant_dropdown_btn.TextColor3 = TEXT_COLOR
     enchant_dropdown_btn.TextSize = 10
-    enchant_dropdown_btn.Font = font_face
+    enchant_dropdown_btn.FontFace = font_face
     enchant_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     enchant_dropdown_btn.Active = true
     enchant_dropdown_btn.Parent = stone_row
@@ -3794,7 +3753,7 @@ local function create_ui()
     enchant_chevron.Text = "▼"
     enchant_chevron.TextColor3 = ACCENT_COLOR
     enchant_chevron.TextSize = 7
-    enchant_chevron.Font = font_face
+    enchant_chevron.FontFace = font_face
     enchant_chevron.TextXAlignment = Enum.TextXAlignment.Right
     enchant_chevron.Parent = enchant_dropdown_btn
 
@@ -3822,7 +3781,7 @@ local function create_ui()
     es_amount_lbl.Text = "Amount Enchant Stone"
     es_amount_lbl.TextColor3 = TEXT_COLOR
     es_amount_lbl.TextSize = 10
-    es_amount_lbl.Font = font_bold
+    es_amount_lbl.FontFace = font_bold
     es_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     es_amount_lbl.Parent = es_amount_row
 
@@ -3833,7 +3792,7 @@ local function create_ui()
     es_qty_box.Text = tostring(config.quantity)
     es_qty_box.TextColor3 = TEXT_COLOR
     es_qty_box.TextSize = 10
-    es_qty_box.Font = font_face
+    es_qty_box.FontFace = font_face
     es_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     es_qty_box.ClearTextOnFocus = false
     es_qty_box.Parent = es_amount_row
@@ -3875,7 +3834,7 @@ local function create_ui()
     es_refresh.Text = "Check Enchant Stones"
     es_refresh.TextColor3 = ACCENT_COLOR
     es_refresh.TextSize = 10
-    es_refresh.Font = font_bold
+    es_refresh.FontFace = font_bold
     es_refresh.Active = true
     es_refresh.Parent = enchant_content
 
@@ -3992,7 +3951,7 @@ local function create_ui()
     rarity_status_title.Text = "Status"
     rarity_status_title.TextColor3 = ACCENT_COLOR
     rarity_status_title.TextSize = 10
-    rarity_status_title.Font = font_bold
+    rarity_status_title.FontFace = font_bold
     rarity_status_title.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_title.Parent = rarity_status_box
 
@@ -4004,7 +3963,7 @@ local function create_ui()
     rarity_status_val_lbl.Text = "Idle"
     rarity_status_val_lbl.TextColor3 = TEXT_COLOR
     rarity_status_val_lbl.TextSize = 10
-    rarity_status_val_lbl.Font = font_face
+    rarity_status_val_lbl.FontFace = font_face
     rarity_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     rarity_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     rarity_status_val_lbl.TextWrapped = true
@@ -4024,7 +3983,7 @@ local function create_ui()
     r_lbl.Text = "Select Rarity"
     r_lbl.TextColor3 = TEXT_COLOR
     r_lbl.TextSize = 10
-    r_lbl.Font = font_bold
+    r_lbl.FontFace = font_bold
     r_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_lbl.Parent = r_row
 
@@ -4046,7 +4005,7 @@ local function create_ui()
     rarity_dropdown_btn.Text = get_rarity_dropdown_text()
     rarity_dropdown_btn.TextColor3 = TEXT_COLOR
     rarity_dropdown_btn.TextSize = 10
-    rarity_dropdown_btn.Font = font_face
+    rarity_dropdown_btn.FontFace = font_face
     rarity_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
     rarity_dropdown_btn.Active = true
     rarity_dropdown_btn.Parent = r_row
@@ -4072,7 +4031,7 @@ local function create_ui()
     rarity_chevron.Text = "▼"
     rarity_chevron.TextColor3 = ACCENT_COLOR
     rarity_chevron.TextSize = 7
-    rarity_chevron.Font = font_face
+    rarity_chevron.FontFace = font_face
     rarity_chevron.TextXAlignment = Enum.TextXAlignment.Right
     rarity_chevron.Parent = rarity_dropdown_btn
 
@@ -4100,7 +4059,7 @@ local function create_ui()
     r_amount_lbl.Text = "Amount Fish Rarity"
     r_amount_lbl.TextColor3 = TEXT_COLOR
     r_amount_lbl.TextSize = 10
-    r_amount_lbl.Font = font_bold
+    r_amount_lbl.FontFace = font_bold
     r_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
     r_amount_lbl.Parent = r_amount_row
 
@@ -4111,7 +4070,7 @@ local function create_ui()
     r_qty_box.Text = tostring(config.quantity)
     r_qty_box.TextColor3 = TEXT_COLOR
     r_qty_box.TextSize = 10
-    r_qty_box.Font = font_face
+    r_qty_box.FontFace = font_face
     r_qty_box.TextXAlignment = Enum.TextXAlignment.Center
     r_qty_box.ClearTextOnFocus = false
     r_qty_box.Parent = r_amount_row
@@ -4153,7 +4112,7 @@ local function create_ui()
     r_refresh.Text = "Refresh Fish Rarity"
     r_refresh.TextColor3 = ACCENT_COLOR
     r_refresh.TextSize = 10
-    r_refresh.Font = font_bold
+    r_refresh.FontFace = font_bold
     r_refresh.Active = true
     r_refresh.Parent = rarity_content
 
@@ -4248,7 +4207,7 @@ local function create_ui()
     coin_status_title.Text = "Status"
     coin_status_title.TextColor3 = ACCENT_COLOR
     coin_status_title.TextSize = 10
-    coin_status_title.Font = font_bold
+    coin_status_title.FontFace = font_bold
     coin_status_title.TextXAlignment = Enum.TextXAlignment.Left
     coin_status_title.Parent = coin_status_box
 
@@ -4260,7 +4219,7 @@ local function create_ui()
     coin_status_val_lbl.Text = "Idle"
     coin_status_val_lbl.TextColor3 = TEXT_COLOR
     coin_status_val_lbl.TextSize = 10
-    coin_status_val_lbl.Font = font_face
+    coin_status_val_lbl.FontFace = font_face
     coin_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
     coin_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
     coin_status_val_lbl.TextWrapped = true
@@ -4280,7 +4239,7 @@ local function create_ui()
     coin_target_lbl.Text = "Target Coin Value"
     coin_target_lbl.TextColor3 = TEXT_COLOR
     coin_target_lbl.TextSize = 10
-    coin_target_lbl.Font = font_bold
+    coin_target_lbl.FontFace = font_bold
     coin_target_lbl.TextXAlignment = Enum.TextXAlignment.Left
     coin_target_lbl.Parent = coin_target_row
 
@@ -4291,7 +4250,7 @@ local function create_ui()
     coin_target_box.Text = format_number(config.trade_coin_target or 8000000)
     coin_target_box.TextColor3 = TEXT_COLOR
     coin_target_box.TextSize = 10
-    coin_target_box.Font = font_face
+    coin_target_box.FontFace = font_face
     coin_target_box.TextXAlignment = Enum.TextXAlignment.Center
     coin_target_box.ClearTextOnFocus = false
     coin_target_box.Parent = coin_target_row
@@ -4334,7 +4293,7 @@ local function create_ui()
     coin_check_btn.Text = "Check Bag Coin Worth"
     coin_check_btn.TextColor3 = ACCENT_COLOR
     coin_check_btn.TextSize = 10
-    coin_check_btn.Font = font_bold
+    coin_check_btn.FontFace = font_bold
     coin_check_btn.Active = true
     coin_check_btn.Parent = coin_content
 
