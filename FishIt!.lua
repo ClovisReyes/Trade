@@ -52,14 +52,31 @@ local _net_lookup = nil
 local function get_net_lookup()
     if _net_lookup then return _net_lookup end
     _net_lookup = {}
-    local net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"].net
-    for _, child in ipairs(net_folder:GetChildren()) do
-        for logical_name, pattern in pairs(remote_map) do
-            if string_find(child.Name, pattern, 1, true) then
-                _net_lookup[logical_name] = child
+    
+    -- 1. Ambil remote resmi yang digunakan game dari TradeData.Remotes
+    pcall(function()
+        local trade_data_mod = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("Trading") and replicated_storage.Shared.Trading:FindFirstChild("TradeData")
+        if trade_data_mod then
+            local td = require(trade_data_mod)
+            if td and td.Remotes then
+                for k, v in pairs(td.Remotes) do
+                    _net_lookup[k] = v
+                end
             end
         end
-    end
+    end)
+
+    -- 2. Fallback ke sleitnick_net jika ada yang belum terisi
+    pcall(function()
+        local net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"].net
+        for _, child in ipairs(net_folder:GetChildren()) do
+            for logical_name, pattern in pairs(remote_map) do
+                if not _net_lookup[logical_name] and string_find(child.Name, pattern, 1, true) then
+                    _net_lookup[logical_name] = child
+                end
+            end
+        end
+    end)
     return _net_lookup
 end
 
