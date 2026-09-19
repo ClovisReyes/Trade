@@ -618,12 +618,14 @@ local function start_trade_session(target_player, mode)
     end
 
     set_status_msg(mode, "Waiting for target to accept offer...")
+    
     local success, err = trade_remotes.SendTradeOffer:InvokeServer(target_player)
-    if not success then
+    if success == false then
         cache.last_failed_offer_time = tick()
         set_status_msg(mode, "Failed: " .. (err or "Declined"))
         return false, err
     end
+    
 
     local start_t = tick()
     while not local_player:GetAttribute("IsTrading") and (tick() - start_t) < 10 do
