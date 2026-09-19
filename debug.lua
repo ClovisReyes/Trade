@@ -1,32 +1,26 @@
 --[[
     ====================================================================================
-    🐟 FISH IT - ULTIMATE TRADE RUNTIME SPY & PACKET LOGGER 🕵️‍♂️ (BULLETPROOF EDITION)
+    🐟 FISH IT - PURE PASSIVE TRADE SPY & PACKET LOGGER 🕵️‍♂️ (NON-BLOCKING)
     ====================================================================================
     Tujuan:
-    Membongkar dan menganalisis 100% alur kerja runtime dari script trade terenkripsi
-    (Luraph, IronBrew, Moonsec, Obfuscator lainnya) secara real-time tanpa error.
+    Merekam aktivitas RemoteFunction & RemoteEvent trade secara 100% pasif (asynchronous),
+    TANPA memblokir popup trade, TANPA memotong data return server, dan TANPA lag.
 
-    Fitur Unggulan:
-    1. 🔍 Dual-Layer Hooking (__namecall + hookfunction fallback):
-       - Menangkap pemanggilan method (`remote:InvokeServer(...)`) maupun index (`remote.InvokeServer(...)`).
-       - Mencegah double-logging otomatis dengan micro-timestamp deduplication.
-       - Menangkap durasi respon server (latency ms) dan return value dari RemoteFunction.
-    2. 📥 Incoming Event Sniffer:
-       - Mendengarkan seluruh event server (TradeStarted, TradeOfferReceived, TradeCompleted, dll).
-       - Auto-attach ke remote baru yang dibuat runtime via DescendantAdded.
-    3. 📱 CloudPhone / Mobile Touch & PC Drag Support:
-       - Dragging universal yang lancar di layar sentuh CloudPhone maupun mouse PC.
-    4. 🎛️ Live Filter & Control:
-       - Toggle filter: [🎯 TRADE ONLY] vs [🌐 ALL REMOTES].
-       - Pause / Resume recording.
-       - Auto Copy ke Clipboard & Auto Save ke file `fishit_trade_spy_dump.txt`.
+    Prinsip Kerja:
+    1. 100% Non-Blocking:
+       - Pemanggilan `old_namecall(self, ...)` dieksekusi langsung tanpa pcall / modifikasi.
+       - Logging diproses di background (`task.spawn`) sehingga game/script berjalan normal.
+    2. Scoped Focus (Trade Only):
+       - Hanya mendengarkan remote bertema Trading (`RF/Trading/*`, `RE/Trading/*`).
+       - Remote game lain (gerakan, prompt, kamera, popup GUI) tidak disentuh sama sekali.
+    3. UI Responsif & Draggable:
+       - Touch & Mouse draggable, tombol Copy Logs & Save File.
     ====================================================================================
 --]]
 
 local cloneref = cloneref or function(ref) return ref end
 local players = cloneref(game:GetService("Players"))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
-local run_service = cloneref(game:GetService("RunService"))
 local user_input_service = cloneref(game:GetService("UserInputService"))
 
 local local_player = players.LocalPlayer
@@ -36,18 +30,16 @@ if not local_player then
     end)
 end
 
--- Storage & Timing
+-- State
 local logs_list = {}
 local is_capturing = true
-local filter_trading_only = true
 local start_time = os.clock()
 local last_log_time = os.clock()
-local recent_calls = {}
 
--- Safe Universal Serializer
+-- Safe Serializer
 local function safe_serialize(val, indent, max_depth, seen)
     indent = indent or 0
-    max_depth = max_depth or 4
+    max_depth = max_depth or 3
     seen = seen or {}
     local spaces = string.rep("  ", indent)
     
@@ -85,8 +77,8 @@ local function safe_serialize(val, indent, max_depth, seen)
         if is_array and max_idx == count and count > 0 then
             local items = {}
             for i = 1, count do
-                if i > 25 then
-                    table.insert(items, "... (+" .. (count - 25) .. " items)")
+                if i > 20 then
+                    table.insert(items, "... (+" .. (count - 20) .. " items)")
                     break
                 end
                 table.insert(items, safe_serialize(val[i], indent + 1, max_depth, seen))
@@ -97,7 +89,7 @@ local function safe_serialize(val, indent, max_depth, seen)
         local c = 0
         for k, v in pairs(val) do
             c = c + 1
-            if c > 35 then
+            if c > 25 then
                 table.insert(lines, spaces .. "  ... (truncated)")
                 break
             end
@@ -108,8 +100,7 @@ local function safe_serialize(val, indent, max_depth, seen)
         if #lines == 0 then return "{}" end
         return "{\n" .. table.concat(lines, "\n") .. "\n" .. spaces .. "}"
     else
-        local str = tostring(val)
-        return string.format("<%s: %s>", luau_t, str)
+        return string.format("<%s: %s>", luau_t, tostring(val))
     end
 end
 
@@ -135,28 +126,22 @@ local function record_log(tag, remote_name, details, color)
     }
 
     table.insert(logs_list, full_entry)
-    if #logs_list > 1000 then
+    if #logs_list > 500 then
         table.remove(logs_list, 1)
     end
 
     add_log_entry(full_entry)
 end
 
--- Filter check
-local function is_relevant_remote(instance)
+-- Check if remote is related to Trading
+local function is_trade_remote(instance)
     if not instance or typeof(instance) ~= "Instance" then return false end
-    if not filter_trading_only then return true end
-
     local name = instance.Name
-    local lname = string.lower(name)
-    local parent_name = instance.Parent and instance.Parent.Name or ""
+    local parent = instance.Parent
+    local parent_name = parent and parent.Name or ""
 
-    if string.find(lname, "trade", 1, true) or 
-       string.find(lname, "item", 1, true) or 
-       string.find(lname, "inventory", 1, true) or
-       string.find(lname, "vendor", 1, true) or
-       string.find(lname, "replion", 1, true) or
-       string.find(parent_name, "net", 1, true) or
+    if string.find(name, "Trading", 1, true) or 
+       string.find(name, "Trade", 1, true) or 
        string.find(parent_name, "Trading", 1, true) then
         return true
     end
@@ -164,41 +149,31 @@ local function is_relevant_remote(instance)
     return false
 end
 
--- Deduplication key helper
-local function check_and_mark_call(remote_inst, method_name)
-    local now = os.clock()
-    local key = tostring(remote_inst) .. "_" .. tostring(method_name)
-    if recent_calls[key] and (now - recent_calls[key]) < 0.003 then
-        return true -- is duplicate
-    end
-    recent_calls[key] = now
-    return false
-end
-
 ----------------------------------------------------------------------
--- 1. DUAL-LAYER HOOKING (__namecall + hookfunction fallback)
+-- 1. PURE PASSIVE ASYNC METAMETHOD HOOK
 ----------------------------------------------------------------------
-local function setup_network_hooks()
+local function setup_passive_hook()
     local newcclosure = newcclosure or function(f) return f end
     local getnamecallmethod = getnamecallmethod or get_namecall_method
     local getcallingscript = getcallingscript or function() return nil end
 
-    -- Layer A: hookmetamethod (__namecall)
-    if hookmetamethod then
-        local old_namecall
-        old_namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            local args = {...}
+    if not hookmetamethod then return end
 
-            if self and typeof(self) == "Instance" then
-                local is_invoke = (method == "InvokeServer" and self:IsA("RemoteFunction"))
-                local is_fire = (method == "FireServer" and self:IsA("RemoteEvent"))
+    local old_namecall
+    old_namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
 
-                if (is_invoke or is_fire) and is_relevant_remote(self) then
-                    check_and_mark_call(self, method)
-                    local caller = getcallingscript()
-                    local caller_name = caller and caller:GetFullName() or "Obfuscated / External"
-                    
+        if is_capturing and self and typeof(self) == "Instance" then
+            local is_invoke = (method == "InvokeServer" and self:IsA("RemoteFunction"))
+            local is_fire = (method == "FireServer" and self:IsA("RemoteEvent"))
+
+            if (is_invoke or is_fire) and is_trade_remote(self) then
+                local args = {...}
+                local caller = getcallingscript()
+                local caller_name = caller and caller:GetFullName() or "External/Script"
+
+                -- Asynchronous logging (Zero impact on game execution)
+                task.spawn(function()
                     local arg_dump = {}
                     for i, v in ipairs(args) do
                         table.insert(arg_dump, string.format("  Arg #%d: %s", i, safe_serialize(v, 1, 3)))
@@ -206,164 +181,99 @@ local function setup_network_hooks()
                     local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
 
                     if is_invoke then
-                        local start_inv = os.clock()
-                        local ok, r1, r2, r3, r4 = pcall(old_namecall, self, ...)
-                        local duration = (os.clock() - start_inv) * 1000
-
-                        if ok then
-                            local results = {r1, r2, r3, r4}
-                            local res_dump = {}
-                            for i, res in ipairs(results) do
-                                table.insert(res_dump, string.format("  Return #%d: %s", i, safe_serialize(res, 1, 3)))
-                            end
-                            local res_str = #res_dump > 0 and table.concat(res_dump, "\n") or "  (void/nil)"
-                            local detail = string.format("Caller: %s\n[SENT ARGS]:\n%s\n[SERVER RESPONSE in %.1fms]:\n%s", 
-                                caller_name, arg_str, duration, res_str)
-
-                            record_log("OUT RF", self.Name, detail, Color3.fromRGB(56, 189, 248))
-                            return r1, r2, r3, r4
-                        else
-                            local detail = string.format("Caller: %s\n[SENT ARGS]:\n%s\n[ERROR in %.1fms]:\n  %s", 
-                                caller_name, arg_str, duration, tostring(r1))
-                            record_log("OUT RF [ERR]", self.Name, detail, Color3.fromRGB(239, 68, 68))
-                            error(r1)
-                        end
+                        local detail = string.format("Caller: %s\n[SENT ARGS]:\n%s", caller_name, arg_str)
+                        record_log("OUT RF", self.Name, detail, Color3.fromRGB(56, 189, 248))
                     else
                         local detail = string.format("Caller: %s\n[SENT ARGS]:\n%s", caller_name, arg_str)
                         record_log("OUT RE", self.Name, detail, Color3.fromRGB(168, 85, 247))
-                        return old_namecall(self, ...)
                     end
-                end
+                end)
             end
+        end
 
-            return old_namecall(self, ...)
-        end))
-    end
-
-    -- Layer B: hookfunction (Direct Indexing Calls Fallback)
-    if hookfunction then
-        local dummy_rf = Instance.new("RemoteFunction")
-        local dummy_re = Instance.new("RemoteEvent")
-        
-        local old_inv
-        pcall(function()
-            old_inv = hookfunction(dummy_rf.InvokeServer, newcclosure(function(self, ...)
-                if self and typeof(self) == "Instance" and is_relevant_remote(self) then
-                    if not check_and_mark_call(self, "InvokeServer") then
-                        local caller = getcallingscript()
-                        local caller_name = caller and caller:GetFullName() or "Obfuscated / External"
-                        local args = {...}
-                        local arg_dump = {}
-                        for i, v in ipairs(args) do
-                            table.insert(arg_dump, string.format("  Arg #%d: %s", i, safe_serialize(v, 1, 3)))
-                        end
-                        local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
-                        local start_inv = os.clock()
-                        local ok, r1, r2, r3, r4 = pcall(old_inv, self, ...)
-                        local duration = (os.clock() - start_inv) * 1000
-
-                        if ok then
-                            local results = {r1, r2, r3, r4}
-                            local res_dump = {}
-                            for i, res in ipairs(results) do
-                                table.insert(res_dump, string.format("  Return #%d: %s", i, safe_serialize(res, 1, 3)))
-                            end
-                            local res_str = #res_dump > 0 and table.concat(res_dump, "\n") or "  (void/nil)"
-                            local detail = string.format("Caller: %s (Direct)\n[SENT ARGS]:\n%s\n[SERVER RESPONSE in %.1fms]:\n%s", 
-                                caller_name, arg_str, duration, res_str)
-                            record_log("OUT RF", self.Name, detail, Color3.fromRGB(56, 189, 248))
-                            return r1, r2, r3, r4
-                        else
-                            local detail = string.format("Caller: %s (Direct)\n[SENT ARGS]:\n%s\n[ERROR in %.1fms]:\n  %s", 
-                                caller_name, arg_str, duration, tostring(r1))
-                            record_log("OUT RF [ERR]", self.Name, detail, Color3.fromRGB(239, 68, 68))
-                            error(r1)
-                        end
-                    end
-                end
-                return old_inv(self, ...)
-            end))
-        end)
-
-        local old_fire
-        pcall(function()
-            old_fire = hookfunction(dummy_re.FireServer, newcclosure(function(self, ...)
-                if self and typeof(self) == "Instance" and is_relevant_remote(self) then
-                    if not check_and_mark_call(self, "FireServer") then
-                        local caller = getcallingscript()
-                        local caller_name = caller and caller:GetFullName() or "Obfuscated / External"
-                        local args = {...}
-                        local arg_dump = {}
-                        for i, v in ipairs(args) do
-                            table.insert(arg_dump, string.format("  Arg #%d: %s", i, safe_serialize(v, 1, 3)))
-                        end
-                        local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
-                        local detail = string.format("Caller: %s (Direct)\n[SENT ARGS]:\n%s", caller_name, arg_str)
-                        record_log("OUT RE", self.Name, detail, Color3.fromRGB(168, 85, 247))
-                    end
-                end
-                return old_fire(self, ...)
-            end))
-        end)
-    end
+        -- 100% UNTOUCHED ORIGINAL EXECUTION
+        return old_namecall(self, ...)
+    end))
 end
 
 ----------------------------------------------------------------------
--- 2. INCOMING EVENT SNIFFER (Server -> Client)
+-- 2. TARGETED INCOMING EVENT SNIFFER (Trade Events Only)
 ----------------------------------------------------------------------
-local hooked_listeners = {}
+local attached_events = {}
 
 local function attach_listener(rem)
-    if not rem or not rem:IsA("RemoteEvent") or hooked_listeners[rem] then return end
-    hooked_listeners[rem] = true
+    if not rem or not rem:IsA("RemoteEvent") or attached_events[rem] then return end
+    attached_events[rem] = true
 
     pcall(function()
         rem.OnClientEvent:Connect(function(...)
-            if not is_relevant_remote(rem) then return end
-
+            if not is_capturing then return end
             local args = {...}
-            local arg_dump = {}
-            for i, v in ipairs(args) do
-                table.insert(arg_dump, string.format("  Param #%d: %s", i, safe_serialize(v, 1, 3)))
-            end
-            local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
-            local detail = string.format("Path: %s\n[PAYLOAD RECEIVED]:\n%s", rem:GetFullName(), arg_str)
+            
+            task.spawn(function()
+                local arg_dump = {}
+                for i, v in ipairs(args) do
+                    table.insert(arg_dump, string.format("  Param #%d: %s", i, safe_serialize(v, 1, 3)))
+                end
+                local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
+                local detail = string.format("Path: %s\n[PAYLOAD RECEIVED]:\n%s", rem:GetFullName(), arg_str)
 
-            record_log("IN RE", rem.Name, detail, Color3.fromRGB(34, 197, 94))
+                record_log("IN RE", rem.Name, detail, Color3.fromRGB(34, 197, 94))
+            end)
         end)
     end)
 end
 
-local function setup_incoming_event_listeners()
-    for _, desc in ipairs(replicated_storage:GetDescendants()) do
-        if desc:IsA("RemoteEvent") then
-            attach_listener(desc)
+local function setup_trade_event_listeners()
+    -- Scan net folder specifically
+    local net_folder = nil
+    pcall(function()
+        local index = replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("_Index")
+        if index then
+            for _, child in ipairs(index:GetChildren()) do
+                if string.find(child.Name, "sleitnick_net", 1, true) then
+                    net_folder = child:FindFirstChild("net")
+                    if net_folder then break end
+                end
+            end
         end
-    end
-
-    replicated_storage.DescendantAdded:Connect(function(desc)
-        if desc:IsA("RemoteEvent") then
-            attach_listener(desc)
+        if not net_folder and replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("_Index") and replicated_storage.Packages._Index:FindFirstChild("sleitnick_net@0.2.0") then
+            net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"]:FindFirstChild("net")
         end
     end)
+
+    if net_folder then
+        for _, child in ipairs(net_folder:GetChildren()) do
+            if child:IsA("RemoteEvent") and is_trade_remote(child) then
+                attach_listener(child)
+            end
+        end
+        net_folder.ChildAdded:Connect(function(child)
+            if child:IsA("RemoteEvent") and is_trade_remote(child) then
+                attach_listener(child)
+            end
+        end)
+    end
 end
 
 ----------------------------------------------------------------------
--- 3. ATTRIBUTE & STATE MONITOR
+-- 3. LOCALPLAYER ATTRIBUTE MONITOR
 ----------------------------------------------------------------------
 local function setup_attribute_watchers()
     if not local_player then return end
     pcall(function()
         local_player.AttributeChanged:Connect(function(attr_name)
-            local val = local_player:GetAttribute(attr_name)
-            local detail = string.format("Attribute '%s' changed to: %s", attr_name, safe_serialize(val, 0, 2))
-            record_log("STATE ATTR", "LocalPlayer." .. attr_name, detail, Color3.fromRGB(234, 179, 8))
+            if string.find(string.lower(attr_name), "trade", 1, true) or attr_name == "IsTrading" then
+                local val = local_player:GetAttribute(attr_name)
+                local detail = string.format("Attribute '%s' = %s", attr_name, safe_serialize(val, 0, 2))
+                record_log("STATE ATTR", "LocalPlayer." .. attr_name, detail, Color3.fromRGB(234, 179, 8))
+            end
         end)
     end)
 end
 
 ----------------------------------------------------------------------
--- 4. UNIVERSAL DRAG HANDLER (Touch & Mouse)
+-- 4. UNIVERSAL DRAGGABLE GUI
 ----------------------------------------------------------------------
 local function make_draggable(frame, drag_handle)
     drag_handle = drag_handle or frame
@@ -398,9 +308,6 @@ local function make_draggable(frame, drag_handle)
     end)
 end
 
-----------------------------------------------------------------------
--- 5. GUI & LIVE DISPLAY
-----------------------------------------------------------------------
 local function build_spy_gui()
     local parent_gui = nil
     if gethui then pcall(function() parent_gui = gethui() end) end
@@ -425,8 +332,8 @@ local function build_spy_gui()
     -- Main Window
     local main = Instance.new("Frame")
     main.Name = "SpyWindow"
-    main.Size = UDim2.new(0, 560, 0, 390)
-    main.Position = UDim2.new(0.5, -280, 0.5, -195)
+    main.Size = UDim2.new(0, 520, 0, 360)
+    main.Position = UDim2.new(0.5, -260, 0.5, -180)
     main.BackgroundColor3 = Color3.fromRGB(16, 18, 24)
     main.BackgroundTransparency = 0
     main.BorderSizePixel = 2
@@ -436,7 +343,7 @@ local function build_spy_gui()
 
     -- Header
     local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 34)
+    header.Size = UDim2.new(1, 0, 0, 32)
     header.BackgroundColor3 = Color3.fromRGB(10, 12, 16)
     header.BackgroundTransparency = 0
     header.BorderSizePixel = 0
@@ -448,7 +355,7 @@ local function build_spy_gui()
     title.Size = UDim2.new(1, -45, 1, 0)
     title.Position = UDim2.new(0, 10, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "🕵️‍♂️ Fish It - Luraph Trade Spy & Behavior Sniffer"
+    title.Text = "🕵️‍♂️ Fish It - Passive Trade Spy (Non-Blocking)"
     title.TextColor3 = Color3.fromRGB(245, 245, 245)
     title.TextSize = 13
     title.Font = Enum.Font.SourceSansBold
@@ -456,8 +363,8 @@ local function build_spy_gui()
     title.Parent = header
 
     local close_btn = Instance.new("TextButton")
-    close_btn.Size = UDim2.new(0, 26, 0, 24)
-    close_btn.Position = UDim2.new(1, -32, 0, 5)
+    close_btn.Size = UDim2.new(0, 26, 0, 22)
+    close_btn.Position = UDim2.new(1, -30, 0, 5)
     close_btn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
     close_btn.BackgroundTransparency = 0
     close_btn.Text = "X"
@@ -470,12 +377,12 @@ local function build_spy_gui()
     -- Control Bar (Top)
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(1, -16, 0, 32)
-    bar.Position = UDim2.new(0, 8, 0, 38)
+    bar.Position = UDim2.new(0, 8, 0, 36)
     bar.BackgroundTransparency = 1
     bar.Parent = main
 
     local pause_btn = Instance.new("TextButton")
-    pause_btn.Size = UDim2.new(0.23, -3, 1, 0)
+    pause_btn.Size = UDim2.new(0.32, -4, 1, 0)
     pause_btn.Position = UDim2.new(0, 0, 0, 0)
     pause_btn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
     pause_btn.BackgroundTransparency = 0
@@ -485,20 +392,9 @@ local function build_spy_gui()
     pause_btn.Font = Enum.Font.SourceSansBold
     pause_btn.Parent = bar
 
-    local filter_btn = Instance.new("TextButton")
-    filter_btn.Size = UDim2.new(0.27, -3, 1, 0)
-    filter_btn.Position = UDim2.new(0.23, 3, 0, 0)
-    filter_btn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
-    filter_btn.BackgroundTransparency = 0
-    filter_btn.Text = "🎯 TRADE ONLY"
-    filter_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    filter_btn.TextSize = 11
-    filter_btn.Font = Enum.Font.SourceSansBold
-    filter_btn.Parent = bar
-
     local copy_btn = Instance.new("TextButton")
-    copy_btn.Size = UDim2.new(0.27, -3, 1, 0)
-    copy_btn.Position = UDim2.new(0.50, 3, 0, 0)
+    copy_btn.Size = UDim2.new(0.38, -4, 1, 0)
+    copy_btn.Position = UDim2.new(0.32, 4, 0, 0)
     copy_btn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
     copy_btn.BackgroundTransparency = 0
     copy_btn.Text = "📋 COPY LOGS"
@@ -508,8 +404,8 @@ local function build_spy_gui()
     copy_btn.Parent = bar
 
     local clear_btn = Instance.new("TextButton")
-    clear_btn.Size = UDim2.new(0.23, -3, 1, 0)
-    clear_btn.Position = UDim2.new(0.77, 3, 0, 0)
+    clear_btn.Size = UDim2.new(0.30, -4, 1, 0)
+    clear_btn.Position = UDim2.new(0.70, 4, 0, 0)
     clear_btn.BackgroundColor3 = Color3.fromRGB(75, 85, 99)
     clear_btn.BackgroundTransparency = 0
     clear_btn.Text = "🗑️ CLEAR"
@@ -520,8 +416,8 @@ local function build_spy_gui()
 
     -- Scroll Area
     local scroll = Instance.new("ScrollingFrame")
-    scroll.Size = UDim2.new(1, -16, 1, -78)
-    scroll.Position = UDim2.new(0, 8, 0, 74)
+    scroll.Size = UDim2.new(1, -16, 1, -76)
+    scroll.Position = UDim2.new(0, 8, 0, 72)
     scroll.BackgroundColor3 = Color3.fromRGB(10, 11, 15)
     scroll.BackgroundTransparency = 0
     scroll.BorderSizePixel = 1
@@ -548,7 +444,7 @@ local function build_spy_gui()
         if not scroll or not scroll.Parent then return end
 
         card_count = card_count + 1
-        if card_count > 150 then
+        if card_count > 120 then
             local first = scroll:FindFirstChildWhichIsA("Frame")
             if first then first:Destroy(); card_count = card_count - 1 end
         end
@@ -610,17 +506,6 @@ local function build_spy_gui()
         end
     end)
 
-    filter_btn.MouseButton1Click:Connect(function()
-        filter_trading_only = not filter_trading_only
-        if filter_trading_only then
-            filter_btn.Text = "🎯 TRADE ONLY"
-            filter_btn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
-        else
-            filter_btn.Text = "🌐 ALL REMOTES"
-            filter_btn.BackgroundColor3 = Color3.fromRGB(236, 72, 153)
-        end
-    end)
-
     copy_btn.MouseButton1Click:Connect(function()
         local all_lines = {
             "==================================================",
@@ -667,11 +552,11 @@ local function build_spy_gui()
         last_log_time = os.clock()
     end)
 
-    record_log("SYSTEM", "Spy Active", "Trade Spy is active & hooking remotes.\n1. Execute your Luraph script now.\n2. Initiate a trade with target player.\n3. Click 'COPY LOGS' to copy everything.", Color3.fromRGB(240, 240, 240))
+    record_log("SYSTEM", "Spy Active", "Passive Trade Spy aktif.\nSilakan jalankan script Luraph Anda dan lakukan trade.", Color3.fromRGB(240, 240, 240))
 end
 
--- Initialize Safely
-pcall(setup_network_hooks)
-pcall(setup_incoming_event_listeners)
+-- Start cleanly
+pcall(setup_passive_hook)
+pcall(setup_trade_event_listeners)
 pcall(setup_attribute_watchers)
 pcall(build_spy_gui)
