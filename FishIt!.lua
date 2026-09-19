@@ -387,19 +387,7 @@ local function truncate_string(str, max_len)
     return str
 end
 
-local function click_gui_button(btn)
-    if not btn then return end
-    pcall(function()
-        if firesignal then
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.Activated)
-        elseif getconnections then
-            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
-                conn:Fire()
-            end
-        end
-    end)
-end
+-- `click_gui_button` removed to prevent BAC-7195 (Anti-cheat detection on simulated clicks)
 
 -- Tiers & Game Data
 local tier_mapping = {
@@ -1049,14 +1037,12 @@ end
 
 local function decline_active_trade()
     pcall(function()
-        local pgui = local_player:FindFirstChild("PlayerGui")
-        local trade_ui = pgui and pgui:FindFirstChild("Trade")
-        if trade_ui then
-            for _, btn in ipairs(trade_ui:GetDescendants()) do
-                if btn:IsA("GuiButton") and (btn.Name == "Decline" or btn.Name == "Cancel" or btn.Name == "Close") then
-                    click_gui_button(btn)
-                end
-            end
+        -- Directly invoke remotes instead of clicking GUI buttons to avoid BAC-7195
+        if trade_remotes.DeclineTrade then
+            trade_remotes.DeclineTrade:InvokeServer()
+        end
+        if trade_remotes.CancelTrade then
+            trade_remotes.CancelTrade:InvokeServer()
         end
     end)
 end
