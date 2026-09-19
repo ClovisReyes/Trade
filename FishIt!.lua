@@ -15,6 +15,7 @@ local player_gui = cloneref(local_player:WaitForChild("PlayerGui"))
 local user_input_service = cloneref(game:GetService("UserInputService"))
 local tween_service = cloneref(game:GetService("TweenService"))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
+local http_service = cloneref(game:GetService("HttpService"))
 
 local variants_folder = replicated_storage:FindFirstChild("Variants")
 
@@ -100,6 +101,52 @@ local config = {
     selected_mutations     = { "All" },
     selected_items         = { "All" },
 }
+
+local CONFIG_FOLDER = "NoirHub"
+local CONFIG_FILE = "NoirHub/Trade_config.json"
+
+local function save_config()
+    pcall(function()
+        if not writefile then return end
+        if makefolder and isfolder then
+            if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+        end
+        local data = {
+            trade_with             = config.trade_with,
+            quantity               = config.quantity,
+            target_coin_amount     = config.target_coin_amount,
+            trade_favorited        = config.trade_favorited,
+            auto_accept_enabled    = config.auto_accept_enabled,
+            selected_fish          = config.selected_fish,
+            selected_tiers         = config.selected_tiers,
+            selected_mutations     = config.selected_mutations,
+            selected_items         = config.selected_items,
+        }
+        writefile(CONFIG_FILE, http_service:JSONEncode(data))
+    end)
+end
+
+local function load_config()
+    pcall(function()
+        if not isfile or not readfile then return end
+        if not isfile(CONFIG_FILE) then return end
+        local raw = readfile(CONFIG_FILE)
+        if not raw or raw == "" then return end
+        local data = http_service:JSONDecode(raw)
+        if type(data) ~= "table" then return end
+
+        if type(data.trade_with) == "string" then config.trade_with = data.trade_with end
+        if type(data.quantity) == "number" then config.quantity = data.quantity end
+        if type(data.target_coin_amount) == "number" then config.target_coin_amount = data.target_coin_amount end
+        if type(data.trade_favorited) == "boolean" then config.trade_favorited = data.trade_favorited end
+        if type(data.auto_accept_enabled) == "boolean" then config.auto_accept_enabled = data.auto_accept_enabled end
+        if type(data.selected_fish) == "table" and #data.selected_fish > 0 then config.selected_fish = data.selected_fish end
+        if type(data.selected_tiers) == "table" and #data.selected_tiers > 0 then config.selected_tiers = data.selected_tiers end
+        if type(data.selected_mutations) == "table" and #data.selected_mutations > 0 then config.selected_mutations = data.selected_mutations end
+        if type(data.selected_items) == "table" and #data.selected_items > 0 then config.selected_items = data.selected_items end
+    end)
+end
+pcall(load_config)
 
 cache = {
     is_trading_active   = false,
@@ -579,6 +626,7 @@ local function toggle_auto_accept(enable)
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
 
     config.auto_accept_enabled = enable
+    save_config()
     if not trade_remotes or not enable then return end
 
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
@@ -595,12 +643,19 @@ local function toggle_auto_accept(enable)
             if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
             pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
             local start_t = tick()
-            while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 45 do
+            while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 60 do
                 pcall(function()
                     trade_remotes.ConfirmTrade:InvokeServer()
                     trade_remotes.SetReady:InvokeServer(true)
                 end)
                 task_wait(0.08)
+            end
+            if local_player:GetAttribute("IsTrading") then
+                pcall(function()
+                    if trade_remotes and trade_remotes.CancelTrade then
+                        trade_remotes.CancelTrade:InvokeServer()
+                    end
+                end)
             end
             close_trading_gui()
         end)
@@ -690,15 +745,28 @@ end
 
 local function wait_for_trade_end(mode_name, chat_listener)
     local start_t = tick()
-    while local_player:GetAttribute("IsTrading") and tick() - start_t < 30 do
+    while local_player:GetAttribute("IsTrading") and tick() - start_t < 60 do
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.enabled then break end
         if chat_listener and chat_listener.is_completed() then break end
         pcall(function()
             if trade_remotes.SetReady then trade_remotes.SetReady:InvokeServer(true) end
             if trade_remotes.ConfirmTrade then trade_remotes.ConfirmTrade:InvokeServer() end
         end)
-        set_status_msg(mode_name, "Accepting & Confirming trade...")
+        local elapsed = math_floor(tick() - start_t)
+        set_status_msg(mode_name, string_format("Accepting & Confirming trade... (%ds/60s)", elapsed))
         task_wait(0.08)
+    end
+    if local_player:GetAttribute("IsTrading") and (not chat_listener or not chat_listener.is_completed()) then
+        pcall(function()
+            if trade_remotes and trade_remotes.CancelTrade then
+                trade_remotes.CancelTrade:InvokeServer()
+            end
+        end)
+        set_status_msg(mode_name, "Trade stuck (>60s), cancelled trade")
+        local cancel_start = tick()
+        while local_player:GetAttribute("IsTrading") and (tick() - cancel_start) < 4 do
+            task_wait(0.1)
+        end
     end
 end
 
@@ -852,7 +920,7 @@ local function execute_trade(mode)
         local chat_listener = listen_for_trade_completion(mark_success)
         pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
         wait_for_trade_end(mode, chat_listener)
-        if chat_listener.is_completed() or (not local_player:GetAttribute("IsTrading") and #added_items > 0) then mark_success() end
+        if chat_listener.is_completed() then mark_success() end
         chat_listener.disconnect()
         if not trade_success then
             s.failed = s.failed + 1
@@ -1269,6 +1337,7 @@ local function create_ui()
                         if idx then table_remove(selected_list, idx) else table_insert(selected_list, clean) end
                     end
                     callback(selected_list)
+                    save_config()
                     populate_drawer(scroll, options, selected_list, is_multi, callback, query)
                 end)
             end
@@ -1340,6 +1409,7 @@ local function create_ui()
             btn.MouseButton1Click:Connect(function()
                 config.trade_with = name
                 target_lbl.Text = name
+                save_config()
                 populate_players()
             end)
         end
@@ -1514,12 +1584,14 @@ local function create_ui()
         for _, t in pairs(fav_toggles) do t.set_state(active) end
         cache.loaded_fish = get_owned_options("Fish")
         cache.loaded_enchants = get_owned_options("Enchant")
+        save_config()
     end
 
     local qty_inputs = {}
     local function sync_qty(val)
         config.quantity = val
         for _, box in pairs(qty_inputs) do box.Text = tostring(val) end
+        save_config()
     end
 
     local function sync_modes(active_mode)
@@ -1698,8 +1770,10 @@ local function create_ui()
         local parsed = parse_coin_input(text)
         if parsed and parsed >= 0 then
             config.target_coin_amount = parsed
+            save_config()
         elseif text == "" then
             config.target_coin_amount = 0
+            save_config()
         end
     end)
     c_box.FocusLost:Connect(function()
@@ -1711,6 +1785,7 @@ local function create_ui()
         else
             c_box.Text = format_number(config.target_coin_amount or 0)
         end
+        save_config()
     end)
 
     local coin_check_btn = Instance.new("TextButton")
