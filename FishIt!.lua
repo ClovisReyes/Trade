@@ -53,30 +53,13 @@ local function get_net_lookup()
     if _net_lookup then return _net_lookup end
     _net_lookup = {}
     
-    -- 1. Ambil remote resmi yang digunakan game dari TradeData.Remotes
-    pcall(function()
-        local trade_data_mod = replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("Trading") and replicated_storage.Shared.Trading:FindFirstChild("TradeData")
-        if trade_data_mod then
-            local td = require(trade_data_mod)
-            if td and td.Remotes then
-                for k, v in pairs(td.Remotes) do
-                    _net_lookup[k] = v
-                end
-            end
+    local trade_data_mod = replicated_storage:WaitForChild("Shared"):WaitForChild("Trading"):WaitForChild("TradeData")
+    local td = require(trade_data_mod)
+    if td and td.Remotes then
+        for k, v in pairs(td.Remotes) do
+            _net_lookup[k] = v
         end
-    end)
-
-    -- 2. Fallback ke sleitnick_net jika ada yang belum terisi
-    pcall(function()
-        local net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"].net
-        for _, child in ipairs(net_folder:GetChildren()) do
-            for logical_name, pattern in pairs(remote_map) do
-                if not _net_lookup[logical_name] and string_find(child.Name, pattern, 1, true) then
-                    _net_lookup[logical_name] = child
-                end
-            end
-        end
-    end)
+    end
     return _net_lookup
 end
 
@@ -566,14 +549,7 @@ pcall(function()
                     -- Bypass GUI: Jangan pernah munculkan popup GUI di layar
                     if requester then
                         pcall(function()
-                            if trade_offer_controller.AcceptTrade then
-                                trade_offer_controller:AcceptTrade(requester)
-                            end
-                        end)
-                        pcall(function()
-                            if trade_remotes and trade_remotes.AcceptTradeOffer then
-                                trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
-                            end
+                            trade_offer_controller:AcceptTrade(requester)
                         end)
                     end
                     return -- Hentikan pembuatan popup UI di PlayerGui
@@ -599,22 +575,11 @@ end
 
 local auto_accept_active = false
 local function toggle_auto_accept(enable)
-    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
 
     config.auto_accept_enabled = enable
     if not trade_remotes or not enable then return end
-
-    auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
-        if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.auto_accept_enabled then return end
-        pcall(function()
-            if trade_offer_controller and trade_offer_controller.AcceptTrade then
-                trade_offer_controller:AcceptTrade(requester)
-            end
-        end)
-        pcall(function() trade_remotes.AcceptTradeOffer:InvokeServer(requester, true) end)
-    end)
 
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
@@ -693,9 +658,9 @@ local function start_trade_session(target_player, mode)
 
     if cache.last_failed_offer_time then
         local elapsed = tick() - cache.last_failed_offer_time
-        if elapsed < 15 then
-            set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 15 - elapsed) .. ")")
-            task_wait(15 - elapsed)
+        if elapsed < 10 then
+            set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 10 - elapsed) .. ")")
+            task_wait(10 - elapsed)
         end
         cache.last_failed_offer_time = nil
     end
