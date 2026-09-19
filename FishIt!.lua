@@ -1131,7 +1131,7 @@ local function wait_for_trade_end(mode, chat_listener)
 
             if is_your_ready and is_their_ready then
                 set_status_msg(mode, "Both players ready. Confirming trade...")
-                task_wait(0.3)
+                task_wait(3.5) -- Wait 3.5s to bypass server countdown checks (BAC-2195)
                 pcall(function()
                     trade_remotes.ConfirmTrade:InvokeServer()
                 end)
@@ -1259,14 +1259,14 @@ local function try_trade_fish()
                 add_success = true
                 break
             end
-            task_wait(0.04)
+            task_wait(0.2) -- Slow down AddItem to prevent BAC-2195 rate limit
         end
 
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
-        task_wait(0.03)
+        task_wait(0.1)
     end
 
     if #added_items > 0 and is_trade_active() then
@@ -1402,14 +1402,14 @@ local function try_trade_rarity()
                 add_success = true
                 break
             end
-            task_wait(0.04)
+            task_wait(0.2)
         end
 
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
-        task_wait(0.03)
+        task_wait(0.1)
     end
 
     if #added_items > 0 and is_trade_active() then
@@ -1544,14 +1544,14 @@ local function try_trade_enchant()
                 end
             end
             if add_success then break end
-            task_wait(0.04)
+            task_wait(0.2)
         end
 
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
-        task_wait(0.03)
+        task_wait(0.1)
     end
 
     if #added_items > 0 and is_trade_active() then
@@ -1669,14 +1669,14 @@ local function try_trade_coin()
                 end
             end
             if add_success then break end
-            task_wait(0.04)
+            task_wait(0.2)
         end
 
         if add_success then
             table_insert(cache.processed_trades, item.UUID)
             table_insert(added_items, item)
         end
-        task_wait(0.03)
+        task_wait(0.1)
     end
 
     if #added_items > 0 and is_trade_active() then
