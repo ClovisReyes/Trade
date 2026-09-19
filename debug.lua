@@ -1,17 +1,33 @@
 --[[
-    Fish It - 7-Point Environment & Data Structure Debugger
-    Script ini memeriksa ke-7 poin secara non-blocking (aman, tidak akan freeze/hang).
-    UI langsung muncul dengan tombol Copy dan Re-Dump.
+    ====================================================================================
+    🐟 FISH IT - ULTIMATE TRADE RUNTIME SPY & PACKET LOGGER 🕵️‍♂️ (BULLETPROOF EDITION)
+    ====================================================================================
+    Tujuan:
+    Membongkar dan menganalisis 100% alur kerja runtime dari script trade terenkripsi
+    (Luraph, IronBrew, Moonsec, Obfuscator lainnya) secara real-time tanpa error.
+
+    Fitur Unggulan:
+    1. 🔍 Dual-Layer Hooking (__namecall + hookfunction fallback):
+       - Menangkap pemanggilan method (`remote:InvokeServer(...)`) maupun index (`remote.InvokeServer(...)`).
+       - Mencegah double-logging otomatis dengan micro-timestamp deduplication.
+       - Menangkap durasi respon server (latency ms) dan return value dari RemoteFunction.
+    2. 📥 Incoming Event Sniffer:
+       - Mendengarkan seluruh event server (TradeStarted, TradeOfferReceived, TradeCompleted, dll).
+       - Auto-attach ke remote baru yang dibuat runtime via DescendantAdded.
+    3. 📱 CloudPhone / Mobile Touch & PC Drag Support:
+       - Dragging universal yang lancar di layar sentuh CloudPhone maupun mouse PC.
+    4. 🎛️ Live Filter & Control:
+       - Toggle filter: [🎯 TRADE ONLY] vs [🌐 ALL REMOTES].
+       - Pause / Resume recording.
+       - Auto Copy ke Clipboard & Auto Save ke file `fishit_trade_spy_dump.txt`.
+    ====================================================================================
 --]]
 
 local cloneref = cloneref or function(ref) return ref end
 local players = cloneref(game:GetService("Players"))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
+local run_service = cloneref(game:GetService("RunService"))
 local user_input_service = cloneref(game:GetService("UserInputService"))
-local tween_service = cloneref(game:GetService("TweenService"))
-
-local text_chat_service = nil
-pcall(function() text_chat_service = cloneref(game:GetService("TextChatService")) end)
 
 local local_player = players.LocalPlayer
 if not local_player then
@@ -20,34 +36,68 @@ if not local_player then
     end)
 end
 
-local logs = {}
-local function log(str)
-    table.insert(logs, tostring(str))
-end
+-- Storage & Timing
+local logs_list = {}
+local is_capturing = true
+local filter_trading_only = true
+local start_time = os.clock()
+local last_log_time = os.clock()
+local recent_calls = {}
 
+-- Safe Universal Serializer
 local function safe_serialize(val, indent, max_depth, seen)
     indent = indent or 0
-    max_depth = max_depth or 3
+    max_depth = max_depth or 4
     seen = seen or {}
     local spaces = string.rep("  ", indent)
+    
+    if val == nil then return "nil" end
+    local raw_t = type(val)
+    local luau_t = (typeof and typeof(val)) or raw_t
 
-    local vtype = type(val)
-    if vtype == "string" then
+    if raw_t == "string" then
         return string.format("%q", val)
-    elseif vtype == "number" or vtype == "boolean" or vtype == "nil" then
+    elseif raw_t == "number" or raw_t == "boolean" then
         return tostring(val)
-    elseif typeof and typeof(val) == "Instance" then
-        return string.format("<Instance: %s (%s)>", val.Name, val.ClassName)
-    elseif vtype == "table" then
+    elseif luau_t == "Instance" then
+        local name, cname = "Unknown", "Instance"
+        pcall(function() name = val.Name; cname = val.ClassName end)
+        return string.format("<Instance: %s (%s)>", name, cname)
+    elseif raw_t == "table" then
         if seen[val] then return "<Cycle Table>" end
         seen[val] = true
         if indent >= max_depth then return "{ ... }" end
 
         local lines = {}
         local count = 0
-        for k, v in pairs(val) do
+        local is_array = true
+        local max_idx = 0
+
+        for k, _ in pairs(val) do
             count = count + 1
-            if count > 40 then
+            if type(k) ~= "number" or k <= 0 or math.floor(k) ~= k then
+                is_array = false
+            else
+                if k > max_idx then max_idx = k end
+            end
+        end
+
+        if is_array and max_idx == count and count > 0 then
+            local items = {}
+            for i = 1, count do
+                if i > 25 then
+                    table.insert(items, "... (+" .. (count - 25) .. " items)")
+                    break
+                end
+                table.insert(items, safe_serialize(val[i], indent + 1, max_depth, seen))
+            end
+            return "[" .. table.concat(items, ", ") .. "]"
+        end
+
+        local c = 0
+        for k, v in pairs(val) do
+            c = c + 1
+            if c > 35 then
                 table.insert(lines, spaces .. "  ... (truncated)")
                 break
             end
@@ -58,457 +108,570 @@ local function safe_serialize(val, indent, max_depth, seen)
         if #lines == 0 then return "{}" end
         return "{\n" .. table.concat(lines, "\n") .. "\n" .. spaces .. "}"
     else
-        return string.format("<%s: %s>", vtype, tostring(val))
+        local str = tostring(val)
+        return string.format("<%s: %s>", luau_t, str)
     end
 end
 
-local function run_inspection()
-    logs = {}
-    log("==================================================")
-    log("       FISH IT 7-POINT COMPREHENSIVE DEBUG DUMP   ")
-    log("       Player: " .. (local_player and local_player.Name or "Unknown"))
-    log("       Time: " .. os.date("!%Y-%m-%d %H:%M:%SZ"))
-    log("==================================================\n")
+-- UI Callback forward declaration
+local add_log_entry = function(...) end
 
-    -- Setup Module Requires safely
-    local replion_mod = nil
-    pcall(function()
-        local replion_pkg = (replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("Replion"))
-            or replicated_storage:FindFirstChild("Replion", true)
-        if replion_pkg then
-            replion_mod = require(replion_pkg)
-        end
-    end)
+local function record_log(tag, remote_name, details, color)
+    if not is_capturing then return end
+    
+    local now = os.clock()
+    local delta_total = now - start_time
+    local delta_last = now - last_log_time
+    last_log_time = now
 
-    local player_data = nil
-    if replion_mod and replion_mod.Client then
-        pcall(function()
-            if replion_mod.Client.GetReplion then
-                player_data = replion_mod.Client:GetReplion("Data") or replion_mod.Client:GetReplion("PlayerData")
-            end
-            if not player_data and replion_mod.Client.Replions then
-                player_data = replion_mod.Client.Replions["Data"] or replion_mod.Client.Replions["PlayerData"]
-            end
-        end)
+    local time_str = string.format("[+%.3fs | Δ%.3fs]", delta_total, delta_last)
+    local full_entry = {
+        time_str = time_str,
+        tag = tag,
+        name = remote_name,
+        details = details,
+        color = color or Color3.fromRGB(220, 220, 220),
+        raw_text = string.format("%s [%s] %s\n%s\n", time_str, tag, remote_name, details)
+    }
+
+    table.insert(logs_list, full_entry)
+    if #logs_list > 1000 then
+        table.remove(logs_list, 1)
     end
 
-    local item_utility = nil
-    pcall(function()
-        local iu_pkg = (replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("ItemUtility"))
-            or replicated_storage:FindFirstChild("ItemUtility", true)
-        if iu_pkg then item_utility = require(iu_pkg) end
-    end)
+    add_log_entry(full_entry)
+end
 
-    local vendor_utility = nil
-    pcall(function()
-        local vu_pkg = (replicated_storage:FindFirstChild("Shared") and replicated_storage.Shared:FindFirstChild("VendorUtility"))
-            or replicated_storage:FindFirstChild("VendorUtility", true)
-        if vu_pkg then vendor_utility = require(vu_pkg) end
-    end)
+-- Filter check
+local function is_relevant_remote(instance)
+    if not instance or typeof(instance) ~= "Instance" then return false end
+    if not filter_trading_only then return true end
 
-    local inventory = nil
-    if player_data then
-        pcall(function() inventory = player_data:Get("Inventory") end)
-    end
-    local items = (inventory and inventory.Items) or {}
-    log(string.format("PlayerData Replion Found: %s | Total Bag Items: %d", tostring(player_data ~= nil), #items))
+    local name = instance.Name
+    local lname = string.lower(name)
+    local parent_name = instance.Parent and instance.Parent.Name or ""
 
-    -------------------------------------------------------
-    -- [POINT 1] HARGA JUAL KOIN IKAN (ItemUtility & VendorUtility)
-    -------------------------------------------------------
-    log("\n==================================================")
-    log("[POINT 1] HARGA JUAL KOIN IKAN (ItemUtility & VendorUtility)")
-    log("==================================================")
-    log("ItemUtility Available: " .. tostring(item_utility ~= nil))
-    log("VendorUtility Available: " .. tostring(vendor_utility ~= nil))
-    if vendor_utility then
-        log("VendorUtility Methods: " .. safe_serialize(vendor_utility, 1, 2))
+    if string.find(lname, "trade", 1, true) or 
+       string.find(lname, "item", 1, true) or 
+       string.find(lname, "inventory", 1, true) or
+       string.find(lname, "vendor", 1, true) or
+       string.find(lname, "replion", 1, true) or
+       string.find(parent_name, "net", 1, true) or
+       string.find(parent_name, "Trading", 1, true) then
+        return true
     end
 
-    local fish_tested = 0
-    for _, itm in ipairs(items) do
-        local data = item_utility and itm.Id and item_utility:GetItemData(itm.Id)
-        if data and data.Data and data.Data.Type == "Fish" then
-            fish_tested = fish_tested + 1
-            log(string.format("\n--- Sample Fish #%d: %s (UUID: %s) ---", fish_tested, tostring(data.Data.Name), tostring(itm.UUID)))
-            log("Inventory Item Data: " .. safe_serialize(itm, 1, 3))
-            log("ItemUtility:GetItemData(Id): " .. safe_serialize(data, 1, 3))
-            if vendor_utility then
-                local ok1, val1 = pcall(function() return vendor_utility:GetSellPrice(itm) end)
-                local ok2, val2 = pcall(function() return vendor_utility.GetSellPrice(itm) end)
-                local ok3, val3 = pcall(function() return vendor_utility:GetPrice(itm) end)
-                log(string.format("  vendor_utility:GetSellPrice(itm) => ok:%s, val:%s", tostring(ok1), tostring(val1)))
-                log(string.format("  vendor_utility.GetSellPrice(itm)  => ok:%s, val:%s", tostring(ok2), tostring(val2)))
-                log(string.format("  vendor_utility:GetPrice(itm)     => ok:%s, val:%s", tostring(ok3), tostring(val3)))
-            end
-            if fish_tested >= 3 then break end
-        end
-    end
-    if fish_tested == 0 then log("No fish found in bag to test price calculation.") end
+    return false
+end
 
-    -------------------------------------------------------
-    -- [POINT 2] REMOTES & KATEGORI AddItem
-    -------------------------------------------------------
-    log("\n==================================================")
-    log("[POINT 2] REMOTES & KATEGORI AddItem")
-    log("==================================================")
-    local net_folder = nil
-    pcall(function()
-        local index = replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("_Index")
-        if index then
-            for _, child in ipairs(index:GetChildren()) do
-                if string.find(child.Name, "sleitnick_net", 1, true) then
-                    net_folder = child:FindFirstChild("net")
-                    if net_folder then break end
+-- Deduplication key helper
+local function check_and_mark_call(remote_inst, method_name)
+    local now = os.clock()
+    local key = tostring(remote_inst) .. "_" .. tostring(method_name)
+    if recent_calls[key] and (now - recent_calls[key]) < 0.003 then
+        return true -- is duplicate
+    end
+    recent_calls[key] = now
+    return false
+end
+
+----------------------------------------------------------------------
+-- 1. DUAL-LAYER HOOKING (__namecall + hookfunction fallback)
+----------------------------------------------------------------------
+local function setup_network_hooks()
+    local newcclosure = newcclosure or function(f) return f end
+    local getnamecallmethod = getnamecallmethod or get_namecall_method
+    local getcallingscript = getcallingscript or function() return nil end
+
+    -- Layer A: hookmetamethod (__namecall)
+    if hookmetamethod then
+        local old_namecall
+        old_namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+
+            if self and typeof(self) == "Instance" then
+                local is_invoke = (method == "InvokeServer" and self:IsA("RemoteFunction"))
+                local is_fire = (method == "FireServer" and self:IsA("RemoteEvent"))
+
+                if (is_invoke or is_fire) and is_relevant_remote(self) then
+                    check_and_mark_call(self, method)
+                    local caller = getcallingscript()
+                    local caller_name = caller and caller:GetFullName() or "Obfuscated / External"
+                    
+                    local arg_dump = {}
+                    for i, v in ipairs(args) do
+                        table.insert(arg_dump, string.format("  Arg #%d: %s", i, safe_serialize(v, 1, 3)))
+                    end
+                    local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
+
+                    if is_invoke then
+                        local start_inv = os.clock()
+                        local ok, r1, r2, r3, r4 = pcall(old_namecall, self, ...)
+                        local duration = (os.clock() - start_inv) * 1000
+
+                        if ok then
+                            local results = {r1, r2, r3, r4}
+                            local res_dump = {}
+                            for i, res in ipairs(results) do
+                                table.insert(res_dump, string.format("  Return #%d: %s", i, safe_serialize(res, 1, 3)))
+                            end
+                            local res_str = #res_dump > 0 and table.concat(res_dump, "\n") or "  (void/nil)"
+                            local detail = string.format("Caller: %s\n[SENT ARGS]:\n%s\n[SERVER RESPONSE in %.1fms]:\n%s", 
+                                caller_name, arg_str, duration, res_str)
+
+                            record_log("OUT RF", self.Name, detail, Color3.fromRGB(56, 189, 248))
+                            return r1, r2, r3, r4
+                        else
+                            local detail = string.format("Caller: %s\n[SENT ARGS]:\n%s\n[ERROR in %.1fms]:\n  %s", 
+                                caller_name, arg_str, duration, tostring(r1))
+                            record_log("OUT RF [ERR]", self.Name, detail, Color3.fromRGB(239, 68, 68))
+                            error(r1)
+                        end
+                    else
+                        local detail = string.format("Caller: %s\n[SENT ARGS]:\n%s", caller_name, arg_str)
+                        record_log("OUT RE", self.Name, detail, Color3.fromRGB(168, 85, 247))
+                        return old_namecall(self, ...)
+                    end
                 end
             end
+
+            return old_namecall(self, ...)
+        end))
+    end
+
+    -- Layer B: hookfunction (Direct Indexing Calls Fallback)
+    if hookfunction then
+        local dummy_rf = Instance.new("RemoteFunction")
+        local dummy_re = Instance.new("RemoteEvent")
+        
+        local old_inv
+        pcall(function()
+            old_inv = hookfunction(dummy_rf.InvokeServer, newcclosure(function(self, ...)
+                if self and typeof(self) == "Instance" and is_relevant_remote(self) then
+                    if not check_and_mark_call(self, "InvokeServer") then
+                        local caller = getcallingscript()
+                        local caller_name = caller and caller:GetFullName() or "Obfuscated / External"
+                        local args = {...}
+                        local arg_dump = {}
+                        for i, v in ipairs(args) do
+                            table.insert(arg_dump, string.format("  Arg #%d: %s", i, safe_serialize(v, 1, 3)))
+                        end
+                        local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
+                        local start_inv = os.clock()
+                        local ok, r1, r2, r3, r4 = pcall(old_inv, self, ...)
+                        local duration = (os.clock() - start_inv) * 1000
+
+                        if ok then
+                            local results = {r1, r2, r3, r4}
+                            local res_dump = {}
+                            for i, res in ipairs(results) do
+                                table.insert(res_dump, string.format("  Return #%d: %s", i, safe_serialize(res, 1, 3)))
+                            end
+                            local res_str = #res_dump > 0 and table.concat(res_dump, "\n") or "  (void/nil)"
+                            local detail = string.format("Caller: %s (Direct)\n[SENT ARGS]:\n%s\n[SERVER RESPONSE in %.1fms]:\n%s", 
+                                caller_name, arg_str, duration, res_str)
+                            record_log("OUT RF", self.Name, detail, Color3.fromRGB(56, 189, 248))
+                            return r1, r2, r3, r4
+                        else
+                            local detail = string.format("Caller: %s (Direct)\n[SENT ARGS]:\n%s\n[ERROR in %.1fms]:\n  %s", 
+                                caller_name, arg_str, duration, tostring(r1))
+                            record_log("OUT RF [ERR]", self.Name, detail, Color3.fromRGB(239, 68, 68))
+                            error(r1)
+                        end
+                    end
+                end
+                return old_inv(self, ...)
+            end))
+        end)
+
+        local old_fire
+        pcall(function()
+            old_fire = hookfunction(dummy_re.FireServer, newcclosure(function(self, ...)
+                if self and typeof(self) == "Instance" and is_relevant_remote(self) then
+                    if not check_and_mark_call(self, "FireServer") then
+                        local caller = getcallingscript()
+                        local caller_name = caller and caller:GetFullName() or "Obfuscated / External"
+                        local args = {...}
+                        local arg_dump = {}
+                        for i, v in ipairs(args) do
+                            table.insert(arg_dump, string.format("  Arg #%d: %s", i, safe_serialize(v, 1, 3)))
+                        end
+                        local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
+                        local detail = string.format("Caller: %s (Direct)\n[SENT ARGS]:\n%s", caller_name, arg_str)
+                        record_log("OUT RE", self.Name, detail, Color3.fromRGB(168, 85, 247))
+                    end
+                end
+                return old_fire(self, ...)
+            end))
+        end)
+    end
+end
+
+----------------------------------------------------------------------
+-- 2. INCOMING EVENT SNIFFER (Server -> Client)
+----------------------------------------------------------------------
+local hooked_listeners = {}
+
+local function attach_listener(rem)
+    if not rem or not rem:IsA("RemoteEvent") or hooked_listeners[rem] then return end
+    hooked_listeners[rem] = true
+
+    pcall(function()
+        rem.OnClientEvent:Connect(function(...)
+            if not is_relevant_remote(rem) then return end
+
+            local args = {...}
+            local arg_dump = {}
+            for i, v in ipairs(args) do
+                table.insert(arg_dump, string.format("  Param #%d: %s", i, safe_serialize(v, 1, 3)))
+            end
+            local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
+            local detail = string.format("Path: %s\n[PAYLOAD RECEIVED]:\n%s", rem:GetFullName(), arg_str)
+
+            record_log("IN RE", rem.Name, detail, Color3.fromRGB(34, 197, 94))
+        end)
+    end)
+end
+
+local function setup_incoming_event_listeners()
+    for _, desc in ipairs(replicated_storage:GetDescendants()) do
+        if desc:IsA("RemoteEvent") then
+            attach_listener(desc)
         end
-        if not net_folder and replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("_Index") and replicated_storage.Packages._Index:FindFirstChild("sleitnick_net@0.2.0") then
-            net_folder = replicated_storage.Packages._Index["sleitnick_net@0.2.0"]:FindFirstChild("net")
+    end
+
+    replicated_storage.DescendantAdded:Connect(function(desc)
+        if desc:IsA("RemoteEvent") then
+            attach_listener(desc)
+        end
+    end)
+end
+
+----------------------------------------------------------------------
+-- 3. ATTRIBUTE & STATE MONITOR
+----------------------------------------------------------------------
+local function setup_attribute_watchers()
+    if not local_player then return end
+    pcall(function()
+        local_player.AttributeChanged:Connect(function(attr_name)
+            local val = local_player:GetAttribute(attr_name)
+            local detail = string.format("Attribute '%s' changed to: %s", attr_name, safe_serialize(val, 0, 2))
+            record_log("STATE ATTR", "LocalPlayer." .. attr_name, detail, Color3.fromRGB(234, 179, 8))
+        end)
+    end)
+end
+
+----------------------------------------------------------------------
+-- 4. UNIVERSAL DRAG HANDLER (Touch & Mouse)
+----------------------------------------------------------------------
+local function make_draggable(frame, drag_handle)
+    drag_handle = drag_handle or frame
+    local dragging = false
+    local drag_start = nil
+    local start_pos = nil
+
+    drag_handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            drag_start = input.Position
+            start_pos = frame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
         end
     end)
 
-    if net_folder then
-        log("Net Folder Path: " .. net_folder:GetFullName())
-        for _, child in ipairs(net_folder:GetChildren()) do
-            local lname = string.lower(child.Name)
-            if string.find(lname, "trade", 1, true) or string.find(child.Name, "AddItem", 1, true) or string.find(child.Name, "SetReady", 1, true) or string.find(child.Name, "Confirm", 1, true) then
-                log(string.format("  Remote: %s [%s]", child.Name, child.ClassName))
-            end
+    user_input_service.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - drag_start
+            frame.Position = UDim2.new(
+                start_pos.X.Scale,
+                start_pos.X.Offset + delta.X,
+                start_pos.Y.Scale,
+                start_pos.Y.Offset + delta.Y
+            )
         end
-    else
-        log("Net Folder: NOT FOUND")
-    end
-
-    -------------------------------------------------------
-    -- [POINT 3] METADATA MUTASI / VARIAN IKAN
-    -------------------------------------------------------
-    log("\n==================================================")
-    log("[POINT 3] METADATA MUTASI / VARIAN IKAN")
-    log("==================================================")
-    local variants_folder = replicated_storage:FindFirstChild("Variants")
-    if variants_folder then
-        log("Variants Folder Found with " .. #variants_folder:GetChildren() .. " variant modules:")
-        local var_names = {}
-        local sample_vars = {}
-        for idx, v in ipairs(variants_folder:GetChildren()) do
-            table.insert(var_names, v.Name)
-            if idx <= 3 and v:IsA("ModuleScript") then
-                local ok, d = pcall(require, v)
-                if ok then sample_vars[v.Name] = d end
-            end
-        end
-        log("All Variant Names: " .. table.concat(var_names, ", "))
-        log("Sample Variant Modules (First 3): " .. safe_serialize(sample_vars, 1, 3))
-    else
-        log("Variants Folder: NOT FOUND")
-    end
-
-    local tiers_mod = replicated_storage:FindFirstChild("Tiers")
-    if tiers_mod and tiers_mod:IsA("ModuleScript") then
-        local ok, data = pcall(require, tiers_mod)
-        log("Tiers Module: " .. (ok and safe_serialize(data, 1, 3) or "Error: " .. tostring(data)))
-    else
-        log("Tiers Module: NOT FOUND")
-    end
-
-    local metadata_keys = {}
-    for _, itm in ipairs(items) do
-        if itm.Metadata and type(itm.Metadata) == "table" then
-            for k, _ in pairs(itm.Metadata) do
-                metadata_keys[k] = (metadata_keys[k] or 0) + 1
-            end
-        end
-    end
-    log("All Metadata Keys in Current Bag Items: " .. safe_serialize(metadata_keys, 1, 2))
-
-    -------------------------------------------------------
-    -- [POINT 4] METADATA SHINY & BIG / GIANT / SPARKLING
-    -------------------------------------------------------
-    log("\n==================================================")
-    log("[POINT 4] METADATA SHINY & BIG / GIANT / SPARKLING")
-    log("==================================================")
-    local shiny_list = {}
-    local big_list = {}
-    for _, itm in ipairs(items) do
-        local is_s = itm.Shiny or (itm.Metadata and (itm.Metadata.Shiny or (itm.Metadata.VariantId and string.find(string.lower(tostring(itm.Metadata.VariantId)), "shiny"))))
-        local is_b = itm.Big or itm.Giant or (itm.Metadata and (itm.Metadata.Big or itm.Metadata.Giant or (itm.Metadata.VariantId and string.find(string.lower(tostring(itm.Metadata.VariantId)), "big"))))
-        if is_s and #shiny_list < 2 then table.insert(shiny_list, itm) end
-        if is_b and #big_list < 2 then table.insert(big_list, itm) end
-    end
-    log("Sample Shiny Items in Bag: " .. safe_serialize(shiny_list, 1, 3))
-    log("Sample Big/Giant Items in Bag: " .. safe_serialize(big_list, 1, 3))
-
-    -------------------------------------------------------
-    -- [POINT 5] TIPE ENCHANT STONES
-    -------------------------------------------------------
-    log("\n==================================================")
-    log("[POINT 5] TIPE ENCHANT STONES (Data.Type & Item Names)")
-    log("==================================================")
-    local enchant_list = {}
-    for _, itm in ipairs(items) do
-        local data = item_utility and itm.Id and item_utility:GetItemData(itm.Id)
-        if data and data.Data then
-            local name = tostring(data.Data.Name)
-            local itype = tostring(data.Data.Type)
-            if string.find(name, "Enchant") or string.find(itype, "Enchant") then
-                table.insert(enchant_list, {
-                    Id = itm.Id,
-                    UUID = itm.UUID,
-                    Name = name,
-                    Type = itype,
-                    Data = data.Data
-                })
-                if #enchant_list >= 3 then break end
-            end
-        end
-    end
-    log("Sample Enchant Stones in Bag: " .. safe_serialize(enchant_list, 1, 3))
-
-    -------------------------------------------------------
-    -- [POINT 6] TARGET PLAYER RESOLUTION (Username vs DisplayName)
-    -------------------------------------------------------
-    log("\n==================================================")
-    log("[POINT 6] TARGET PLAYER RESOLUTION (Players in Server)")
-    log("==================================================")
-    local ply_list = {}
-    for _, p in ipairs(players:GetPlayers()) do
-        table.insert(ply_list, {
-            Name = p.Name,
-            DisplayName = p.DisplayName,
-            UserId = p.UserId,
-            IsLocalPlayer = (p == local_player)
-        })
-    end
-    log("Players in Server: " .. safe_serialize(ply_list, 1, 3))
-
-    -------------------------------------------------------
-    -- [POINT 7] DETEKSI TRADE COMPLETION & CHAT / ATTRIBUTES
-    -------------------------------------------------------
-    log("\n==================================================")
-    log("[POINT 7] DETEKSI TRADE COMPLETION & CHAT / ATTRIBUTES")
-    log("==================================================")
-    log("LocalPlayer Attributes: " .. safe_serialize(local_player:GetAttributes(), 1, 2))
-    log("TextChatService Available: " .. tostring(text_chat_service ~= nil))
-    if text_chat_service then
-        local channels = text_chat_service:FindFirstChild("TextChannels")
-        if channels then
-            local ch_names = {}
-            for _, c in ipairs(channels:GetChildren()) do table.insert(ch_names, c.Name) end
-            log("TextChannels List: " .. table.concat(ch_names, ", "))
-        end
-    end
-    local legacy_chat = replicated_storage:FindFirstChild("DefaultChatSystemChatEvents")
-    log("Legacy Chat Events Available: " .. tostring(legacy_chat ~= nil))
-
-    log("\n==================================================")
-    log("               END OF 7-POINT DUMP                ")
-    log("==================================================")
-
-    return table.concat(logs, "\n")
+    end)
 end
 
--- UI CREATION
-local function create_ui()
-    local parent_gui = (gethui and pcall(gethui) and gethui()) or game:GetService("CoreGui") or local_player:WaitForChild("PlayerGui")
-    local old = parent_gui:FindFirstChild("FishIt_DebugDump")
-    if old then pcall(function() old:Destroy() end) end
+----------------------------------------------------------------------
+-- 5. GUI & LIVE DISPLAY
+----------------------------------------------------------------------
+local function build_spy_gui()
+    local parent_gui = nil
+    if gethui then pcall(function() parent_gui = gethui() end) end
+    if not parent_gui and game:GetService("CoreGui") then pcall(function() parent_gui = game:GetService("CoreGui") end) end
+    if not parent_gui and local_player then
+        parent_gui = local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 3)
+    end
+    if not parent_gui then return end
+
+    pcall(function()
+        for _, c in ipairs(parent_gui:GetChildren()) do
+            if c.Name == "FishIt_TradeSpy" then c:Destroy() end
+        end
+    end)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "FishIt_DebugDump"
+    gui.Name = "FishIt_TradeSpy"
     gui.ResetOnSpawn = false
     gui.DisplayOrder = 2147483647
     gui.Parent = parent_gui
 
-    -- Main Container Frame
-    local frame = Instance.new("Frame")
-    frame.Name = "MainFrame"
-    frame.Size = UDim2.new(0, 600, 0, 460)
-    frame.Position = UDim2.new(0.5, -300, 0.5, -230)
-    frame.BackgroundColor3 = Color3.fromRGB(20, 22, 26)
-    frame.BackgroundTransparency = 0
-    frame.BorderSizePixel = 0
-    frame.Active = true
-    frame.ZIndex = 10
-    frame.Parent = gui
+    -- Main Window
+    local main = Instance.new("Frame")
+    main.Name = "SpyWindow"
+    main.Size = UDim2.new(0, 560, 0, 390)
+    main.Position = UDim2.new(0.5, -280, 0.5, -195)
+    main.BackgroundColor3 = Color3.fromRGB(16, 18, 24)
+    main.BackgroundTransparency = 0
+    main.BorderSizePixel = 2
+    main.BorderColor3 = Color3.fromRGB(168, 85, 247)
+    main.Active = true
+    main.Parent = gui
 
-    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 8); corner.Parent = frame
-    local stroke = Instance.new("UIStroke"); stroke.Color = Color3.fromRGB(168, 85, 247); stroke.Thickness = 1.5; stroke.Parent = frame
-
-    -- Top Header Bar
+    -- Header
     local header = Instance.new("Frame")
-    header.Name = "Header"
     header.Size = UDim2.new(1, 0, 0, 34)
-    header.BackgroundColor3 = Color3.fromRGB(15, 16, 20)
+    header.BackgroundColor3 = Color3.fromRGB(10, 12, 16)
+    header.BackgroundTransparency = 0
     header.BorderSizePixel = 0
-    header.ZIndex = 11
-    header.Parent = frame
+    header.Parent = main
 
-    local h_corner = Instance.new("UICorner"); h_corner.CornerRadius = UDim.new(0, 8); h_corner.Parent = header
+    make_draggable(main, header)
 
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -100, 1, 0)
-    title.Position = UDim2.new(0, 12, 0, 0)
+    title.Size = UDim2.new(1, -45, 1, 0)
+    title.Position = UDim2.new(0, 10, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "Fish It 7-Point Environment & Data Debugger"
-    title.TextColor3 = Color3.fromRGB(240, 240, 240)
+    title.Text = "🕵️‍♂️ Fish It - Luraph Trade Spy & Behavior Sniffer"
+    title.TextColor3 = Color3.fromRGB(245, 245, 245)
     title.TextSize = 13
     title.Font = Enum.Font.SourceSansBold
     title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 12
     title.Parent = header
 
-    -- Header Dragging
-    local dragging, drag_start, start_pos
-    header.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; drag_start = input.Position; start_pos = frame.Position
-            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
-        end
-    end)
-    user_input_service.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - drag_start
-            frame.Position = UDim2.new(start_pos.X.Scale, start_pos.X.Offset + delta.X, start_pos.Y.Scale, start_pos.Y.Offset + delta.Y)
-        end
-    end)
-
-    -- Close Button
     local close_btn = Instance.new("TextButton")
-    close_btn.Size = UDim2.new(0, 26, 0, 26)
-    close_btn.Position = UDim2.new(1, -30, 0.5, -13)
-    close_btn.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
-    close_btn.Text = "✕"
+    close_btn.Size = UDim2.new(0, 26, 0, 24)
+    close_btn.Position = UDim2.new(1, -32, 0, 5)
+    close_btn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
+    close_btn.BackgroundTransparency = 0
+    close_btn.Text = "X"
     close_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     close_btn.TextSize = 12
     close_btn.Font = Enum.Font.SourceSansBold
-    close_btn.ZIndex = 12
     close_btn.Parent = header
-    local cb_corner = Instance.new("UICorner"); cb_corner.CornerRadius = UDim.new(0, 4); cb_corner.Parent = close_btn
     close_btn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
-    -- Scrolling Frame for Output
-    local scroll = Instance.new("ScrollingFrame")
-    scroll.Name = "OutputScroll"
-    scroll.Size = UDim2.new(1, -20, 1, -90)
-    scroll.Position = UDim2.new(0, 10, 0, 42)
-    scroll.BackgroundColor3 = Color3.fromRGB(12, 13, 16)
-    scroll.BorderSizePixel = 0
-    scroll.ScrollBarThickness = 6
-    scroll.ScrollBarImageColor3 = Color3.fromRGB(168, 85, 247)
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    scroll.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y
-    scroll.ZIndex = 11
-    scroll.Parent = frame
+    -- Control Bar (Top)
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, -16, 0, 32)
+    bar.Position = UDim2.new(0, 8, 0, 38)
+    bar.BackgroundTransparency = 1
+    bar.Parent = main
 
-    local s_corner = Instance.new("UICorner"); s_corner.CornerRadius = UDim.new(0, 6); s_corner.Parent = scroll
-    local s_stroke = Instance.new("UIStroke"); s_stroke.Color = Color3.fromRGB(45, 48, 55); s_stroke.Thickness = 1; s_stroke.Parent = scroll
+    local pause_btn = Instance.new("TextButton")
+    pause_btn.Size = UDim2.new(0.23, -3, 1, 0)
+    pause_btn.Position = UDim2.new(0, 0, 0, 0)
+    pause_btn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+    pause_btn.BackgroundTransparency = 0
+    pause_btn.Text = "🟢 REC"
+    pause_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    pause_btn.TextSize = 11
+    pause_btn.Font = Enum.Font.SourceSansBold
+    pause_btn.Parent = bar
 
-    local text_box = Instance.new("TextBox")
-    text_box.Name = "OutputTextBox"
-    text_box.Size = UDim2.new(1, -16, 1, -16)
-    text_box.Position = UDim2.new(0, 8, 0, 8)
-    text_box.BackgroundTransparency = 1
-    text_box.TextColor3 = Color3.fromRGB(220, 225, 235)
-    text_box.TextSize = 11
-    text_box.Font = Enum.Font.Code
-    text_box.TextXAlignment = Enum.TextXAlignment.Left
-    text_box.TextYAlignment = Enum.TextYAlignment.Top
-    text_box.ClearTextOnFocus = false
-    text_box.TextEditable = false
-    text_box.MultiLine = true
-    text_box.TextWrapped = false
-    text_box.AutomaticSize = Enum.AutomaticSize.XY
-    text_box.Text = "Please wait, scanning game data..."
-    text_box.ZIndex = 12
-    text_box.Parent = scroll
-
-    -- Bottom Button Bar
-    local btn_container = Instance.new("Frame")
-    btn_container.Name = "ButtonContainer"
-    btn_container.Size = UDim2.new(1, -20, 0, 36)
-    btn_container.Position = UDim2.new(0, 10, 1, -42)
-    btn_container.BackgroundTransparency = 1
-    btn_container.ZIndex = 11
-    btn_container.Parent = frame
+    local filter_btn = Instance.new("TextButton")
+    filter_btn.Size = UDim2.new(0.27, -3, 1, 0)
+    filter_btn.Position = UDim2.new(0.23, 3, 0, 0)
+    filter_btn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
+    filter_btn.BackgroundTransparency = 0
+    filter_btn.Text = "🎯 TRADE ONLY"
+    filter_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    filter_btn.TextSize = 11
+    filter_btn.Font = Enum.Font.SourceSansBold
+    filter_btn.Parent = bar
 
     local copy_btn = Instance.new("TextButton")
-    copy_btn.Name = "CopyButton"
-    copy_btn.Size = UDim2.new(0.68, -6, 1, 0)
-    copy_btn.Position = UDim2.new(0, 0, 0, 0)
-    copy_btn.BackgroundColor3 = Color3.fromRGB(168, 85, 247)
-    copy_btn.Text = "📋 Copy Output to Clipboard"
+    copy_btn.Size = UDim2.new(0.27, -3, 1, 0)
+    copy_btn.Position = UDim2.new(0.50, 3, 0, 0)
+    copy_btn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
+    copy_btn.BackgroundTransparency = 0
+    copy_btn.Text = "📋 COPY LOGS"
     copy_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    copy_btn.TextSize = 13
+    copy_btn.TextSize = 11
     copy_btn.Font = Enum.Font.SourceSansBold
-    copy_btn.ZIndex = 12
-    copy_btn.Parent = btn_container
-    local cp_corner = Instance.new("UICorner"); cp_corner.CornerRadius = UDim.new(0, 6); cp_corner.Parent = copy_btn
+    copy_btn.Parent = bar
 
-    local refresh_btn = Instance.new("TextButton")
-    refresh_btn.Name = "RefreshButton"
-    refresh_btn.Size = UDim2.new(0.32, -6, 1, 0)
-    refresh_btn.Position = UDim2.new(0.68, 6, 0, 0)
-    refresh_btn.BackgroundColor3 = Color3.fromRGB(45, 50, 60)
-    refresh_btn.Text = "🔄 Re-Dump"
-    refresh_btn.TextColor3 = Color3.fromRGB(230, 235, 245)
-    refresh_btn.TextSize = 13
-    refresh_btn.Font = Enum.Font.SourceSansBold
-    refresh_btn.ZIndex = 12
-    refresh_btn.Parent = btn_container
-    local rf_corner = Instance.new("UICorner"); rf_corner.CornerRadius = UDim.new(0, 6); rf_corner.Parent = refresh_btn
+    local clear_btn = Instance.new("TextButton")
+    clear_btn.Size = UDim2.new(0.23, -3, 1, 0)
+    clear_btn.Position = UDim2.new(0.77, 3, 0, 0)
+    clear_btn.BackgroundColor3 = Color3.fromRGB(75, 85, 99)
+    clear_btn.BackgroundTransparency = 0
+    clear_btn.Text = "🗑️ CLEAR"
+    clear_btn.TextColor3 = Color3.fromRGB(240, 240, 240)
+    clear_btn.TextSize = 11
+    clear_btn.Font = Enum.Font.SourceSansBold
+    clear_btn.Parent = bar
 
-    local current_output = ""
-    local is_dumping = false
+    -- Scroll Area
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size = UDim2.new(1, -16, 1, -78)
+    scroll.Position = UDim2.new(0, 8, 0, 74)
+    scroll.BackgroundColor3 = Color3.fromRGB(10, 11, 15)
+    scroll.BackgroundTransparency = 0
+    scroll.BorderSizePixel = 1
+    scroll.BorderColor3 = Color3.fromRGB(30, 35, 45)
+    scroll.ScrollBarThickness = 5
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scroll.Parent = main
 
-    local function execute_dump()
-        if is_dumping then return end
-        is_dumping = true
-        text_box.Text = "Scanning all 7 points in environment & inventory..."
-        copy_btn.Text = "⏳ Scanning data..."
-        task.wait(0.1)
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 3)
+    layout.Parent = scroll
 
-        task.spawn(function()
-            local success, result = pcall(run_inspection)
-            if success and result then
-                current_output = result
-                text_box.Text = current_output
-                copy_btn.Text = "📋 Copy Output to Clipboard"
-                -- Auto copy immediately for convenience
-                if setclipboard then pcall(setclipboard, current_output) end
-            else
-                current_output = "Error during inspection: " .. tostring(result)
-                text_box.Text = current_output
-                copy_btn.Text = "⚠️ Error - Click to Retry"
-            end
-            is_dumping = false
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 4)
+    padding.PaddingBottom = UDim.new(0, 4)
+    padding.PaddingLeft = UDim.new(0, 4)
+    padding.PaddingRight = UDim.new(0, 4)
+    padding.Parent = scroll
+
+    local card_count = 0
+    add_log_entry = function(entry)
+        if not scroll or not scroll.Parent then return end
+
+        card_count = card_count + 1
+        if card_count > 150 then
+            local first = scroll:FindFirstChildWhichIsA("Frame")
+            if first then first:Destroy(); card_count = card_count - 1 end
+        end
+
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(1, -4, 0, 0)
+        card.AutomaticSize = Enum.AutomaticSize.Y
+        card.BackgroundColor3 = Color3.fromRGB(18, 21, 28)
+        card.BackgroundTransparency = 0
+        card.BorderSizePixel = 1
+        card.BorderColor3 = Color3.fromRGB(35, 40, 52)
+        card.Parent = scroll
+
+        local card_pad = Instance.new("UIPadding")
+        card_pad.PaddingTop = UDim.new(0, 3)
+        card_pad.PaddingBottom = UDim.new(0, 3)
+        card_pad.PaddingLeft = UDim.new(0, 5)
+        card_pad.PaddingRight = UDim.new(0, 5)
+        card_pad.Parent = card
+
+        local header_txt = Instance.new("TextLabel")
+        header_txt.Size = UDim2.new(1, 0, 0, 16)
+        header_txt.BackgroundTransparency = 1
+        header_txt.Font = Enum.Font.SourceSansBold
+        header_txt.TextSize = 11
+        header_txt.TextXAlignment = Enum.TextXAlignment.Left
+        header_txt.TextColor3 = entry.color
+        header_txt.Text = string.format("%s [%s] %s", entry.time_str, entry.tag, entry.name)
+        header_txt.Parent = card
+
+        local body_txt = Instance.new("TextLabel")
+        body_txt.Size = UDim2.new(1, 0, 0, 0)
+        body_txt.Position = UDim2.new(0, 0, 0, 16)
+        body_txt.AutomaticSize = Enum.AutomaticSize.Y
+        body_txt.BackgroundTransparency = 1
+        body_txt.Font = Enum.Font.Code
+        body_txt.TextSize = 10
+        body_txt.TextXAlignment = Enum.TextXAlignment.Left
+        body_txt.TextYAlignment = Enum.TextYAlignment.Top
+        body_txt.TextColor3 = Color3.fromRGB(205, 210, 220)
+        body_txt.TextWrapped = true
+        body_txt.Text = entry.details
+        body_txt.Parent = card
+
+        task.defer(function()
+            scroll.CanvasPosition = Vector2.new(0, 999999)
         end)
     end
 
-    copy_btn.MouseButton1Click:Connect(function()
-        if current_output == "" or is_dumping then return end
-        if setclipboard then
-            pcall(setclipboard, current_output)
-            copy_btn.Text = "✅ Copied to Clipboard!"
-        elseif toclipboard then
-            pcall(toclipboard, current_output)
-            copy_btn.Text = "✅ Copied to Clipboard!"
+    -- Button handlers
+    pause_btn.MouseButton1Click:Connect(function()
+        is_capturing = not is_capturing
+        if is_capturing then
+            pause_btn.Text = "🟢 REC"
+            pause_btn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
         else
-            copy_btn.Text = "⚠️ setclipboard not available"
+            pause_btn.Text = "⏸️ PAUSE"
+            pause_btn.BackgroundColor3 = Color3.fromRGB(234, 179, 8)
         end
-        task.delay(2.5, function()
+    end)
+
+    filter_btn.MouseButton1Click:Connect(function()
+        filter_trading_only = not filter_trading_only
+        if filter_trading_only then
+            filter_btn.Text = "🎯 TRADE ONLY"
+            filter_btn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
+        else
+            filter_btn.Text = "🌐 ALL REMOTES"
+            filter_btn.BackgroundColor3 = Color3.fromRGB(236, 72, 153)
+        end
+    end)
+
+    copy_btn.MouseButton1Click:Connect(function()
+        local all_lines = {
+            "==================================================",
+            "       FISH IT TRADE BEHAVIOR CAPTURE LOG",
+            "       Total Events Recorded: " .. #logs_list,
+            "==================================================\n"
+        }
+        for _, entry in ipairs(logs_list) do
+            table.insert(all_lines, entry.raw_text)
+            table.insert(all_lines, "--------------------------------------------------")
+        end
+        local full_text = table.concat(all_lines, "\n")
+        
+        local success = false
+        pcall(function()
+            if setclipboard then setclipboard(full_text); success = true end
+            if not success and toclipboard then toclipboard(full_text); success = true end
+        end)
+        pcall(function()
+            if writefile then writefile("fishit_trade_spy_dump.txt", full_text) end
+        end)
+
+        if success then
+            copy_btn.Text = "✅ COPIED!"
+            copy_btn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+        else
+            copy_btn.Text = "⚠️ FAILED (SAVED FILE)"
+        end
+        task.delay(2, function()
             if copy_btn and copy_btn.Parent then
-                copy_btn.Text = "📋 Copy Output to Clipboard"
+                copy_btn.Text = "📋 COPY LOGS"
+                copy_btn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
             end
         end)
     end)
 
-    refresh_btn.MouseButton1Click:Connect(function()
-        execute_dump()
+    clear_btn.MouseButton1Click:Connect(function()
+        logs_list = {}
+        card_count = 0
+        for _, child in ipairs(scroll:GetChildren()) do
+            if child:IsA("Frame") then child:Destroy() end
+        end
+        start_time = os.clock()
+        last_log_time = os.clock()
     end)
 
-    -- Run initial dump asynchronously
-    task.spawn(execute_dump)
+    record_log("SYSTEM", "Spy Active", "Trade Spy is active & hooking remotes.\n1. Execute your Luraph script now.\n2. Initiate a trade with target player.\n3. Click 'COPY LOGS' to copy everything.", Color3.fromRGB(240, 240, 240))
 end
 
-pcall(create_ui)
+-- Initialize Safely
+pcall(setup_network_hooks)
+pcall(setup_incoming_event_listeners)
+pcall(setup_attribute_watchers)
+pcall(build_spy_gui)
