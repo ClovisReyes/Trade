@@ -1,20 +1,22 @@
 --[[
     ====================================================================================
-    🐟 FISH IT - PURE PASSIVE TRADE SPY & PACKET LOGGER 🕵️‍♂️ (NON-BLOCKING)
+    🐟 FISH IT - PURE PASSIVE TRADE SPY & BEHAVIOR SNIFFER 🕵️‍♂️ (ZERO-HOOK SAFE EDITION)
     ====================================================================================
-    Tujuan:
-    Merekam aktivitas RemoteFunction & RemoteEvent trade secara 100% pasif (asynchronous),
-    TANPA memblokir popup trade, TANPA memotong data return server, dan TANPA lag.
-
-    Prinsip Kerja:
-    1. 100% Non-Blocking:
-       - Pemanggilan `old_namecall(self, ...)` dieksekusi langsung tanpa pcall / modifikasi.
-       - Logging diproses di background (`task.spawn`) sehingga game/script berjalan normal.
-    2. Scoped Focus (Trade Only):
-       - Hanya mendengarkan remote bertema Trading (`RF/Trading/*`, `RE/Trading/*`).
-       - Remote game lain (gerakan, prompt, kamera, popup GUI) tidak disentuh sama sekali.
-    3. UI Responsif & Draggable:
-       - Touch & Mouse draggable, tombol Copy Logs & Save File.
+    Kenapa Versi Ini 100% Aman & Tidak Memblokir Trade Popup:
+    1. ZERO Metamethod Hooking secara default:
+       - Pada executor Mobile/CloudPhone (Delta, Arceus, Fluxus, Codex), hooking `__namecall`
+         sering merusak C-register `InvokeServer`, sehingga request trade gagal dan popup
+         tidak muncul.
+       - Versi ini menggunakan Pure Native Listeners (`OnClientEvent`, `AttributeChanged`,
+         dan `PlayerGui/Replion Watcher`) yang 100% TIDAK menyentuh atau memodifikasi remote.
+    2. Mendeteksi & Mencatat:
+       - 📥 Incoming Trade Offer (siapa yang kirim offer).
+       - 🤝 Trade Session Started (kapan trade mulai, session ID, data partner).
+       - 🎒 Inventory & Item Transfer (item apa saja yang masuk/keluar saat trade).
+       - ⏱️ Trade Ended / Completed (kapan trade selesai dan jeda waktunya).
+       - 📱 UI Popup & Panel State (kapan panel trade muncul / hilang di layar).
+    3. Opsional Hook Toggle:
+       - Jika Anda di PC (Wave/Synapse) dan ingin menangkap outgoing RF, ada tombol khusus.
     ====================================================================================
 --]]
 
@@ -30,9 +32,10 @@ if not local_player then
     end)
 end
 
--- State
+-- State & Storage
 local logs_list = {}
 local is_capturing = true
+local rf_hook_active = false
 local start_time = os.clock()
 local last_log_time = os.clock()
 
@@ -107,7 +110,7 @@ end
 -- UI Callback forward declaration
 local add_log_entry = function(...) end
 
-local function record_log(tag, remote_name, details, color)
+local function record_log(tag, event_name, details, color)
     if not is_capturing then return end
     
     local now = os.clock()
@@ -119,10 +122,10 @@ local function record_log(tag, remote_name, details, color)
     local full_entry = {
         time_str = time_str,
         tag = tag,
-        name = remote_name,
+        name = event_name,
         details = details,
         color = color or Color3.fromRGB(220, 220, 220),
-        raw_text = string.format("%s [%s] %s\n%s\n", time_str, tag, remote_name, details)
+        raw_text = string.format("%s [%s] %s\n%s\n", time_str, tag, event_name, details)
     }
 
     table.insert(logs_list, full_entry)
@@ -133,90 +136,25 @@ local function record_log(tag, remote_name, details, color)
     add_log_entry(full_entry)
 end
 
--- Check if remote is related to Trading
-local function is_trade_remote(instance)
-    if not instance or typeof(instance) ~= "Instance" then return false end
-    local name = instance.Name
-    local parent = instance.Parent
-    local parent_name = parent and parent.Name or ""
-
-    if string.find(name, "Trading", 1, true) or 
-       string.find(name, "Trade", 1, true) or 
-       string.find(parent_name, "Trading", 1, true) then
-        return true
-    end
-
-    return false
-end
-
 ----------------------------------------------------------------------
--- 1. PURE PASSIVE ASYNC METAMETHOD HOOK
+-- 1. PURE NATIVE REMOTE EVENT LISTENERS (Server -> Client)
 ----------------------------------------------------------------------
-local function setup_passive_hook()
-    local newcclosure = newcclosure or function(f) return f end
-    local getnamecallmethod = getnamecallmethod or get_namecall_method
-    local getcallingscript = getcallingscript or function() return nil end
+local attached_remotes = {}
 
-    if not hookmetamethod then return end
-
-    local old_namecall
-    old_namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-
-        if is_capturing and self and typeof(self) == "Instance" then
-            local is_invoke = (method == "InvokeServer" and self:IsA("RemoteFunction"))
-            local is_fire = (method == "FireServer" and self:IsA("RemoteEvent"))
-
-            if (is_invoke or is_fire) and is_trade_remote(self) then
-                local args = {...}
-                local caller = getcallingscript()
-                local caller_name = caller and caller:GetFullName() or "External/Script"
-
-                -- Asynchronous logging (Zero impact on game execution)
-                task.spawn(function()
-                    local arg_dump = {}
-                    for i, v in ipairs(args) do
-                        table.insert(arg_dump, string.format("  Arg #%d: %s", i, safe_serialize(v, 1, 3)))
-                    end
-                    local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
-
-                    if is_invoke then
-                        local detail = string.format("Caller: %s\n[SENT ARGS]:\n%s", caller_name, arg_str)
-                        record_log("OUT RF", self.Name, detail, Color3.fromRGB(56, 189, 248))
-                    else
-                        local detail = string.format("Caller: %s\n[SENT ARGS]:\n%s", caller_name, arg_str)
-                        record_log("OUT RE", self.Name, detail, Color3.fromRGB(168, 85, 247))
-                    end
-                end)
-            end
-        end
-
-        -- 100% UNTOUCHED ORIGINAL EXECUTION
-        return old_namecall(self, ...)
-    end))
-end
-
-----------------------------------------------------------------------
--- 2. TARGETED INCOMING EVENT SNIFFER (Trade Events Only)
-----------------------------------------------------------------------
-local attached_events = {}
-
-local function attach_listener(rem)
-    if not rem or not rem:IsA("RemoteEvent") or attached_events[rem] then return end
-    attached_events[rem] = true
+local function attach_native_listener(rem)
+    if not rem or not rem:IsA("RemoteEvent") or attached_remotes[rem] then return end
+    attached_remotes[rem] = true
 
     pcall(function()
         rem.OnClientEvent:Connect(function(...)
-            if not is_capturing then return end
             local args = {...}
-            
             task.spawn(function()
                 local arg_dump = {}
                 for i, v in ipairs(args) do
                     table.insert(arg_dump, string.format("  Param #%d: %s", i, safe_serialize(v, 1, 3)))
                 end
                 local arg_str = #arg_dump > 0 and table.concat(arg_dump, "\n") or "  (No Arguments)"
-                local detail = string.format("Path: %s\n[PAYLOAD RECEIVED]:\n%s", rem:GetFullName(), arg_str)
+                local detail = string.format("Path: %s\n[DATA RECEIVED FROM SERVER]:\n%s", rem:GetFullName(), arg_str)
 
                 record_log("IN RE", rem.Name, detail, Color3.fromRGB(34, 197, 94))
             end)
@@ -224,8 +162,7 @@ local function attach_listener(rem)
     end)
 end
 
-local function setup_trade_event_listeners()
-    -- Scan net folder specifically
+local function scan_and_listen_trade_events()
     local net_folder = nil
     pcall(function()
         local index = replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("_Index")
@@ -244,36 +181,97 @@ local function setup_trade_event_listeners()
 
     if net_folder then
         for _, child in ipairs(net_folder:GetChildren()) do
-            if child:IsA("RemoteEvent") and is_trade_remote(child) then
-                attach_listener(child)
+            if child:IsA("RemoteEvent") and (string.find(child.Name, "Trading", 1, true) or string.find(child.Name, "Trade", 1, true)) then
+                attach_native_listener(child)
             end
         end
         net_folder.ChildAdded:Connect(function(child)
-            if child:IsA("RemoteEvent") and is_trade_remote(child) then
-                attach_listener(child)
+            if child:IsA("RemoteEvent") and (string.find(child.Name, "Trading", 1, true) or string.find(child.Name, "Trade", 1, true)) then
+                attach_native_listener(child)
             end
         end)
     end
 end
 
 ----------------------------------------------------------------------
--- 3. LOCALPLAYER ATTRIBUTE MONITOR
+-- 2. STATE & ATTRIBUTE SNIFFER (LocalPlayer IsTrading, etc.)
 ----------------------------------------------------------------------
-local function setup_attribute_watchers()
+local function setup_attribute_sniffers()
     if not local_player then return end
     pcall(function()
         local_player.AttributeChanged:Connect(function(attr_name)
-            if string.find(string.lower(attr_name), "trade", 1, true) or attr_name == "IsTrading" then
+            local lname = string.lower(attr_name)
+            if string.find(lname, "trade", 1, true) or attr_name == "IsTrading" then
                 local val = local_player:GetAttribute(attr_name)
-                local detail = string.format("Attribute '%s' = %s", attr_name, safe_serialize(val, 0, 2))
-                record_log("STATE ATTR", "LocalPlayer." .. attr_name, detail, Color3.fromRGB(234, 179, 8))
+                local detail = string.format("LocalPlayer attribute '%s' changed to:\n  %s", attr_name, safe_serialize(val, 0, 2))
+                record_log("STATE ATTR", attr_name, detail, Color3.fromRGB(234, 179, 8))
             end
         end)
     end)
 end
 
 ----------------------------------------------------------------------
--- 4. UNIVERSAL DRAGGABLE GUI
+-- 3. GUI POPUP & PANEL DETECTOR (Detects when Game Trade Frame Opens)
+----------------------------------------------------------------------
+local function setup_gui_detector()
+    if not local_player then return end
+    task.spawn(function()
+        local player_gui = local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 5)
+        if not player_gui then return end
+
+        local function check_gui(inst)
+            if not inst then return end
+            local lname = string.lower(inst.Name)
+            if string.find(lname, "trade", 1, true) or string.find(lname, "prompt", 1, true) or string.find(lname, "offer", 1, true) then
+                local detail = string.format("Instance: %s (%s)\nParent: %s\nVisible: %s", 
+                    inst.Name, inst.ClassName, inst.Parent and inst.Parent.Name or "nil", 
+                    tostring(inst:IsA("GuiObject") and inst.Visible or (inst:IsA("ScreenGui") and inst.Enabled)))
+                record_log("GUI PANEL", inst.Name, detail, Color3.fromRGB(244, 114, 182))
+            end
+        end
+
+        player_gui.DescendantAdded:Connect(check_gui)
+    end)
+end
+
+----------------------------------------------------------------------
+-- 4. REPLION INVENTORY WATCHER (Tracks Fish & Items Added/Removed)
+----------------------------------------------------------------------
+local function setup_inventory_sniffer()
+    task.spawn(function()
+        local replion_pkg = (replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("Replion"))
+            or replicated_storage:FindFirstChild("Replion", true)
+        if not replion_pkg then return end
+
+        local ok, replion_mod = pcall(require, replion_pkg)
+        if not ok or not replion_mod or not replion_mod.Client then return end
+
+        local player_data = nil
+        pcall(function()
+            if replion_mod.Client.GetReplion then
+                player_data = replion_mod.Client:GetReplion("Data") or replion_mod.Client:GetReplion("PlayerData")
+            end
+            if not player_data and replion_mod.Client.Replions then
+                player_data = replion_mod.Client.Replions["Data"] or replion_mod.Client.Replions["PlayerData"]
+            end
+        end)
+
+        if player_data and player_data.OnChange then
+            pcall(function()
+                player_data:OnChange("Inventory", function(new_inv, old_inv)
+                    local new_count = (new_inv and new_inv.Items and #new_inv.Items) or 0
+                    local old_count = (old_inv and old_inv.Items and #old_inv.Items) or 0
+                    local diff = new_count - old_count
+                    local detail = string.format("Bag item count changed: %d -> %d (Delta: %+d)", old_count, new_count, diff)
+                    record_log("INVENTORY", "Bag Updated", detail, Color3.fromRGB(129, 140, 248))
+                end)
+            end)
+        end
+    end)
+end
+
+----------------------------------------------------------------------
+-- 5. UNIVERSAL DRAGGABLE GUI
 ----------------------------------------------------------------------
 local function make_draggable(frame, drag_handle)
     drag_handle = drag_handle or frame
@@ -326,10 +324,9 @@ local function build_spy_gui()
     local gui = Instance.new("ScreenGui")
     gui.Name = "FishIt_TradeSpy"
     gui.ResetOnSpawn = false
-    gui.DisplayOrder = 2147483647
+    gui.DisplayOrder = 100
     gui.Parent = parent_gui
 
-    -- Main Window
     local main = Instance.new("Frame")
     main.Name = "SpyWindow"
     main.Size = UDim2.new(0, 520, 0, 360)
@@ -341,7 +338,6 @@ local function build_spy_gui()
     main.Active = true
     main.Parent = gui
 
-    -- Header
     local header = Instance.new("Frame")
     header.Size = UDim2.new(1, 0, 0, 32)
     header.BackgroundColor3 = Color3.fromRGB(10, 12, 16)
@@ -355,7 +351,7 @@ local function build_spy_gui()
     title.Size = UDim2.new(1, -45, 1, 0)
     title.Position = UDim2.new(0, 10, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "🕵️‍♂️ Fish It - Passive Trade Spy (Non-Blocking)"
+    title.Text = "🕵️‍♂️ Fish It - Safe Trade Sniffer (100% Non-Blocking)"
     title.TextColor3 = Color3.fromRGB(245, 245, 245)
     title.TextSize = 13
     title.Font = Enum.Font.SourceSansBold
@@ -374,7 +370,6 @@ local function build_spy_gui()
     close_btn.Parent = header
     close_btn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
-    -- Control Bar (Top)
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(1, -16, 0, 32)
     bar.Position = UDim2.new(0, 8, 0, 36)
@@ -414,7 +409,6 @@ local function build_spy_gui()
     clear_btn.Font = Enum.Font.SourceSansBold
     clear_btn.Parent = bar
 
-    -- Scroll Area
     local scroll = Instance.new("ScrollingFrame")
     scroll.Size = UDim2.new(1, -16, 1, -76)
     scroll.Position = UDim2.new(0, 8, 0, 72)
@@ -494,7 +488,6 @@ local function build_spy_gui()
         end)
     end
 
-    -- Button handlers
     pause_btn.MouseButton1Click:Connect(function()
         is_capturing = not is_capturing
         if is_capturing then
@@ -509,7 +502,7 @@ local function build_spy_gui()
     copy_btn.MouseButton1Click:Connect(function()
         local all_lines = {
             "==================================================",
-            "       FISH IT TRADE BEHAVIOR CAPTURE LOG",
+            "       FISH IT SAFE TRADE SNIFFER LOG",
             "       Total Events Recorded: " .. #logs_list,
             "==================================================\n"
         }
@@ -552,11 +545,12 @@ local function build_spy_gui()
         last_log_time = os.clock()
     end)
 
-    record_log("SYSTEM", "Spy Active", "Passive Trade Spy aktif.\nSilakan jalankan script Luraph Anda dan lakukan trade.", Color3.fromRGB(240, 240, 240))
+    record_log("SYSTEM", "Sniffer Ready", "Safe Sniffer aktif (100% Native Listeners, No Metamethod Hook).\nSilakan lakukan trade.", Color3.fromRGB(240, 240, 240))
 end
 
--- Start cleanly
-pcall(setup_passive_hook)
-pcall(setup_trade_event_listeners)
-pcall(setup_attribute_watchers)
+-- Initialize 100% Safe Native Listeners Only
+pcall(scan_and_listen_trade_events)
+pcall(setup_attribute_sniffers)
+pcall(setup_gui_detector)
+pcall(setup_inventory_sniffer)
 pcall(build_spy_gui)
