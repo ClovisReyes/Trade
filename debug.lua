@@ -1,19 +1,11 @@
 --[[
     ====================================================================================
-    🕵️‍♂️ FISH IT - DEEP REVERSE & INTERACTION SPY (MECHANISM ANALYZER)
+    🐟 FISH IT - 100% UNDETECTED SAFE TRADE SNIFFER & PACKET LOG 🕵️‍♂️
     ====================================================================================
-    Tujuan:
-    Membongkar CARA KERJA & MEKANISME ASLI dari Script Luraph:
-    1. 🖱️ GUI INTERACTION SPY:
-       - Apakah dia mengklik tombol GUI di PlayerGui? (Trade Prompt, Accept, Ready, Confirm).
-       - Metode apa yang dia pakai? (firesignal, getconnections, click connection, atau VirtualInput).
-    2. 🌐 DIRECT REMOTE SPY (Non-breaking __namecall & method spy):
-       - Apakah dia mem-bypass GUI dan langsung menembak Remote (InvokeServer/FireServer)?
-       - Argumen eksak apa yang dikirim ke server? (Player instance, UUID, string category).
-    3. 📦 DATA SOURCING SPY:
-       - Dari mana dia mengambil list ikan? (Replion PlayerData vs GUI Inventory Scroller).
-    4. 🎮 VIRTUAL INPUT SPY:
-       - Apakah dia memalsukan input layar sentuh/mouse (VirtualInputManager)?
+    Perlindungan Anti-Cheat (Zero BAC Kick):
+    - TIDAK menyentuh / hook VirtualInputManager (Penyebab BAC-6221).
+    - TIDAK memasang listener ke PlayerGui buttons (Penyebab BAC-4193).
+    - 100% Pasif & Aman.
     ====================================================================================
 --]]
 
@@ -21,7 +13,6 @@ local cloneref = cloneref or function(ref) return ref end
 local players = cloneref(game:GetService("Players"))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
 local user_input_service = cloneref(game:GetService("UserInputService"))
-local gui_service = cloneref(game:GetService("GuiService"))
 
 local local_player = players.LocalPlayer
 if not local_player then
@@ -30,7 +21,7 @@ if not local_player then
     end)
 end
 
--- State
+-- State & Storage
 local logs_list = {}
 local is_capturing = true
 local start_time = os.clock()
@@ -134,139 +125,7 @@ local function record_log(tag, action_title, details, color)
 end
 
 ----------------------------------------------------------------------
--- 1. DIRECT REMOTE SPY (__namecall Safe Outgoing Logger)
-----------------------------------------------------------------------
--- Mobile-safe hook without pcall wrapper to guarantee zero breakages
-local function setup_remote_spy()
-    local newcclosure = newcclosure or function(f) return f end
-    local getnamecallmethod = getnamecallmethod or get_namecall_method
-    local getcallingscript = getcallingscript or function() return nil end
-
-    if not hookmetamethod then return end
-
-    local old_namecall
-    old_namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-
-        if self and typeof(self) == "Instance" then
-            local is_invoke = (method == "InvokeServer" and self:IsA("RemoteFunction"))
-            local is_fire = (method == "FireServer" and self:IsA("RemoteEvent"))
-
-            if is_invoke or is_fire then
-                local sname = self.Name
-                local slname = string.lower(sname)
-                local parent = self.Parent
-                local pname = parent and parent.Name or ""
-
-                -- Only capture Trade / Inventory / Net Remotes
-                if string.find(slname, "trade", 1, true) or 
-                   string.find(slname, "item", 1, true) or 
-                   string.find(pname, "Trading", 1, true) or
-                   string.find(pname, "net", 1, true) then
-
-                    local args = {...}
-                    local caller = getcallingscript()
-                    local caller_info = caller and (caller.Name .. " (" .. caller:GetFullName() .. ")") or "Obfuscated Luraph Script"
-
-                    task.spawn(function()
-                        local arg_lines = {}
-                        for i, arg in ipairs(args) do
-                            table.insert(arg_lines, string.format("  Arg #%d: %s", i, safe_serialize(arg, 1, 3)))
-                        end
-                        local arg_str = #arg_lines > 0 and table.concat(arg_lines, "\n") or "  (None)"
-
-                        local detail = string.format("Mekanisme: [DIRECT REMOTE INVOCATION]\nRemote Path: %s\nDipanggil oleh: %s\nArgumen:\n%s", 
-                            self:GetFullName(), caller_info, arg_str)
-
-                        if is_invoke then
-                            record_log("ACTION: REMOTE CALL (RF)", sname .. ":InvokeServer()", detail, Color3.fromRGB(56, 189, 248))
-                        else
-                            record_log("ACTION: REMOTE FIRE (RE)", sname .. ":FireServer()", detail, Color3.fromRGB(168, 85, 247))
-                        end
-                    end)
-                end
-            end
-        end
-
-        return old_namecall(self, ...)
-    end))
-end
-
-----------------------------------------------------------------------
--- 2. GUI BUTTON CLICK & INTERACTION SPY
-----------------------------------------------------------------------
-local watched_buttons = {}
-
-local function monitor_button(btn)
-    if not btn or watched_buttons[btn] then return end
-    if not (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) then return end
-    watched_buttons[btn] = true
-
-    local btn_path = btn:GetFullName()
-
-    btn.MouseButton1Click:Connect(function()
-        local detail = string.format("Mekanisme: [GUI MOUSE CLICK / FIRESIGNAL]\nButton: %s\nText: %s\nParent Frame: %s\nVisible: %s", 
-            btn.Name, tostring(btn.Text or btn.Name), btn.Parent and btn.Parent.Name or "nil", tostring(btn.Visible))
-        record_log("GUI CLICK", btn.Name .. " Clicked", detail, Color3.fromRGB(244, 114, 182))
-    end)
-
-    btn.Activated:Connect(function()
-        local detail = string.format("Mekanisme: [GUI ACTIVATED EVENT]\nButton: %s\nText: %s\nParent Frame: %s", 
-            btn.Name, tostring(btn.Text or btn.Name), btn.Parent and btn.Parent.Name or "nil")
-        record_log("GUI ACTIVATED", btn.Name .. " Activated", detail, Color3.fromRGB(236, 72, 153))
-    end)
-end
-
-local function setup_gui_interaction_spy()
-    local player_gui = local_player:FindFirstChild("PlayerGui") or local_player:WaitForChild("PlayerGui", 5)
-    if not player_gui then return end
-
-    for _, desc in ipairs(player_gui:GetDescendants()) do
-        if desc:IsA("GuiButton") then monitor_button(desc) end
-    end
-
-    player_gui.DescendantAdded:Connect(function(desc)
-        if desc:IsA("GuiButton") then monitor_button(desc) end
-    end)
-end
-
-----------------------------------------------------------------------
--- 3. VIRTUAL INPUT MANAGER SPY (Synthetic Touch/Mouse Emulation)
-----------------------------------------------------------------------
-local function setup_virtual_input_spy()
-    local vim = nil
-    pcall(function() vim = cloneref(game:GetService("VirtualInputManager")) end)
-    if not vim then return end
-
-    if hookfunction then
-        pcall(function()
-            local old_send_mouse
-            old_send_mouse = hookfunction(vim.SendMouseButtonEvent, newcclosure(function(self, x, y, button, is_down, game_processed, ...)
-                task.spawn(function()
-                    local detail = string.format("Mekanisme: [VIRTUAL INPUT EMULATION]\nKoordinat: X=%d, Y=%d\nButton: %s\nIsDown: %s", 
-                        x, y, tostring(button), tostring(is_down))
-                    record_log("VIRTUAL INPUT", "SendMouseButtonEvent", detail, Color3.fromRGB(251, 146, 60))
-                end)
-                return old_send_mouse(self, x, y, button, is_down, game_processed, ...)
-            end))
-        end)
-
-        pcall(function()
-            local old_send_touch
-            old_send_touch = hookfunction(vim.SendTouchEvent, newcclosure(function(self, x, y, is_down, ...)
-                task.spawn(function()
-                    local detail = string.format("Mekanisme: [VIRTUAL TOUCH EMULATION]\nKoordinat: X=%d, Y=%d\nIsDown: %s", 
-                        x, y, tostring(is_down))
-                    record_log("VIRTUAL TOUCH", "SendTouchEvent", detail, Color3.fromRGB(251, 146, 60))
-                end)
-                return old_send_touch(self, x, y, is_down, ...)
-            end))
-        end)
-    end
-end
-
-----------------------------------------------------------------------
--- 4. INCOMING SERVER EVENTS (Trade Lifecycle)
+-- 1. NATIVE TRADE REMOTE EVENT SNIFFER (100% Safe)
 ----------------------------------------------------------------------
 local function setup_trade_event_listeners()
     local net_folder = nil
@@ -295,7 +154,7 @@ local function setup_trade_event_listeners()
                         for i, v in ipairs(args) do
                             table.insert(arg_lines, string.format("  Param #%d: %s", i, safe_serialize(v, 1, 3)))
                         end
-                        local detail = string.format("Event Server: %s\nData Diterima:\n%s", child.Name, table.concat(arg_lines, "\n"))
+                        local detail = string.format("RemoteEvent: %s\nData:\n%s", child.Name, table.concat(arg_lines, "\n"))
                         record_log("SERVER EVENT", child.Name, detail, Color3.fromRGB(34, 197, 94))
                     end)
                 end)
@@ -305,7 +164,59 @@ local function setup_trade_event_listeners()
 end
 
 ----------------------------------------------------------------------
--- 5. GUI & DISPLAY INTERFACE
+-- 2. ATTRIBUTE & STATE SNIFFER (IsTrading)
+----------------------------------------------------------------------
+local function setup_attribute_sniffers()
+    if not local_player then return end
+    pcall(function()
+        local_player.AttributeChanged:Connect(function(attr_name)
+            if string.find(string.lower(attr_name), "trade", 1, true) or attr_name == "IsTrading" then
+                local val = local_player:GetAttribute(attr_name)
+                local detail = string.format("Attribute '%s' = %s", attr_name, safe_serialize(val, 0, 2))
+                record_log("STATE ATTR", "LocalPlayer." .. attr_name, detail, Color3.fromRGB(234, 179, 8))
+            end
+        end)
+    end)
+end
+
+----------------------------------------------------------------------
+-- 3. REPLION INVENTORY WATCHER
+----------------------------------------------------------------------
+local function setup_inventory_sniffer()
+    task.spawn(function()
+        local replion_pkg = (replicated_storage:FindFirstChild("Packages") and replicated_storage.Packages:FindFirstChild("Replion"))
+            or replicated_storage:FindFirstChild("Replion", true)
+        if not replion_pkg then return end
+
+        local ok, replion_mod = pcall(require, replion_pkg)
+        if not ok or not replion_mod or not replion_mod.Client then return end
+
+        local player_data = nil
+        pcall(function()
+            if replion_mod.Client.GetReplion then
+                player_data = replion_mod.Client:GetReplion("Data") or replion_mod.Client:GetReplion("PlayerData")
+            end
+            if not player_data and replion_mod.Client.Replions then
+                player_data = replion_mod.Client.Replions["Data"] or replion_mod.Client.Replions["PlayerData"]
+            end
+        end)
+
+        if player_data and player_data.OnChange then
+            pcall(function()
+                player_data:OnChange("Inventory", function(new_inv, old_inv)
+                    local new_count = (new_inv and new_inv.Items and #new_inv.Items) or 0
+                    local old_count = (old_inv and old_inv.Items and #old_inv.Items) or 0
+                    local diff = new_count - old_count
+                    local detail = string.format("Item di tas berubah: %d -> %d (%+d)", old_count, new_count, diff)
+                    record_log("INVENTORY", "Item Transferred", detail, Color3.fromRGB(129, 140, 248))
+                end)
+            end)
+        end
+    end)
+end
+
+----------------------------------------------------------------------
+-- 4. DRAGGABLE GUI
 ----------------------------------------------------------------------
 local function make_draggable(frame, drag_handle)
     drag_handle = drag_handle or frame
@@ -351,20 +262,20 @@ local function build_spy_gui()
 
     pcall(function()
         for _, c in ipairs(parent_gui:GetChildren()) do
-            if c.Name == "FishIt_TradeSpy" then c:Destroy() end
+            if c.Name == "FishIt_SafeSpy" then c:Destroy() end
         end
     end)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "FishIt_TradeSpy"
+    gui.Name = "FishIt_SafeSpy"
     gui.ResetOnSpawn = false
     gui.DisplayOrder = 2147483647
     gui.Parent = parent_gui
 
     local main = Instance.new("Frame")
     main.Name = "SpyWindow"
-    main.Size = UDim2.new(0, 560, 0, 380)
-    main.Position = UDim2.new(0.5, -280, 0.5, -190)
+    main.Size = UDim2.new(0, 520, 0, 360)
+    main.Position = UDim2.new(0.5, -260, 0.5, -180)
     main.BackgroundColor3 = Color3.fromRGB(16, 18, 24)
     main.BackgroundTransparency = 0
     main.BorderSizePixel = 2
@@ -385,7 +296,7 @@ local function build_spy_gui()
     title.Size = UDim2.new(1, -45, 1, 0)
     title.Position = UDim2.new(0, 10, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "🕵️‍♂️ Fish It - Mechanism & Method Reverse Spy"
+    title.Text = "🕵️‍♂️ Fish It - Safe Trade Behavior Spy"
     title.TextColor3 = Color3.fromRGB(245, 245, 245)
     title.TextSize = 13
     title.Font = Enum.Font.SourceSansBold
@@ -472,7 +383,7 @@ local function build_spy_gui()
         if not scroll or not scroll.Parent then return end
 
         card_count = card_count + 1
-        if card_count > 150 then
+        if card_count > 120 then
             local first = scroll:FindFirstChildWhichIsA("Frame")
             if first then first:Destroy(); card_count = card_count - 1 end
         end
@@ -536,8 +447,8 @@ local function build_spy_gui()
     copy_btn.MouseButton1Click:Connect(function()
         local all_lines = {
             "==================================================",
-            "    FISH IT MECHANISM & METHOD REVERSE LOG",
-            "    Total Action Events: " .. #logs_list,
+            "       FISH IT SAFE TRADE SNIFFER LOG",
+            "       Total Events Recorded: " .. #logs_list,
             "==================================================\n"
         }
         for _, entry in ipairs(logs_list) do
@@ -552,7 +463,7 @@ local function build_spy_gui()
             if not success and toclipboard then toclipboard(full_text); success = true end
         end)
         pcall(function()
-            if writefile then writefile("fishit_mechanism_log.txt", full_text) end
+            if writefile then writefile("fishit_trade_spy_dump.txt", full_text) end
         end)
 
         if success then
@@ -579,12 +490,11 @@ local function build_spy_gui()
         last_log_time = os.clock()
     end)
 
-    record_log("SYSTEM", "Analyzer Ready", "Mechanism & Action Analyzer Aktif!\nMenunggu interaksi script Luraph (GUI Click / Remote Invocation / Virtual Touch)...", Color3.fromRGB(240, 240, 240))
+    record_log("SYSTEM", "Safe Spy Ready", "100% Undetected Safe Sniffer aktif (No VirtualInput/PlayerGui hooks).", Color3.fromRGB(240, 240, 240))
 end
 
 -- Initialize safely
-pcall(setup_remote_spy)
-pcall(setup_gui_interaction_spy)
-pcall(setup_virtual_input_spy)
 pcall(setup_trade_event_listeners)
+pcall(setup_attribute_sniffers)
+pcall(setup_inventory_sniffer)
 pcall(build_spy_gui)
