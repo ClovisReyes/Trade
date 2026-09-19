@@ -95,10 +95,10 @@ local config = {
     trade_enchants_enabled = false,
     trade_coins_enabled    = false,
     trade_rarity_enabled   = false,
-    selected_fish          = {},
+    selected_fish          = { "All" },
     selected_tiers         = { "All" },
     selected_mutations     = { "All" },
-    selected_items         = {},
+    selected_items         = { "All" },
 }
 
 cache = {
@@ -337,7 +337,8 @@ local function get_inventory_items(type_filter, bypass_favorited)
         local inv = player_data:Get("Inventory")
         for _, item in ipairs(inv and inv.Items or {}) do
             if item and item.Id then
-                if bypass_favorited or not (item.Favorited and not config.trade_favorited) then
+                local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
+                if bypass_favorited or not is_fav or config.trade_favorited then
                     local data = item_utility:GetItemData(item.Id)
                     if data and data.Data then
                         local name = data.Data.Name
@@ -360,7 +361,7 @@ local function get_inventory_items(type_filter, bypass_favorited)
 end
 
 local function get_owned_options(type_filter)
-    local list, counts = {}, get_inventory_items(type_filter, true)
+    local list, counts = {}, get_inventory_items(type_filter, false)
     for name, qty in pairs(counts) do table_insert(list, name .. " (x" .. qty .. ")") end
     table_sort(list)
     return list
@@ -387,39 +388,41 @@ local function find_target_player()
 end
 
 local function should_trade_fish(item_data, inventory_item)
-    if not config.enabled or (inventory_item.Favorited and not config.trade_favorited) then return false end
-    local name_match = table_find(config.selected_fish, "All") ~= nil
+    local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
+    if not config.enabled or (is_fav and not config.trade_favorited) then return false end
+    local name_match = #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil
     if not name_match then
         local fish_name = string_lower(item_data.Data.Name)
         for _, sel in ipairs(config.selected_fish) do
-            if fish_name == string_lower(sel) then name_match = true; break end
+            if fish_name == string_lower(strip_quantity(sel)) then name_match = true; break end
         end
     end
     local mut_match = #config.selected_mutations == 0 or table_find(config.selected_mutations, "All") ~= nil
     if not mut_match then
         local mut_name = string_lower(get_item_mutation(inventory_item))
         for _, sel in ipairs(config.selected_mutations) do
-            if mut_name == string_lower(sel) then mut_match = true; break end
+            if mut_name == string_lower(strip_quantity(sel)) then mut_match = true; break end
         end
     end
     return name_match and mut_match
 end
 
 local function should_trade_fish_by_rarity(item_data, inventory_item)
-    if not config.enabled or (inventory_item.Favorited and not config.trade_favorited) then return false end
-    local rarity_match = table_find(config.selected_tiers, "All") ~= nil
+    local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
+    if not config.enabled or (is_fav and not config.trade_favorited) then return false end
+    local rarity_match = #config.selected_tiers == 0 or table_find(config.selected_tiers, "All") ~= nil
     if not rarity_match then
         local raw_tier = item_data.Data.Tier
         local tier_name = type(raw_tier) == "number" and (tier_mapping[raw_tier] or "") or string_lower(tostring(raw_tier))
         for _, sel in ipairs(config.selected_tiers) do
-            if tier_name == string_lower(sel) then rarity_match = true; break end
+            if tier_name == string_lower(strip_quantity(sel)) then rarity_match = true; break end
         end
     end
     local mut_match = #config.selected_mutations == 0 or table_find(config.selected_mutations, "All") ~= nil
     if not mut_match then
         local mut_name = string_lower(get_item_mutation(inventory_item))
         for _, sel in ipairs(config.selected_mutations) do
-            if mut_name == string_lower(sel) then mut_match = true; break end
+            if mut_name == string_lower(strip_quantity(sel)) then mut_match = true; break end
         end
     end
     return rarity_match and mut_match
@@ -428,7 +431,7 @@ end
 local function collect_round_robin(items, key_extractor, selected_keys, limit)
     local buckets, bucket_keys, items_to_trade, added = {}, {}, {}, {}
     for _, k in ipairs(selected_keys) do
-        local lk = string_lower(k)
+        local lk = string_lower(strip_quantity(k))
         if lk ~= "all" then buckets[lk] = {}; table_insert(bucket_keys, lk) end
     end
     for _, item in ipairs(items) do
@@ -484,7 +487,8 @@ local function update_status_ui(mode_name)
     if mode_name == "coin" then
         local target = config.target_coin_amount or 0
         local current = s.total_coins or 0
-        details = string_format("Sent: %s / %s Coins (%d fish) | Fails: %d", format_number(current), format_number(target), s.total_items, s.failed)
+        local target_str = target == 0 and "∞" or format_number(target)
+        details = string_format("Sent: %s / %s Coins (%d fish) | Fails: %d", format_number(current), target_str, s.total_items, s.failed)
     else
         local target = config.quantity
         local current = s.total_items
@@ -592,7 +596,7 @@ local function toggle_auto_accept(enable)
             if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
             pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
             local start_t = tick()
-            while config.auto_accept_enabled and auto_accept_active and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 60 do
+            while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 60 do
                 pcall(function()
                     trade_remotes.ConfirmTrade:InvokeServer()
                     trade_remotes.SetReady:InvokeServer(true)
@@ -676,6 +680,7 @@ end
 local function wait_for_trade_end(mode_name, chat_listener)
     local start_t = tick()
     while local_player:GetAttribute("IsTrading") and tick() - start_t < 30 do
+        if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.enabled then break end
         if chat_listener and chat_listener.is_completed() then break end
         pcall(function()
             if trade_remotes.SetReady then trade_remotes.SetReady:InvokeServer(true) end
@@ -703,7 +708,7 @@ local function collect_trade_items(mode)
     local items_to_trade = {}
 
     if mode == "fish" then
-        local has_all = table_find(config.selected_fish, "All") ~= nil
+        local has_all = #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil
         if #config.selected_fish > 1 and not has_all then
             items_to_trade = collect_round_robin(items, function(it)
                 local d = item_utility:GetItemData(it.Id)
@@ -719,7 +724,7 @@ local function collect_trade_items(mode)
             end
         end
     elseif mode == "rarity" then
-        local has_all = table_find(config.selected_tiers, "All") ~= nil
+        local has_all = #config.selected_tiers == 0 or table_find(config.selected_tiers, "All") ~= nil
         if #config.selected_tiers > 1 and not has_all then
             items_to_trade = collect_round_robin(items, function(it)
                 local d = item_utility:GetItemData(it.Id)
@@ -741,12 +746,21 @@ local function collect_trade_items(mode)
     elseif mode == "enchant" then
         for _, item in ipairs(items) do
             if #items_to_trade >= limit then break end
-            if item and item.Id and not (item.Favorited and not config.trade_favorited) then
-                local d = item_utility:GetItemData(item.Id)
-                if d and d.Data and d.Data.Type == "Enchant Stones" then
-                    local name = d.Data.Name
-                    if table_find(config.selected_items, "All") or table_find(config.selected_items, name) then
-                        if not table_find(cache.processed_trades, item.UUID) then table_insert(items_to_trade, item) end
+            if item and item.Id then
+                local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
+                if not (is_fav and not config.trade_favorited) then
+                    local d = item_utility:GetItemData(item.Id)
+                    if d and d.Data and d.Data.Type == "Enchant Stones" then
+                        local name = d.Data.Name
+                        local match = #config.selected_items == 0 or table_find(config.selected_items, "All") ~= nil
+                        if not match then
+                            for _, sel in ipairs(config.selected_items) do
+                                if string_lower(name) == string_lower(strip_quantity(sel)) then match = true; break end
+                            end
+                        end
+                        if match then
+                            if not table_find(cache.processed_trades, item.UUID) then table_insert(items_to_trade, item) end
+                        end
                     end
                 end
             end
@@ -764,7 +778,7 @@ local function execute_trade(mode)
     cache.processed_trades = {}
     local target_player = find_target_player()
     if not target_player or not player_data then
-        set_status_msg(mode, config.trade_with ~= "" and "Error: Target player tidak ditemukan" or "Error: Target player belum dipilih")
+        set_status_msg(mode, config.trade_with ~= "" and "Waiting: Target player tidak ditemukan di server" or "Waiting: Target player belum dipilih di panel kanan")
         return
     end
 
@@ -772,26 +786,26 @@ local function execute_trade(mode)
     if mode == "coin" then
         if config.target_coin_amount > 0 and (s.total_coins or 0) >= config.target_coin_amount then
             config.enabled = false
-            if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
             config.trade_coins_enabled = false
+            if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
+            set_status_msg("coin", string_format("Selesai! Berhasil mengirim %s Coins (%d ikan)", format_number(s.total_coins), s.total_items))
             return
         end
     else
         if config.quantity > 0 and s.total_items >= config.quantity then
             config.enabled = false
+            local flag_name = "trade_" .. (mode == "enchant" and "enchants" or (mode == "rarity" and "rarity" or "fish")) .. "_enabled"
+            config[flag_name] = false
             if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
-            config["trade_" .. (mode == "enchant" and "enchants" or (mode == "rarity" and "rarity" or "fish")) .. "_enabled"] = false
+            set_status_msg(mode, string_format("Selesai! Berhasil mengirim %d/%d item", s.total_items, config.quantity))
             return
         end
     end
 
     local items_to_trade = collect_trade_items(mode)
     if #items_to_trade == 0 then
-        local err_msg = mode == "coin" and "Error: Tidak ada lagi ikan yang tersedia di inventory" or ("Error: Tidak ada lagi " .. get_mode_display_name(mode) .. " di inventory")
+        local err_msg = mode == "coin" and "Waiting: Tidak ada ikan yang memenuhi syarat di bag (idle)..." or ("Waiting: Tidak ada " .. get_mode_display_name(mode) .. " yang tersedia di bag (idle)...")
         set_status_msg(mode, err_msg)
-        config.enabled = false
-        if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
-        config["trade_" .. (mode == "enchant" and "enchants" or (mode == "rarity" and "rarity" or (mode == "coin" and "coins" or "fish"))) .. "_enabled"] = false
         return
     end
 
@@ -903,6 +917,7 @@ local function create_ui()
     gui.Name = "AutoTrade"
     gui.ResetOnSpawn = false
     gui.DisplayOrder = 2147483647
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.Parent = parent_gui
 
     local BG_COLOR = Color3.fromRGB(15, 15, 15)
@@ -936,7 +951,7 @@ local function create_ui()
     main.BackgroundTransparency = 0
     main.BorderSizePixel = 0
     main.Active = true
-    main.ZIndex = 10
+    main.ZIndex = 1
     main.Parent = gui
     create_corner(main, 10); create_stroke(main, Color3.fromRGB(45, 45, 45))
 
@@ -961,9 +976,11 @@ local function create_ui()
             float_dragging = true
             float_drag_start = input.Position
             float_start_pos = floating_btn.Position
-            input.Changed:Connect(function()
+            local end_conn
+            end_conn = input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     float_dragging = false
+                    if end_conn then end_conn:Disconnect(); end_conn = nil end
                     pcall(function()
                         local vp_size = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Vector2.new(1920, 1080)
                         local abs_pos = floating_btn.AbsolutePosition
@@ -1008,7 +1025,7 @@ local function create_ui()
     header.Size = UDim2.new(1, 0, 0, 24)
     header.BackgroundColor3 = SIDEBAR_COLOR
     header.BackgroundTransparency = 0
-    header.ZIndex = 5
+    header.ZIndex = 2
     header.Parent = main
     create_corner(header, 10)
 
@@ -1021,7 +1038,7 @@ local function create_ui()
     title_lbl.TextSize = 10
     title_lbl.FontFace = font_bold
     title_lbl.TextXAlignment = Enum.TextXAlignment.Left
-    title_lbl.ZIndex = 6
+    title_lbl.ZIndex = 3
     title_lbl.Parent = header
 
     local min_btn = Instance.new("TextButton")
@@ -1029,32 +1046,51 @@ local function create_ui()
     min_btn.Size = UDim2.new(0, 22, 0, 22)
     min_btn.Position = UDim2.new(1, -74, 0.5, -11)
     min_btn.BackgroundTransparency = 1
-    min_btn.Text = "−"
+    min_btn.Text = "-"
     min_btn.TextColor3 = MUTED_COLOR
-    min_btn.TextSize = 13
-    min_btn.FontFace = font_bold
-    min_btn.ZIndex = 6
+    min_btn.TextSize = 14
+    min_btn.Font = Enum.Font.SourceSansBold
+    min_btn.ZIndex = 3
     min_btn.Parent = header
     min_btn.MouseEnter:Connect(function() min_btn.TextColor3 = ACCENT_COLOR end)
     min_btn.MouseLeave:Connect(function() min_btn.TextColor3 = MUTED_COLOR end)
     min_btn.MouseButton1Click:Connect(function() main.Visible = false; floating_btn.Visible = true end)
+
+    local is_expanded = false
+    local saved_normal_size = UDim2.new(0, 250, 0, 200)
+    local saved_normal_pos = UDim2.new(0.5, -178, 0.5, -100)
 
     local restore_btn = Instance.new("TextButton")
     restore_btn.Name = "RestoreBtn"
     restore_btn.Size = UDim2.new(0, 22, 0, 22)
     restore_btn.Position = UDim2.new(1, -50, 0.5, -11)
     restore_btn.BackgroundTransparency = 1
-    restore_btn.Text = "❐"
+    restore_btn.Text = "[]"
     restore_btn.TextColor3 = MUTED_COLOR
-    restore_btn.TextSize = 11
-    restore_btn.FontFace = font_bold
-    restore_btn.ZIndex = 6
+    restore_btn.TextSize = 10
+    restore_btn.Font = Enum.Font.SourceSansBold
+    restore_btn.ZIndex = 3
     restore_btn.Parent = header
     restore_btn.MouseEnter:Connect(function() restore_btn.TextColor3 = ACCENT_COLOR end)
     restore_btn.MouseLeave:Connect(function() restore_btn.TextColor3 = MUTED_COLOR end)
     restore_btn.MouseButton1Click:Connect(function()
-        if player_panel then
-            player_panel.Visible = not player_panel.Visible
+        is_expanded = not is_expanded
+        if is_expanded then
+            saved_normal_size = main.Size
+            saved_normal_pos = main.Position
+            restore_btn.Text = "[-]"
+            local target_size = UDim2.new(1, -125, 1 - saved_normal_pos.Y.Scale, -saved_normal_pos.Y.Offset - 10)
+            local target_pos = UDim2.new(0, 10, saved_normal_pos.Y.Scale, saved_normal_pos.Y.Offset)
+            tween_service:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = target_size,
+                Position = target_pos
+            }):Play()
+        else
+            restore_btn.Text = "[]"
+            tween_service:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = saved_normal_size,
+                Position = saved_normal_pos
+            }):Play()
         end
     end)
 
@@ -1063,11 +1099,11 @@ local function create_ui()
     close_btn.Size = UDim2.new(0, 22, 0, 22)
     close_btn.Position = UDim2.new(1, -26, 0.5, -11)
     close_btn.BackgroundTransparency = 1
-    close_btn.Text = "✕"
+    close_btn.Text = "X"
     close_btn.TextColor3 = MUTED_COLOR
-    close_btn.TextSize = 11
-    close_btn.FontFace = font_bold
-    close_btn.ZIndex = 6
+    close_btn.TextSize = 12
+    close_btn.Font = Enum.Font.SourceSansBold
+    close_btn.ZIndex = 3
     close_btn.Parent = header
     close_btn.MouseEnter:Connect(function() close_btn.TextColor3 = Color3.fromRGB(255, 60, 60) end)
     close_btn.MouseLeave:Connect(function() close_btn.TextColor3 = MUTED_COLOR end)
@@ -1076,10 +1112,20 @@ local function create_ui()
     end)
 
     local dragging, drag_start, start_pos
+    local header_end_conn
     header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging, drag_start, start_pos = true, input.Position, main.Position
-            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+            if header_end_conn then header_end_conn:Disconnect(); header_end_conn = nil end
+            header_end_conn = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    if header_end_conn then header_end_conn:Disconnect(); header_end_conn = nil end
+                    if not is_expanded then
+                        saved_normal_pos = main.Position
+                    end
+                end
+            end)
         end
     end)
     header_drag_conn = user_input_service.InputChanged:Connect(function(input)
@@ -1094,7 +1140,7 @@ local function create_ui()
     close_detector.Position = UDim2.new(0.5, -2500, 0.5, -2500)
     close_detector.BackgroundTransparency = 1
     close_detector.Text = ""
-    close_detector.ZIndex = 5
+    close_detector.ZIndex = 8
     close_detector.Visible = false
     close_detector.Parent = main
 
@@ -1120,12 +1166,14 @@ local function create_ui()
         search.Size = UDim2.new(1, -20, 0, 24)
         search.Position = UDim2.new(0, 10, 0, 10)
         search.BackgroundColor3 = INPUT_BG_COLOR
+        search.Text = ""
         search.PlaceholderText = "Search..."
         search.PlaceholderColor3 = MUTED_COLOR
         search.TextColor3 = TEXT_COLOR
         search.TextSize = 9
         search.FontFace = font_face
         search.TextXAlignment = Enum.TextXAlignment.Center
+        search.ClearTextOnFocus = false
         search.ZIndex = 10
         search.Parent = panel
         create_corner(search, 5); create_stroke(search, Color3.fromRGB(45, 45, 45))
@@ -1284,6 +1332,8 @@ local function create_ui()
     content_scroll.BackgroundTransparency = 1
     content_scroll.ScrollBarThickness = 3
     content_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    content_scroll.ZIndex = 2
+    content_scroll.CanvasSize = UDim2.new(0, 0, 0, 180)
     content_scroll.Parent = main
     local content_layout = Instance.new("UIListLayout"); content_layout.Padding = UDim.new(0, 6); content_layout.Parent = content_scroll
 
@@ -1291,6 +1341,7 @@ local function create_ui()
         local row = Instance.new("Frame")
         row.Size = UDim2.new(1, 0, 0, 22)
         row.BackgroundTransparency = 1
+        row.ZIndex = 3
         row.Parent = parent
 
         local lbl = Instance.new("TextLabel")
@@ -1301,6 +1352,7 @@ local function create_ui()
         lbl.TextSize = 9
         lbl.FontFace = font_bold
         lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = 4
         lbl.Parent = row
 
         local capsule = Instance.new("TextButton")
@@ -1308,6 +1360,7 @@ local function create_ui()
         capsule.Position = UDim2.new(1, -32, 0.5, -8)
         capsule.BackgroundColor3 = default and ACCENT_COLOR or Color3.fromRGB(45, 45, 45)
         capsule.Text = ""
+        capsule.ZIndex = 4
         capsule.Parent = row
         create_corner(capsule, 8); create_stroke(capsule, Color3.fromRGB(35, 35, 35))
 
@@ -1315,6 +1368,7 @@ local function create_ui()
         knob.Size = UDim2.new(0, 12, 0, 12)
         knob.Position = default and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
         knob.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+        knob.ZIndex = 5
         knob.Parent = capsule
         create_corner(knob, 6)
 
@@ -1329,7 +1383,11 @@ local function create_ui()
             callback(active)
         end)
         return {
-            set_state = function(state) active = state; update_visual(state) end,
+            set_state = function(state)
+                if active == state then return end
+                active = state
+                update_visual(state)
+            end,
             Frame = row
         }
     end
@@ -1340,6 +1398,7 @@ local function create_ui()
         frame.BackgroundColor3 = CARD_COLOR
         frame.BackgroundTransparency = 0
         frame.ClipsDescendants = true
+        frame.ZIndex = 2
         frame.Parent = content_scroll
         create_corner(frame, 5); create_stroke(frame, Color3.fromRGB(35, 35, 35))
 
@@ -1351,28 +1410,32 @@ local function create_ui()
         head.TextSize = 9
         head.FontFace = font_bold
         head.TextXAlignment = Enum.TextXAlignment.Left
+        head.ZIndex = 3
         head.Parent = frame
 
         local chev = Instance.new("TextLabel")
         chev.Size = UDim2.new(0, 20, 1, 0)
         chev.Position = UDim2.new(1, -25, 0, 0)
         chev.BackgroundTransparency = 1
-        chev.Text = "▼"
+        chev.Text = "v"
         chev.TextColor3 = ACCENT_COLOR
-        chev.TextSize = 9
+        chev.TextSize = 10
+        chev.Font = Enum.Font.SourceSansBold
+        chev.ZIndex = 4
         chev.Parent = head
 
         local inner = Instance.new("Frame")
         inner.Size = UDim2.new(1, -12, 0, 0)
         inner.Position = UDim2.new(0, 6, 0, 28)
         inner.BackgroundTransparency = 1
+        inner.ZIndex = 3
         inner.Parent = frame
         local in_layout = Instance.new("UIListLayout"); in_layout.Padding = UDim.new(0, 6); in_layout.Parent = inner
 
         local expanded = false
         head.MouseButton1Click:Connect(function()
             expanded = not expanded
-            chev.Text = expanded and "▲" or "▼"
+            chev.Text = expanded and "^" or "v"
             local target_h = expanded and (32 + in_layout.AbsoluteContentSize.Y) or 26
             tween_service:Create(frame, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { Size = UDim2.new(1, 0, 0, target_h) }):Play()
             task_wait(0.21)
@@ -1390,6 +1453,7 @@ local function create_ui()
         box.AutomaticSize = Enum.AutomaticSize.Y
         box.BackgroundColor3 = CARD_COLOR
         box.BackgroundTransparency = 0
+        box.ZIndex = 3
         box.Parent = parent
         create_corner(box, 6); create_stroke(box, Color3.fromRGB(35, 35, 35))
 
@@ -1402,6 +1466,7 @@ local function create_ui()
         title.TextSize = 9
         title.FontFace = font_bold
         title.TextXAlignment = Enum.TextXAlignment.Left
+        title.ZIndex = 4
         title.Parent = box
 
         local val = Instance.new("TextLabel")
@@ -1415,6 +1480,7 @@ local function create_ui()
         val.FontFace = font_face
         val.TextXAlignment = Enum.TextXAlignment.Left
         val.TextWrapped = true
+        val.ZIndex = 4
         val.Parent = box
         status_labels[mode] = val
         return val
@@ -1448,7 +1514,7 @@ local function create_ui()
     create_stat_box(byname_inner, "fish")
     local f_row = Instance.new("Frame"); f_row.Size = UDim2.new(1, 0, 0, 22); f_row.BackgroundTransparency = 1; f_row.Parent = byname_inner
     local f_lbl = Instance.new("TextLabel"); f_lbl.Size = UDim2.new(0.45, 0, 1, 0); f_lbl.BackgroundTransparency = 1; f_lbl.Text = "Select Item"; f_lbl.TextColor3 = TEXT_COLOR; f_lbl.TextSize = 9; f_lbl.FontFace = font_bold; f_lbl.TextXAlignment = Enum.TextXAlignment.Left; f_lbl.Parent = f_row
-    local f_drop = Instance.new("TextButton"); f_drop.Size = UDim2.new(0.55, 0, 1, 0); f_drop.Position = UDim2.new(0.45, 0, 0, 0); f_drop.BackgroundColor3 = INPUT_BG_COLOR; f_drop.Text = (#config.selected_fish > 0 and table_concat(config.selected_fish, "/") or "Select Option"); f_drop.TextColor3 = TEXT_COLOR; f_drop.TextSize = 9; f_drop.FontFace = font_face; f_drop.Parent = f_row
+    local f_drop = Instance.new("TextButton"); f_drop.Size = UDim2.new(0.55, 0, 1, 0); f_drop.Position = UDim2.new(0.45, 0, 0, 0); f_drop.BackgroundColor3 = INPUT_BG_COLOR; f_drop.Text = (#config.selected_fish > 0 and table_concat(config.selected_fish, "/") or "All"); f_drop.TextColor3 = TEXT_COLOR; f_drop.TextSize = 9; f_drop.FontFace = font_face; f_drop.Parent = f_row
     create_corner(f_drop, 4); create_stroke(f_drop, Color3.fromRGB(45, 45, 45))
     f_drop.MouseButton1Click:Connect(function()
         item_panel.Visible = not item_panel.Visible
@@ -1456,13 +1522,13 @@ local function create_ui()
         if item_panel.Visible then
             cache.loaded_fish = get_owned_options("Fish")
             populate_drawer(item_scroll, cache.loaded_fish, config.selected_fish, true, function(sel)
-                f_drop.Text = #sel > 0 and table_concat(sel, "/") or "Select Option"
+                f_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
             end, item_search.Text)
         end
     end)
     item_search:GetPropertyChangedSignal("Text"):Connect(function()
         populate_drawer(item_scroll, cache.loaded_fish, config.selected_fish, true, function(sel)
-            f_drop.Text = #sel > 0 and table_concat(sel, "/") or "Select Option"
+            f_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
         end, item_search.Text)
     end)
 
@@ -1502,7 +1568,7 @@ local function create_ui()
     create_stat_box(en_inner, "enchant")
     local e_row = Instance.new("Frame"); e_row.Size = UDim2.new(1, 0, 0, 22); e_row.BackgroundTransparency = 1; e_row.Parent = en_inner
     local e_lbl = Instance.new("TextLabel"); e_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_lbl.BackgroundTransparency = 1; e_lbl.Text = "Stone Type"; e_lbl.TextColor3 = TEXT_COLOR; e_lbl.TextSize = 9; e_lbl.FontFace = font_bold; e_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_lbl.Parent = e_row
-    local e_drop = Instance.new("TextButton"); e_drop.Size = UDim2.new(0.55, 0, 1, 0); e_drop.Position = UDim2.new(0.45, 0, 0, 0); e_drop.BackgroundColor3 = INPUT_BG_COLOR; e_drop.Text = (#config.selected_items > 0 and table_concat(config.selected_items, "/") or "Select Option"); e_drop.TextColor3 = TEXT_COLOR; e_drop.TextSize = 9; e_drop.FontFace = font_face; e_drop.Parent = e_row
+    local e_drop = Instance.new("TextButton"); e_drop.Size = UDim2.new(0.55, 0, 1, 0); e_drop.Position = UDim2.new(0.45, 0, 0, 0); e_drop.BackgroundColor3 = INPUT_BG_COLOR; e_drop.Text = (#config.selected_items > 0 and table_concat(config.selected_items, "/") or "All"); e_drop.TextColor3 = TEXT_COLOR; e_drop.TextSize = 9; e_drop.FontFace = font_face; e_drop.Parent = e_row
     create_corner(e_drop, 4); create_stroke(e_drop, Color3.fromRGB(45, 45, 45))
     e_drop.MouseButton1Click:Connect(function()
         enchant_panel.Visible = not enchant_panel.Visible
@@ -1510,13 +1576,13 @@ local function create_ui()
         if enchant_panel.Visible then
             cache.loaded_enchants = get_owned_options("Enchant")
             populate_drawer(enchant_scroll, cache.loaded_enchants, config.selected_items, true, function(sel)
-                e_drop.Text = #sel > 0 and table_concat(sel, "/") or "Select Option"
+                e_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
             end, enchant_search.Text)
         end
     end)
     enchant_search:GetPropertyChangedSignal("Text"):Connect(function()
         populate_drawer(enchant_scroll, cache.loaded_enchants, config.selected_items, true, function(sel)
-            e_drop.Text = #sel > 0 and table_concat(sel, "/") or "Select Option"
+            e_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
         end, enchant_search.Text)
     end)
 
@@ -1555,14 +1621,14 @@ local function create_ui()
     create_stat_box(r_inner, "rarity")
     local r_row = Instance.new("Frame"); r_row.Size = UDim2.new(1, 0, 0, 22); r_row.BackgroundTransparency = 1; r_row.Parent = r_inner
     local r_lbl = Instance.new("TextLabel"); r_lbl.Size = UDim2.new(0.45, 0, 1, 0); r_lbl.BackgroundTransparency = 1; r_lbl.Text = "Select Rarity"; r_lbl.TextColor3 = TEXT_COLOR; r_lbl.TextSize = 9; r_lbl.FontFace = font_bold; r_lbl.TextXAlignment = Enum.TextXAlignment.Left; r_lbl.Parent = r_row
-    local r_drop = Instance.new("TextButton"); r_drop.Size = UDim2.new(0.55, 0, 1, 0); r_drop.Position = UDim2.new(0.45, 0, 0, 0); r_drop.BackgroundColor3 = INPUT_BG_COLOR; r_drop.Text = (#config.selected_tiers > 0 and table_concat(config.selected_tiers, "/") or "Select Option"); r_drop.TextColor3 = TEXT_COLOR; r_drop.TextSize = 9; r_drop.FontFace = font_face; r_drop.Parent = r_row
+    local r_drop = Instance.new("TextButton"); r_drop.Size = UDim2.new(0.55, 0, 1, 0); r_drop.Position = UDim2.new(0.45, 0, 0, 0); r_drop.BackgroundColor3 = INPUT_BG_COLOR; r_drop.Text = (#config.selected_tiers > 0 and table_concat(config.selected_tiers, "/") or "All"); r_drop.TextColor3 = TEXT_COLOR; r_drop.TextSize = 9; r_drop.FontFace = font_face; r_drop.Parent = r_row
     create_corner(r_drop, 4); create_stroke(r_drop, Color3.fromRGB(45, 45, 45))
     r_drop.MouseButton1Click:Connect(function()
         rarity_panel.Visible = not rarity_panel.Visible
         close_detector.Visible = rarity_panel.Visible
         if rarity_panel.Visible then
             populate_drawer(rarity_scroll, cache.loaded_tiers, config.selected_tiers, true, function(sel)
-                r_drop.Text = #sel > 0 and table_concat(sel, "/") or "Select Option"
+                r_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
             end)
         end
     end)
