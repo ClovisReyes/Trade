@@ -110,7 +110,7 @@ cache = {
     loaded_mutations    = {},
     loaded_tiers        = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" },
     loaded_variant_multipliers = {},
-    last_trade_time     = nil,
+    last_failed_offer_time     = nil,
     status_text         = { fish = "Idle", enchant = "Idle", coin = "Idle", rarity = "Idle" },
     status_details      = { fish = "", enchant = "", coin = "", rarity = "" },
     stats = {
@@ -123,6 +123,13 @@ cache = {
 
 _G.AutoTradeConfig = config
 _G.AutoTradeCache = cache
+
+local mode_flag_map = {
+    fish    = "trade_fish_enabled",
+    rarity  = "trade_rarity_enabled",
+    enchant = "trade_enchants_enabled",
+    coin    = "trade_coins_enabled",
+}
 
 local tier_mapping = {
     [1] = "common", [2] = "uncommon", [3] = "rare", [4] = "epic",
@@ -508,58 +515,8 @@ local function set_status_msg(mode_name, msg, details_override)
     update_status_ui(mode_name)
 end
 
-local function click_gui_button(btn)
-    if not btn then return end
-    pcall(function()
-        if firesignal then
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.Activated)
-        elseif getconnections then
-            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do conn:Fire() end
-        end
-    end)
-end
-
-local function dismiss_trade_prompt()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            for _, desc in ipairs(prompt_gui:GetDescendants()) do
-                if desc:IsA("GuiButton") and (desc.Name == "No" or desc.Name == "Cancel" or desc.Name == "Decline") then
-                    click_gui_button(desc)
-                end
-            end
-            if prompt_gui:FindFirstChild("Blackout") then prompt_gui.Blackout.Visible = false end
-            if prompt_gui:FindFirstChild("Frame") then prompt_gui.Frame.Visible = false end
-        end
-    end)
-end
-
-local function apply_prompt_visibility()
-    pcall(function()
-        local prompt_gui = player_gui:FindFirstChild("Prompt")
-        if prompt_gui then
-            prompt_gui.Enabled = not config.auto_accept_enabled
-            if config.auto_accept_enabled then
-                if prompt_gui:FindFirstChild("Blackout") then prompt_gui.Blackout.Visible = false end
-                if prompt_gui:FindFirstChild("Frame") then prompt_gui.Frame.Visible = false end
-            end
-        end
-    end)
-end
-
 local function close_trading_gui()
-    pcall(function()
-        local t_gui = player_gui:FindFirstChild("! Trading")
-        if t_gui then
-            t_gui.Enabled = false
-            if t_gui:FindFirstChild("Frame") then t_gui.Frame.Visible = false end
-            for _, btn_name in ipairs({"Close", "Decline", "X"}) do
-                local btn = t_gui:FindFirstChild(btn_name, true)
-                if btn and btn:IsA("GuiButton") then click_gui_button(btn) end
-            end
-        end
-    end)
+    -- Bypass GUI: We don't touch PlayerGui to avoid triggering BAC
 end
 
 local auto_accept_active = false
@@ -569,39 +526,33 @@ local function toggle_auto_accept(enable)
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
 
     config.auto_accept_enabled = enable
-    if not enable then dismiss_trade_prompt() end
-    apply_prompt_visibility()
     if not trade_remotes or not enable then return end
 
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.auto_accept_enabled then return end
         pcall(function() trade_remotes.AcceptTradeOffer:InvokeServer(requester, true) end)
-        task_wait(0.05)
-        dismiss_trade_prompt()
-        apply_prompt_visibility()
     end)
 
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         auto_accept_active = false
         close_trading_gui()
-        dismiss_trade_prompt()
     end)
 
     auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
         if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         auto_accept_active = true
         task_spawn(function()
-            task_wait(0.5)
+            task_wait(0.2)
             if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
             pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
             local start_t = tick()
-            while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 60 do
+            while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 45 do
                 pcall(function()
                     trade_remotes.ConfirmTrade:InvokeServer()
                     trade_remotes.SetReady:InvokeServer(true)
                 end)
-                task_wait(0.4)
+                task_wait(0.08)
             end
             close_trading_gui()
         end)
@@ -649,31 +600,41 @@ end
 
 local function start_trade_session(target_player, mode)
     if not target_player or not trade_remotes then return false, "No remotes" end
-    if not local_player:GetAttribute("IsTrading") then
-        if cache.last_trade_time then
-            local elapsed = tick() - cache.last_trade_time
-            if elapsed < 15 then
-                set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 15 - elapsed) .. ")")
-                task_wait(15 - elapsed)
-            end
+    if local_player:GetAttribute("IsTrading") then
+        close_trading_gui()
+        local clear_start = tick()
+        while local_player:GetAttribute("IsTrading") and (tick() - clear_start) < 4 do
+            task_wait(0.1)
         end
-        set_status_msg(mode, "Waiting for target to accept offer...")
-        cache.last_trade_time = tick()
-        local success, err = trade_remotes.SendTradeOffer:InvokeServer(target_player)
-        if not success then
-            cache.last_trade_time = tick()
-            set_status_msg(mode, "Failed: " .. (err or "Declined"))
-            return false, err
-        end
-        local start_t = tick()
-        while not local_player:GetAttribute("IsTrading") and tick() - start_t < 10 do task_wait(0.1) end
-        if not local_player:GetAttribute("IsTrading") then
-            cache.last_trade_time = tick()
-            set_status_msg(mode, "Trade request timed out")
-            return false, "Timeout"
-        end
-        task_wait(0.5)
     end
+
+    if cache.last_failed_offer_time then
+        local elapsed = tick() - cache.last_failed_offer_time
+        if elapsed < 15 then
+            set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 15 - elapsed) .. ")")
+            task_wait(15 - elapsed)
+        end
+        cache.last_failed_offer_time = nil
+    end
+
+    set_status_msg(mode, "Waiting for target to accept offer...")
+    local success, err = trade_remotes.SendTradeOffer:InvokeServer(target_player)
+    if not success then
+        cache.last_failed_offer_time = tick()
+        set_status_msg(mode, "Failed: " .. (err or "Declined"))
+        return false, err
+    end
+
+    local start_t = tick()
+    while not local_player:GetAttribute("IsTrading") and (tick() - start_t) < 10 do
+        task_wait(0.1)
+    end
+    if not local_player:GetAttribute("IsTrading") then
+        cache.last_failed_offer_time = tick()
+        set_status_msg(mode, "Trade request timed out")
+        return false, "Timeout"
+    end
+    task_wait(0.3)
     return true
 end
 
@@ -686,17 +647,8 @@ local function wait_for_trade_end(mode_name, chat_listener)
             if trade_remotes.SetReady then trade_remotes.SetReady:InvokeServer(true) end
             if trade_remotes.ConfirmTrade then trade_remotes.ConfirmTrade:InvokeServer() end
         end)
-        pcall(function()
-            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
-            if t_gui then
-                for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
-                    local btn = t_gui:FindFirstChild(btn_name, true)
-                    if btn and btn:IsA("GuiButton") then click_gui_button(btn) end
-                end
-            end
-        end)
         set_status_msg(mode_name, "Accepting & Confirming trade...")
-        task_wait(0.1)
+        task_wait(0.08)
     end
 end
 
@@ -794,8 +746,8 @@ local function execute_trade(mode)
     else
         if config.quantity > 0 and s.total_items >= config.quantity then
             config.enabled = false
-            local flag_name = "trade_" .. (mode == "enchant" and "enchants" or (mode == "rarity" and "rarity" or "fish")) .. "_enabled"
-            config[flag_name] = false
+            local flag_name = mode_flag_map[mode]
+            if flag_name then config[flag_name] = false end
             if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
             set_status_msg(mode, string_format("Selesai! Berhasil mengirim %d/%d item", s.total_items, config.quantity))
             return
@@ -826,7 +778,7 @@ local function execute_trade(mode)
             table_insert(added_items, item)
             if mode == "coin" then added_coins = added_coins + calculate_fish_coin_value(item) end
         end
-        task_wait(0.10)
+        task_wait(0.08)
     end
 
     if #added_items > 0 and local_player:GetAttribute("IsTrading") then
@@ -854,10 +806,18 @@ local function execute_trade(mode)
         chat_listener.disconnect()
         if not trade_success then
             s.failed = s.failed + 1
+            cache.last_failed_offer_time = tick()
             close_trading_gui()
             update_status_ui(mode)
         else
-            cache.last_trade_time = tick()
+            cache.last_failed_offer_time = nil
+            set_status_msg(mode, "Trade done! Syncing inventory...")
+            local clear_start = tick()
+            while local_player:GetAttribute("IsTrading") and (tick() - clear_start) < 4 do
+                task_wait(0.1)
+            end
+            task_wait(0.4)
+
             if mode == "coin" then
                 if config.target_coin_amount > 0 and (s.total_coins or 0) >= config.target_coin_amount then
                     config.enabled = false
@@ -868,8 +828,8 @@ local function execute_trade(mode)
             else
                 if config.quantity > 0 and s.total_items >= config.quantity then
                     config.enabled = false
-                    local flag_name = "trade_" .. (mode == "enchant" and "enchants" or (mode == "rarity" and "rarity" or "fish")) .. "_enabled"
-                    config[flag_name] = false
+                    local flag_name = mode_flag_map[mode]
+                    if flag_name then config[flag_name] = false end
                     if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
                     set_status_msg(mode, string_format("Selesai! Berhasil mengirim %d/%d item", s.total_items, config.quantity))
                 end
@@ -886,7 +846,7 @@ local function run_auto_trade_loop()
     cache.loop_running = true
     for _, mode in ipairs({"fish", "rarity", "enchant", "coin"}) do
         task_spawn(function()
-            local flag_name = "trade_" .. (mode == "enchant" and "enchants" or (mode == "rarity" and "rarity" or (mode == "coin" and "coins" or "fish"))) .. "_enabled"
+            local flag_name = mode_flag_map[mode]
             while _G.NoirHub_AutoTrade_ScriptID == script_id do
                 if config.enabled and config[flag_name] then
                     if not cache.is_trading_active then
@@ -902,7 +862,19 @@ local function run_auto_trade_loop()
 end
 
 local function create_ui()
-    local parent_gui = (gethui and pcall(gethui) and gethui()) or game:GetService("CoreGui") or local_player:WaitForChild("PlayerGui")
+    local parent_gui = nil
+    if gethui then
+        local ok, res = pcall(gethui)
+        if ok and res then parent_gui = res end
+    end
+    if not parent_gui then
+        local ok, core = pcall(function() return cloneref(game:GetService("CoreGui")) end)
+        if ok and core then parent_gui = core end
+    end
+    if not parent_gui then
+        parent_gui = player_gui
+    end
+
     local function clear_old(cont)
         if not cont then return end
         pcall(function()
@@ -911,7 +883,7 @@ local function create_ui()
             end
         end)
     end
-    clear_old(parent_gui); clear_old(local_player:FindFirstChild("PlayerGui"))
+    clear_old(parent_gui)
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "AutoTrade"
@@ -1501,10 +1473,10 @@ local function create_ui()
     end
 
     local function sync_modes(active_mode)
-        for m, t in pairs(toggle_ctrls) do
+        for m, flag in pairs(mode_flag_map) do
             if m ~= active_mode then
-                t.set_state(false)
-                config["trade_" .. (m == "enchant" and "enchants" or (m == "rarity" and "rarity" or (m == "coin" and "coins" or "fish"))) .. "_enabled"] = false
+                if toggle_ctrls[m] then toggle_ctrls[m].set_state(false) end
+                config[flag] = false
             end
         end
     end
@@ -1767,8 +1739,8 @@ local function create_ui()
         while gui.Parent and _G.NoirHub_AutoTrade_ScriptID == script_id do
             for _, mode in ipairs({"fish", "rarity", "enchant", "coin"}) do
                 update_status_ui(mode)
-                local flag_name = "trade_" .. (mode == "enchant" and "enchants" or (mode == "rarity" and "rarity" or (mode == "coin" and "coins" or "fish"))) .. "_enabled"
-                if toggle_ctrls[mode] then
+                local flag_name = mode_flag_map[mode]
+                if toggle_ctrls[mode] and flag_name then
                     toggle_ctrls[mode].set_state(config.enabled and config[flag_name])
                 end
             end
