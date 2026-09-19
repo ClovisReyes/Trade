@@ -532,6 +532,35 @@ local function set_status_msg(mode_name, msg, details_override)
     update_status_ui(mode_name)
 end
 
+local trade_offer_controller = nil
+local original_popup = nil
+pcall(function()
+    local mod = replicated_storage:FindFirstChild("Controllers") and replicated_storage.Controllers:FindFirstChild("Trading") and replicated_storage.Controllers.Trading:FindFirstChild("TradeOfferController")
+    if mod then
+        trade_offer_controller = require(mod)
+        if trade_offer_controller and trade_offer_controller.PopUp then
+            original_popup = trade_offer_controller.PopUp
+            trade_offer_controller.PopUp = function(self, requester, ...)
+                if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
+                    -- Bypass GUI: Jangan pernah munculkan popup GUI di layar
+                    pcall(function()
+                        if self.AcceptTrade then
+                            self:AcceptTrade(requester)
+                        end
+                    end)
+                    pcall(function()
+                        if trade_remotes and trade_remotes.AcceptTradeOffer then
+                            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+                        end
+                    end)
+                    return -- Hentikan pembuatan popup UI di PlayerGui
+                end
+                return original_popup(self, requester, ...)
+            end
+        end
+    end
+end)
+
 local function close_trading_gui()
     -- Bypass GUI: We don't touch PlayerGui to avoid triggering BAC
 end
@@ -547,6 +576,11 @@ local function toggle_auto_accept(enable)
 
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.auto_accept_enabled then return end
+        pcall(function()
+            if trade_offer_controller and trade_offer_controller.AcceptTrade then
+                trade_offer_controller:AcceptTrade(requester)
+            end
+        end)
         pcall(function() trade_remotes.AcceptTradeOffer:InvokeServer(requester, true) end)
     end)
 
@@ -1795,4 +1829,7 @@ _G.NoirHub_AutoTrade_Cleanup = function()
         local old = pgui and (pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
         if old then old:Destroy() end
     end)
+    if trade_offer_controller and original_popup then
+        trade_offer_controller.PopUp = original_popup
+    end
 end
