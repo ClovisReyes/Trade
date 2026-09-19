@@ -1163,7 +1163,7 @@ local function start_trade_session(target_player, mode)
             trade_remotes.SendTradeOffer:InvokeServer(target_player)
         end)
 
-        task_wait(1.5)
+        task_wait(5.0) -- Wait 5s between trade requests to prevent BAC-10196 (Spamming requests)
         if is_trade_active() then
             offer_accepted = true
             break
@@ -1534,14 +1534,12 @@ local function try_trade_enchant()
 
         local add_success = false
         for attempt = 1, 2 do
-            for _, cat_type in ipairs({"Enchant Stones", "Items", "Item"}) do
-                local ok, res = pcall(function()
-                    return trade_remotes.AddItem:InvokeServer(cat_type, item.UUID)
-                end)
-                if ok and res ~= false then
-                    add_success = true
-                    break
-                end
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer("Enchant Stones", item.UUID)
+            end)
+            if ok and res ~= false then
+                add_success = true
+                break
             end
             if add_success then break end
             task_wait(0.2)
@@ -1659,14 +1657,12 @@ local function try_trade_coin()
 
         local add_success = false
         for attempt = 1, 2 do
-            for _, cat_type in ipairs({"Fish", "Items", "Item"}) do
-                local ok, res = pcall(function()
-                    return trade_remotes.AddItem:InvokeServer(cat_type, item.UUID)
-                end)
-                if ok and res ~= false then
-                    add_success = true
-                    break
-                end
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
+            end)
+            if ok and res ~= false then
+                add_success = true
+                break
             end
             if add_success then break end
             task_wait(0.2)
