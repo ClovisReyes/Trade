@@ -26,7 +26,7 @@ local variables = {
 }
 
 local cache, status_labels, toggle_ctrls = nil, {}, {}
-local inventory_conn, auto_accept_conn, auto_accept_trade_started_conn, auto_accept_trade_ended_conn
+local auto_accept_trade_started_conn, auto_accept_trade_ended_conn
 local float_drag_conn, header_drag_conn
 
 local success_replion, replion_mod = pcall(require, variables.replion)
@@ -1887,10 +1887,8 @@ _G.NoirHub_AutoTrade_Cleanup = function()
     _G.NoirHub_AutoTrade_ScriptID = nil
     if float_drag_conn then pcall(function() float_drag_conn:Disconnect() end); float_drag_conn = nil end
     if header_drag_conn then pcall(function() header_drag_conn:Disconnect() end); header_drag_conn = nil end
-    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
-    if inventory_conn then pcall(function() inventory_conn:Disconnect() end); inventory_conn = nil end
     pcall(function()
         local core = gethui and pcall(gethui) and gethui() or game:GetService("CoreGui")
         local old = core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
