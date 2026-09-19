@@ -534,6 +534,21 @@ end
 
 local trade_offer_controller = nil
 local original_popup = nil
+local last_accepted_offer_time = 0
+
+local function do_single_accept(requester)
+    if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+    local now = tick()
+    if (now - last_accepted_offer_time) < 2 then return end
+    last_accepted_offer_time = now
+
+    pcall(function()
+        if trade_remotes and trade_remotes.AcceptTradeOffer then
+            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+        end
+    end)
+end
+
 pcall(function()
     local mod = replicated_storage:FindFirstChild("Controllers") and replicated_storage.Controllers:FindFirstChild("Trading") and replicated_storage.Controllers.Trading:FindFirstChild("TradeOfferController")
     if mod then
@@ -542,18 +557,9 @@ pcall(function()
             original_popup = trade_offer_controller.PopUp
             trade_offer_controller.PopUp = function(self, requester, ...)
                 if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
-                    -- Bypass GUI: Jangan pernah munculkan popup GUI di layar
-                    pcall(function()
-                        if self.AcceptTrade then
-                            self:AcceptTrade(requester)
-                        end
-                    end)
-                    pcall(function()
-                        if trade_remotes and trade_remotes.AcceptTradeOffer then
-                            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
-                        end
-                    end)
-                    return -- Hentikan pembuatan popup UI di PlayerGui
+                    -- Bypass GUI: Accept 1x dan cegah popup muncul di layar
+                    do_single_accept(requester)
+                    return
                 end
                 return original_popup(self, requester, ...)
             end
@@ -575,13 +581,7 @@ local function toggle_auto_accept(enable)
     if not trade_remotes or not enable then return end
 
     auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
-        if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.auto_accept_enabled then return end
-        pcall(function()
-            if trade_offer_controller and trade_offer_controller.AcceptTrade then
-                trade_offer_controller:AcceptTrade(requester)
-            end
-        end)
-        pcall(function() trade_remotes.AcceptTradeOffer:InvokeServer(requester, true) end)
+        do_single_accept(requester)
     end)
 
     auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
