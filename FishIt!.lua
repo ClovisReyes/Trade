@@ -471,6 +471,12 @@ local function get_inventory_enchants(bypass_favorited)
                         if data and data.Data then
                             local name = data.Data.Name
                             local is_enchant = (data.Data.Type == "Enchant Stones") or string_find(name, "Enchant", 1, true)
+                            
+                            -- Prevent BAC-8193: Do not show/trade locked server items
+                            if data.Data.Untradeable or data.Data.Tradeable == false or string_find(string_lower(name), "transcended") then
+                                is_enchant = false
+                            end
+
                             if is_enchant then
                                 enchants[name] = (enchants[name] or 0) + (item.Amount or 1)
                             end
@@ -1132,9 +1138,11 @@ local function wait_for_trade_end(mode, chat_listener)
             if is_your_ready and is_their_ready then
                 set_status_msg(mode, "Both players ready. Confirming trade...")
                 task_wait(3.5) -- Wait 3.5s to bypass server countdown checks (BAC-2195)
-                pcall(function()
-                    trade_remotes.ConfirmTrade:InvokeServer()
-                end)
+                if is_trade_active() then
+                    pcall(function()
+                        trade_remotes.ConfirmTrade:InvokeServer()
+                    end)
+                end
                 confirm_pressed = true
             end
         end
@@ -1153,21 +1161,17 @@ local function start_trade_session(target_player, mode)
     local offer_accepted = false
     local offer_start = tick()
 
-    while is_running and config.enabled and (tick() - offer_start) < 25 do
+    pcall(function()
+        trade_remotes.SendTradeOffer:InvokeServer(target_player)
+    end)
+
+    while is_running and config.enabled and (tick() - offer_start) < 20 do
         if is_trade_active() then
+            task_wait(1.5) -- Wait for server trade state to fully initialize
             offer_accepted = true
             break
         end
-
-        pcall(function()
-            trade_remotes.SendTradeOffer:InvokeServer(target_player)
-        end)
-
-        task_wait(5.0) -- Wait 5s between trade requests to prevent BAC-10196 (Spamming requests)
-        if is_trade_active() then
-            offer_accepted = true
-            break
-        end
+        task_wait(1.0)
     end
 
     if not offer_accepted then
@@ -1242,6 +1246,7 @@ local function try_trade_fish()
     if not success then
         cache.stats.fish.failed = cache.stats.fish.failed + 1
         update_mode_status("fish")
+        task_wait(15) -- Cooldown before retrying to prevent BAC-8193 spam
         return
     end
 
@@ -1385,6 +1390,7 @@ local function try_trade_rarity()
     if not success then
         cache.stats.rarity.failed = cache.stats.rarity.failed + 1
         update_mode_status("rarity")
+        task_wait(15)
         return
     end
 
@@ -1524,6 +1530,7 @@ local function try_trade_enchant()
     if not success then
         cache.stats.enchant.failed = cache.stats.enchant.failed + 1
         update_mode_status("enchant")
+        task_wait(15)
         return
     end
 
@@ -1647,6 +1654,7 @@ local function try_trade_coin()
     if not success then
         cache.stats.coin.failed = cache.stats.coin.failed + 1
         update_mode_status("coin")
+        task_wait(15)
         return
     end
 
