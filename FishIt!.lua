@@ -1310,6 +1310,7 @@ local function try_trade_fish()
 
         if trade_success then
             cache.last_trade_time = tick()
+            task_wait(math.random(12, 25)) -- Cooldown to prevent BAC-3198 (Velocity/Bot detection)
             if config.quantity > 0 and cache.stats.fish.total_items >= config.quantity then
                 config.enabled = false
                 config.trade_fish_enabled = false
@@ -1454,6 +1455,7 @@ local function try_trade_rarity()
 
         if trade_success then
             cache.last_trade_time = tick()
+            task_wait(math.random(12, 25))
             if config.quantity > 0 and cache.stats.rarity.total_items >= config.quantity then
                 config.enabled = false
                 config.trade_rarity_enabled = false
@@ -1595,6 +1597,7 @@ local function try_trade_enchant()
 
         if trade_success then
             cache.last_trade_time = tick()
+            task_wait(math.random(12, 25))
             if config.quantity > 0 and cache.stats.enchant.total_items >= config.quantity then
                 config.enabled = false
                 config.trade_enchants_enabled = false
@@ -1726,6 +1729,7 @@ local function try_trade_coin()
 
         if trade_success then
             cache.last_trade_time = tick()
+            task_wait(math.random(12, 25))
             if config.trade_coin_target > 0 and cache.stats.coin.total_coins >= config.trade_coin_target then
                 config.enabled = false
                 config.trade_coin_enabled = false
