@@ -312,7 +312,7 @@ local function select_fish_for_coin_trade(target_coins, already_sent_coins)
 
     local candidate_pool = {}
     for _, itm in ipairs(items) do
-        if itm and itm.Id and not table_find(cache.processed_trades, itm.UUID) then
+        if itm and itm.Id then
             local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
             if not is_fav or config.trade_favorited then
                 local val = calculate_fish_coin_value(itm)
@@ -498,7 +498,7 @@ local function collect_round_robin(items, key_extractor, selected_keys, limit)
         for _, k in ipairs(bucket_keys) do
             if #items_to_trade >= limit then break end
             for _, item in ipairs(buckets[k] or {}) do
-                if not added[item.UUID] and not table_find(cache.processed_trades, item.UUID) then
+                if not added[item.UUID] then
                     added[item.UUID] = true
                     table_insert(items_to_trade, item)
                     added_any = true
@@ -787,6 +787,7 @@ local function collect_trade_items(mode)
     local total_sent = cache.stats[mode].total_items
     local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
     local items_to_trade = {}
+    local added_uuids = {}
 
     if mode == "fish" then
         local has_all = #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil
@@ -800,7 +801,10 @@ local function collect_trade_items(mode)
                 if #items_to_trade >= limit then break end
                 local d = item and item.Id and item_utility:GetItemData(item.Id)
                 if d and d.Data and d.Data.Type == "Fish" and should_trade_fish(d, item) then
-                    if not table_find(cache.processed_trades, item.UUID) then table_insert(items_to_trade, item) end
+                    if not added_uuids[item.UUID] then
+                        added_uuids[item.UUID] = true
+                        table_insert(items_to_trade, item)
+                    end
                 end
             end
         end
@@ -820,7 +824,10 @@ local function collect_trade_items(mode)
                 if #items_to_trade >= limit then break end
                 local d = item and item.Id and item_utility:GetItemData(item.Id)
                 if d and d.Data and d.Data.Type == "Fish" and should_trade_fish_by_rarity(d, item) then
-                    if not table_find(cache.processed_trades, item.UUID) then table_insert(items_to_trade, item) end
+                    if not added_uuids[item.UUID] then
+                        added_uuids[item.UUID] = true
+                        table_insert(items_to_trade, item)
+                    end
                 end
             end
         end
@@ -840,7 +847,10 @@ local function collect_trade_items(mode)
                             end
                         end
                         if match then
-                            if not table_find(cache.processed_trades, item.UUID) then table_insert(items_to_trade, item) end
+                            if not added_uuids[item.UUID] then
+                                added_uuids[item.UUID] = true
+                                table_insert(items_to_trade, item)
+                            end
                         end
                     end
                 end
@@ -856,7 +866,6 @@ local function collect_trade_items(mode)
 end
 
 local function execute_trade(mode)
-    cache.processed_trades = {}
     local target_player = find_target_player()
     if not target_player or not player_data then
         set_status_msg(mode, config.trade_with ~= "" and "Waiting: Target player tidak ditemukan di server" or "Waiting: Target player belum dipilih di panel kanan")
@@ -933,7 +942,6 @@ local function execute_trade(mode)
             set_status_msg(mode, string_format("Adding %s... (%d/%d)", get_mode_display_name(mode), idx, #items_to_trade))
             local ok, res = pcall(function() return trade_remotes.AddItem:InvokeServer(category, item.UUID) end)
             if ok and res ~= false then
-                table_insert(cache.processed_trades, item.UUID)
                 table_insert(added_items, item)
                 if mode == "coin" then added_coins = added_coins + calculate_fish_coin_value(item) end
             end
@@ -971,14 +979,6 @@ local function execute_trade(mode)
                 config.trade_coins_enabled = false
                 if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
                 set_status_msg("coin", string_format("Selesai! Berhasil mengirim %s Coins (%d ikan)", format_number(s.total_coins), s.total_items))
-            else
-                local remaining = collect_trade_items("coin")
-                if #remaining == 0 then
-                    config.enabled = false
-                    config.trade_coins_enabled = false
-                    if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
-                    set_status_msg("coin", string_format("Selesai! Bag kosong. Berhasil mengirim %s Coins (%d ikan)", format_number(s.total_coins), s.total_items))
-                end
             end
         else
             if config.quantity > 0 and s.total_items >= config.quantity then
@@ -987,15 +987,6 @@ local function execute_trade(mode)
                 if flag_name then config[flag_name] = false end
                 if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
                 set_status_msg(mode, string_format("Selesai! Berhasil mengirim %d/%d item", s.total_items, config.quantity))
-            else
-                local remaining = collect_trade_items(mode)
-                if #remaining == 0 then
-                    config.enabled = false
-                    local flag_name = mode_flag_map[mode]
-                    if flag_name then config[flag_name] = false end
-                    if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
-                    set_status_msg(mode, string_format("Selesai! Bag kosong. Berhasil mengirim %d item", s.total_items))
-                end
             end
         end
     end
