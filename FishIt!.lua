@@ -1067,7 +1067,8 @@ local function create_ui()
 
     local BG_COLOR = Color3.fromRGB(15, 15, 15)
     local SIDEBAR_COLOR = Color3.fromRGB(10, 10, 10)
-    local ACCENT_COLOR = Color3.fromRGB(255, 0, 255)
+    local ACCENT_COLOR = Color3.fromRGB(255, 125, 0)
+    local BUTTON_COLOR = Color3.fromRGB(235, 95, 20)
     local TEXT_COLOR = Color3.fromRGB(240, 240, 240)
     local MUTED_COLOR = Color3.fromRGB(150, 150, 150)
     local CARD_COLOR = Color3.fromRGB(22, 22, 22)
@@ -1688,7 +1689,7 @@ local function create_ui()
     table_insert(qty_inputs, f_qty)
     f_qty.FocusLost:Connect(function() sync_qty(tonumber(f_qty.Text) or config.quantity) end)
 
-    local f_ref = Instance.new("TextButton"); f_ref.Size = UDim2.new(1, 0, 0, 26); f_ref.BackgroundColor3 = Color3.fromRGB(192, 0, 192); f_ref.Text = "Refresh Fish Items"; f_ref.TextColor3 = Color3.fromRGB(255, 255, 255); f_ref.TextSize = 9; f_ref.FontFace = font_bold; f_ref.Parent = byname_inner
+    local f_ref = Instance.new("TextButton"); f_ref.Size = UDim2.new(1, 0, 0, 26); f_ref.BackgroundColor3 = BUTTON_COLOR; f_ref.Text = "Refresh Fish Items"; f_ref.TextColor3 = Color3.fromRGB(255, 255, 255); f_ref.TextSize = 9; f_ref.FontFace = font_bold; f_ref.Parent = byname_inner
     create_corner(f_ref, 5)
     f_ref.MouseButton1Click:Connect(function()
         f_ref.Text = "Fish Items Refreshed!"
@@ -1742,7 +1743,7 @@ local function create_ui()
     table_insert(qty_inputs, e_qty)
     e_qty.FocusLost:Connect(function() sync_qty(tonumber(e_qty.Text) or config.quantity) end)
 
-    local e_ref = Instance.new("TextButton"); e_ref.Size = UDim2.new(1, 0, 0, 26); e_ref.BackgroundColor3 = Color3.fromRGB(192, 0, 192); e_ref.Text = "Check Enchant Stones"; e_ref.TextColor3 = Color3.fromRGB(255, 255, 255); e_ref.TextSize = 9; e_ref.FontFace = font_bold; e_ref.Parent = en_inner
+    local e_ref = Instance.new("TextButton"); e_ref.Size = UDim2.new(1, 0, 0, 26); e_ref.BackgroundColor3 = BUTTON_COLOR; e_ref.Text = "Check Enchant Stones"; e_ref.TextColor3 = Color3.fromRGB(255, 255, 255); e_ref.TextSize = 9; e_ref.FontFace = font_bold; e_ref.Parent = en_inner
     create_corner(e_ref, 5)
     e_ref.MouseButton1Click:Connect(function()
         e_ref.Text = "Enchant Stones Checked!"
@@ -1789,7 +1790,7 @@ local function create_ui()
     table_insert(qty_inputs, r_qty)
     r_qty.FocusLost:Connect(function() sync_qty(tonumber(r_qty.Text) or config.quantity) end)
 
-    local r_ref = Instance.new("TextButton"); r_ref.Size = UDim2.new(1, 0, 0, 26); r_ref.BackgroundColor3 = Color3.fromRGB(192, 0, 192); r_ref.Text = "Refresh Fish Rarity"; r_ref.TextColor3 = Color3.fromRGB(255, 255, 255); r_ref.TextSize = 9; r_ref.FontFace = font_bold; r_ref.Parent = r_inner
+    local r_ref = Instance.new("TextButton"); r_ref.Size = UDim2.new(1, 0, 0, 26); r_ref.BackgroundColor3 = BUTTON_COLOR; r_ref.Text = "Refresh Fish Rarity"; r_ref.TextColor3 = Color3.fromRGB(255, 255, 255); r_ref.TextSize = 9; r_ref.FontFace = font_bold; r_ref.Parent = r_inner
     create_corner(r_ref, 5)
     r_ref.MouseButton1Click:Connect(function()
         r_ref.Text = "Rarity Fish Refreshed!"
@@ -1845,7 +1846,7 @@ local function create_ui()
 
     local coin_check_btn = Instance.new("TextButton")
     coin_check_btn.Size = UDim2.new(1, 0, 0, 26)
-    coin_check_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    coin_check_btn.BackgroundColor3 = BUTTON_COLOR
     coin_check_btn.Text = "Check Bag Coin Worth"
     coin_check_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     coin_check_btn.TextSize = 9
@@ -1896,7 +1897,7 @@ local function create_ui()
     end)
     fav_toggles.coin = create_toggle(c_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
 
-    local c_reset = Instance.new("TextButton"); c_reset.Size = UDim2.new(1, 0, 0, 26); c_reset.BackgroundColor3 = Color3.fromRGB(192, 0, 192); c_reset.Text = "Reset Stats By Coin"; c_reset.TextColor3 = Color3.fromRGB(255, 255, 255); c_reset.TextSize = 9; c_reset.FontFace = font_bold; c_reset.Parent = c_inner
+    local c_reset = Instance.new("TextButton"); c_reset.Size = UDim2.new(1, 0, 0, 26); c_reset.BackgroundColor3 = BUTTON_COLOR; c_reset.Text = "Reset Stats By Coin"; c_reset.TextColor3 = Color3.fromRGB(255, 255, 255); c_reset.TextSize = 9; c_reset.FontFace = font_bold; c_reset.Parent = c_inner
     create_corner(c_reset, 5)
     c_reset.MouseButton1Click:Connect(function()
         cache.stats.coin = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
