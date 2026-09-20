@@ -1944,6 +1944,8 @@ _G.NoirHub_AutoTrade_Cleanup = function()
     if header_drag_conn then pcall(function() header_drag_conn:Disconnect() end); header_drag_conn = nil end
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
+    if auto_accept_trade_completed_conn then pcall(function() auto_accept_trade_completed_conn:Disconnect() end); auto_accept_trade_completed_conn = nil end
+    if auto_accept_attr_conn then pcall(function() auto_accept_attr_conn:Disconnect() end); auto_accept_attr_conn = nil end
     pcall(function()
         local core = gethui and pcall(gethui) and gethui() or game:GetService("CoreGui")
         local old = core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
