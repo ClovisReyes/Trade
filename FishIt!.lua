@@ -1412,20 +1412,20 @@ local function create_ui()
     create_corner(player_panel, 10); create_stroke(player_panel, Color3.fromRGB(45, 45, 45))
 
     local ply_refresh = Instance.new("TextButton")
-    ply_refresh.Size = UDim2.new(1, -20, 0, 26)
-    ply_refresh.Position = UDim2.new(0, 10, 0, 10)
-    ply_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    ply_refresh.Size = UDim2.new(1, -16, 0, 20)
+    ply_refresh.Position = UDim2.new(0, 8, 0, 8)
+    ply_refresh.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
     ply_refresh.Text = "Refresh"
-    ply_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ply_refresh.TextColor3 = Color3.fromRGB(20, 20, 20)
     ply_refresh.TextSize = 9
     ply_refresh.FontFace = font_bold
     ply_refresh.ZIndex = 10
     ply_refresh.Parent = player_panel
-    create_corner(ply_refresh, 5)
+    create_corner(ply_refresh, 4)
 
     local target_lbl = Instance.new("TextLabel")
-    target_lbl.Size = UDim2.new(1, -12, 0, 20)
-    target_lbl.Position = UDim2.new(0, 6, 0, 42)
+    target_lbl.Size = UDim2.new(1, -16, 0, 18)
+    target_lbl.Position = UDim2.new(0, 8, 0, 32)
     target_lbl.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     target_lbl.Text = config.trade_with ~= "" and config.trade_with or "None"
     target_lbl.TextColor3 = ACCENT_COLOR
@@ -1436,8 +1436,8 @@ local function create_ui()
     create_corner(target_lbl, 4); create_stroke(target_lbl, Color3.fromRGB(45, 45, 45))
 
     local p_scroll = Instance.new("ScrollingFrame")
-    p_scroll.Size = UDim2.new(1, -12, 1, -78)
-    p_scroll.Position = UDim2.new(0, 6, 0, 73)
+    p_scroll.Size = UDim2.new(1, -12, 1, -58)
+    p_scroll.Position = UDim2.new(0, 6, 0, 54)
     p_scroll.BackgroundTransparency = 1
     p_scroll.ScrollBarThickness = 3
     p_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
