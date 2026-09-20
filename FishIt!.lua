@@ -885,8 +885,12 @@ local function execute_trade(mode)
 
     local items_to_trade = collect_trade_items(mode)
     if #items_to_trade == 0 then
-        local err_msg = mode == "coin" and "Waiting: Tidak ada ikan yang memenuhi syarat di bag (idle)..." or ("Waiting: Tidak ada " .. get_mode_display_name(mode) .. " yang tersedia di bag (idle)...")
-        set_status_msg(mode, err_msg)
+        config.enabled = false
+        local flag_name = mode_flag_map[mode]
+        if flag_name then config[flag_name] = false end
+        if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
+        local done_msg = mode == "coin" and "Selesai! Tidak ada ikan di bag untuk ditukar." or ("Selesai! Tidak ada " .. get_mode_display_name(mode) .. " di bag.")
+        set_status_msg(mode, done_msg)
         return
     end
 
@@ -967,6 +971,14 @@ local function execute_trade(mode)
                 config.trade_coins_enabled = false
                 if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
                 set_status_msg("coin", string_format("Selesai! Berhasil mengirim %s Coins (%d ikan)", format_number(s.total_coins), s.total_items))
+            else
+                local remaining = collect_trade_items("coin")
+                if #remaining == 0 then
+                    config.enabled = false
+                    config.trade_coins_enabled = false
+                    if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
+                    set_status_msg("coin", string_format("Selesai! Bag kosong. Berhasil mengirim %s Coins (%d ikan)", format_number(s.total_coins), s.total_items))
+                end
             end
         else
             if config.quantity > 0 and s.total_items >= config.quantity then
@@ -975,6 +987,15 @@ local function execute_trade(mode)
                 if flag_name then config[flag_name] = false end
                 if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
                 set_status_msg(mode, string_format("Selesai! Berhasil mengirim %d/%d item", s.total_items, config.quantity))
+            else
+                local remaining = collect_trade_items(mode)
+                if #remaining == 0 then
+                    config.enabled = false
+                    local flag_name = mode_flag_map[mode]
+                    if flag_name then config[flag_name] = false end
+                    if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
+                    set_status_msg(mode, string_format("Selesai! Bag kosong. Berhasil mengirim %d item", s.total_items))
+                end
             end
         end
     end
