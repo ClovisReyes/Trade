@@ -27,6 +27,7 @@ local variables = {
 
 local cache, status_labels, toggle_ctrls = nil, {}, {}
 local auto_accept_trade_started_conn, auto_accept_trade_ended_conn
+local auto_accept_trade_completed_conn, auto_accept_attr_conn
 local float_drag_conn, header_drag_conn
 
 local success_replion, replion_mod = pcall(require, variables.replion)
@@ -594,7 +595,7 @@ pcall(function()
 
                 if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
                     -- Bypass GUI: Jangan pernah munculkan popup GUI di layar
-                    if requester and not local_player:GetAttribute("IsTrading") and not auto_accept_active then
+                    if requester then
                         pcall(function()
                             trade_offer_controller:AcceptTrade(requester)
                         end)
@@ -611,9 +612,10 @@ _G.NoirHub_AutoTrade_Cleanup = function()
     if _G.OriginalTradeOfferPopUp and trade_offer_controller then
         trade_offer_controller.PopUp = _G.OriginalTradeOfferPopUp
     end
-    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
+    if auto_accept_trade_completed_conn then pcall(function() auto_accept_trade_completed_conn:Disconnect() end); auto_accept_trade_completed_conn = nil end
+    if auto_accept_attr_conn then pcall(function() auto_accept_attr_conn:Disconnect() end); auto_accept_attr_conn = nil end
 end
 
 local function close_trading_gui()
@@ -624,42 +626,62 @@ local auto_accept_active = false
 local function toggle_auto_accept(enable)
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
+    if auto_accept_trade_completed_conn then pcall(function() auto_accept_trade_completed_conn:Disconnect() end); auto_accept_trade_completed_conn = nil end
+    if auto_accept_attr_conn then pcall(function() auto_accept_attr_conn:Disconnect() end); auto_accept_attr_conn = nil end
 
     config.auto_accept_enabled = enable
+    auto_accept_active = false
     save_config()
     if not trade_remotes or not enable then return end
 
-    auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
+    local function on_trade_end()
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         auto_accept_active = false
         close_trading_gui()
-    end)
+    end
 
-    auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
-        if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-        auto_accept_active = true
-        task_spawn(function()
-            task_wait(2.5)
-            if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
-            pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
-            local start_t = tick()
-            while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 60 do
-                pcall(function()
-                    trade_remotes.SetReady:InvokeServer(true)
-                    trade_remotes.ConfirmTrade:InvokeServer()
-                end)
-                task_wait(0.08)
+    if trade_remotes.TradeEnded then
+        auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(on_trade_end)
+    end
+    if trade_remotes.TradeCompleted then
+        auto_accept_trade_completed_conn = trade_remotes.TradeCompleted.OnClientEvent:Connect(on_trade_end)
+    end
+    pcall(function()
+        auto_accept_attr_conn = local_player:GetAttributeChangedSignal("IsTrading"):Connect(function()
+            if not local_player:GetAttribute("IsTrading") then
+                on_trade_end()
             end
-            if local_player:GetAttribute("IsTrading") then
-                pcall(function()
-                    if trade_remotes and trade_remotes.CancelTrade then
-                        trade_remotes.CancelTrade:InvokeServer()
-                    end
-                end)
-            end
-            close_trading_gui()
         end)
     end)
+
+    if trade_remotes.TradeStarted then
+        auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
+            if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+            auto_accept_active = true
+            task_spawn(function()
+                task_wait(2.5)
+                if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
+                pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
+                local start_t = tick()
+                while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 60 do
+                    pcall(function()
+                        trade_remotes.SetReady:InvokeServer(true)
+                        trade_remotes.ConfirmTrade:InvokeServer()
+                    end)
+                    task_wait(0.08)
+                end
+                auto_accept_active = false
+                if local_player:GetAttribute("IsTrading") then
+                    pcall(function()
+                        if trade_remotes and trade_remotes.CancelTrade then
+                            trade_remotes.CancelTrade:InvokeServer()
+                        end
+                    end)
+                end
+                close_trading_gui()
+            end)
+        end)
+    end
 end
 
 local function listen_for_trade_completion(on_completed)
