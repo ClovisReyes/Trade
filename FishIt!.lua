@@ -594,7 +594,7 @@ pcall(function()
 
                 if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
                     -- Bypass GUI: Jangan pernah munculkan popup GUI di layar
-                    if requester then
+                    if requester and not local_player:GetAttribute("IsTrading") and not auto_accept_active then
                         pcall(function()
                             trade_offer_controller:AcceptTrade(requester)
                         end)
@@ -1009,7 +1009,7 @@ local function run_auto_trade_loop()
             local flag_name = mode_flag_map[mode]
             while _G.NoirHub_AutoTrade_ScriptID == script_id do
                 if config.enabled and config[flag_name] then
-                    if not cache.is_trading_active then
+                    if not cache.is_trading_active and not local_player:GetAttribute("IsTrading") then
                         cache.is_trading_active = true
                         pcall(function() execute_trade(mode) end)
                         cache.is_trading_active = false
