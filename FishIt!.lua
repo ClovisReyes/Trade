@@ -639,14 +639,14 @@ local function toggle_auto_accept(enable)
         if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         auto_accept_active = true
         task_spawn(function()
-            task_wait(0.2)
+            task_wait(2.5)
             if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
             pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
             local start_t = tick()
             while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 60 do
                 pcall(function()
-                    trade_remotes.ConfirmTrade:InvokeServer()
                     trade_remotes.SetReady:InvokeServer(true)
+                    trade_remotes.ConfirmTrade:InvokeServer()
                 end)
                 task_wait(0.08)
             end
@@ -706,8 +706,19 @@ local function start_trade_session(target_player, mode)
     if local_player:GetAttribute("IsTrading") then
         close_trading_gui()
         local clear_start = tick()
-        while local_player:GetAttribute("IsTrading") and (tick() - clear_start) < 4 do
+        while local_player:GetAttribute("IsTrading") and (tick() - clear_start) < 2 do
             task_wait(0.1)
+        end
+        if local_player:GetAttribute("IsTrading") then
+            pcall(function()
+                if trade_remotes and trade_remotes.CancelTrade then
+                    trade_remotes.CancelTrade:InvokeServer()
+                end
+            end)
+            local cancel_wait = tick()
+            while local_player:GetAttribute("IsTrading") and (tick() - cancel_wait) < 3 do
+                task_wait(0.1)
+            end
         end
     end
 
@@ -886,76 +897,86 @@ local function execute_trade(mode)
     if not success then s.failed = s.failed + 1; update_status_ui(mode); return end
 
     local added_items, added_coins = {}, 0
-    set_status_msg(mode, "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
     local category = (mode == "enchant") and "Enchant Stones" or "Fish"
+    
+    local trade_success = false
+    local function mark_success()
+        if not trade_success then
+            trade_success = true
+            s.success_trades = s.success_trades + 1
+            s.last_items = #added_items
+            s.total_items = s.total_items + #added_items
+            if mode == "coin" then
+                local sent_subtotal = 0
+                for _, itm in ipairs(added_items) do
+                    sent_subtotal = sent_subtotal + calculate_fish_coin_value(itm)
+                end
+                s.total_coins = (s.total_coins or 0) + sent_subtotal
+            end
+            update_status_ui(mode)
+        end
+    end
+    local chat_listener = listen_for_trade_completion(mark_success)
+
+    local add_start_time = tick()
     for idx, item in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") or _G.NoirHub_AutoTrade_ScriptID ~= script_id then break end
-        local ok, res = pcall(function() return trade_remotes.AddItem:InvokeServer(category, item.UUID) end)
-        if ok and res ~= false then
-            table_insert(cache.processed_trades, item.UUID)
-            table_insert(added_items, item)
-            if mode == "coin" then added_coins = added_coins + calculate_fish_coin_value(item) end
+        if (tick() - add_start_time) > 20 then
+            -- 20s watchdog limit on AddItem phase
+            break
+        end
+        if item and item.UUID then
+            set_status_msg(mode, string_format("Adding %s... (%d/%d)", get_mode_display_name(mode), idx, #items_to_trade))
+            local ok, res = pcall(function() return trade_remotes.AddItem:InvokeServer(category, item.UUID) end)
+            if ok and res ~= false then
+                table_insert(cache.processed_trades, item.UUID)
+                table_insert(added_items, item)
+                if mode == "coin" then added_coins = added_coins + calculate_fish_coin_value(item) end
+            end
         end
         task_wait(0.08)
     end
 
-    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
-        local trade_success = false
-        local function mark_success()
-            if not trade_success then
-                trade_success = true
-                s.success_trades = s.success_trades + 1
-                s.last_items = #added_items
-                s.total_items = s.total_items + #added_items
-                if mode == "coin" then
-                    local sent_subtotal = 0
-                    for _, itm in ipairs(added_items) do
-                        sent_subtotal = sent_subtotal + calculate_fish_coin_value(itm)
-                    end
-                    s.total_coins = (s.total_coins or 0) + sent_subtotal
-                end
-                update_status_ui(mode)
-            end
-        end
-        local chat_listener = listen_for_trade_completion(mark_success)
+    if local_player:GetAttribute("IsTrading") then
         pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
         wait_for_trade_end(mode, chat_listener)
-        if chat_listener.is_completed() then mark_success() end
-        chat_listener.disconnect()
-        if not trade_success then
-            s.failed = s.failed + 1
-            cache.last_failed_offer_time = tick()
-            close_trading_gui()
-            update_status_ui(mode)
-        else
-            cache.last_failed_offer_time = nil
-            set_status_msg(mode, "Trade done! Syncing inventory...")
-            local clear_start = tick()
-            while local_player:GetAttribute("IsTrading") and (tick() - clear_start) < 4 do
-                task_wait(0.1)
-            end
-            task_wait(0.4)
+    end
 
-            if mode == "coin" then
-                if config.target_coin_amount > 0 and (s.total_coins or 0) >= config.target_coin_amount then
-                    config.enabled = false
-                    config.trade_coins_enabled = false
-                    if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
-                    set_status_msg("coin", string_format("Selesai! Berhasil mengirim %s Coins (%d ikan)", format_number(s.total_coins), s.total_items))
-                end
-            else
-                if config.quantity > 0 and s.total_items >= config.quantity then
-                    config.enabled = false
-                    local flag_name = mode_flag_map[mode]
-                    if flag_name then config[flag_name] = false end
-                    if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
-                    set_status_msg(mode, string_format("Selesai! Berhasil mengirim %d/%d item", s.total_items, config.quantity))
-                end
+    if chat_listener.is_completed() then
+        mark_success()
+    end
+    chat_listener.disconnect()
+
+    if not trade_success then
+        s.failed = s.failed + 1
+        cache.last_failed_offer_time = tick()
+        close_trading_gui()
+        update_status_ui(mode)
+    else
+        cache.last_failed_offer_time = nil
+        set_status_msg(mode, "Trade done! Syncing inventory...")
+        local clear_start = tick()
+        while local_player:GetAttribute("IsTrading") and (tick() - clear_start) < 4 do
+            task_wait(0.1)
+        end
+        task_wait(0.4)
+
+        if mode == "coin" then
+            if config.target_coin_amount > 0 and (s.total_coins or 0) >= config.target_coin_amount then
+                config.enabled = false
+                config.trade_coins_enabled = false
+                if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
+                set_status_msg("coin", string_format("Selesai! Berhasil mengirim %s Coins (%d ikan)", format_number(s.total_coins), s.total_items))
+            end
+        else
+            if config.quantity > 0 and s.total_items >= config.quantity then
+                config.enabled = false
+                local flag_name = mode_flag_map[mode]
+                if flag_name then config[flag_name] = false end
+                if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
+                set_status_msg(mode, string_format("Selesai! Berhasil mengirim %d/%d item", s.total_items, config.quantity))
             end
         end
-    else
-        s.failed = s.failed + 1
-        update_status_ui(mode)
     end
 end
 
