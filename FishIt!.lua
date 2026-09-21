@@ -26,7 +26,7 @@ local variables = {
 }
 
 local cache, status_labels, toggle_ctrls = nil, {}, {}
-local auto_accept_trade_started_conn, auto_accept_trade_ended_conn
+local auto_accept_trade_offer_conn, auto_accept_trade_started_conn, auto_accept_trade_ended_conn
 local auto_accept_trade_completed_conn, auto_accept_attr_conn
 local float_drag_conn, header_drag_conn
 
@@ -576,6 +576,29 @@ if not _G.OriginalTradeOfferPopUp then
     end)
 end
 
+local function accept_trade_from(req)
+    local p = nil
+    if typeof(req) == "Instance" and req:IsA("Player") then
+        p = req
+    elseif type(req) == "table" and req.Player and typeof(req.Player) == "Instance" and req.Player:IsA("Player") then
+        p = req.Player
+    elseif type(req) == "string" and players:FindFirstChild(req) then
+        p = players:FindFirstChild(req)
+    end
+    if p then
+        pcall(function()
+            if trade_offer_controller and trade_offer_controller.AcceptTrade then
+                trade_offer_controller:AcceptTrade(p)
+            end
+        end)
+        pcall(function()
+            if trade_remotes and trade_remotes.AcceptTradeOffer then
+                trade_remotes.AcceptTradeOffer:InvokeServer(p)
+            end
+        end)
+    end
+end
+
 local original_popup = _G.OriginalTradeOfferPopUp
 pcall(function()
     local mod = replicated_storage:FindFirstChild("Controllers") and replicated_storage.Controllers:FindFirstChild("Trading") and replicated_storage.Controllers.Trading:FindFirstChild("TradeOfferController")
@@ -584,25 +607,9 @@ pcall(function()
         if trade_offer_controller and original_popup then
             trade_offer_controller.PopUp = function(...)
                 local args = {...}
-                local self_or_req = args[1]
-                local req = args[2]
-                local requester = nil
-                if typeof(self_or_req) == "Instance" and self_or_req:IsA("Player") then
-                    requester = self_or_req
-                elseif typeof(req) == "Instance" and req:IsA("Player") then
-                    requester = req
-                end
-
                 if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
-                    -- Bypass GUI: Jangan pernah munculkan popup GUI di layar
-                    if requester then
-                        if local_player:GetAttribute("IsTrading") then
-                            -- Sedang ada trade aktif: abaikan offer baru agar sesi saat ini tidak terganggu
-                            return
-                        end
-                        pcall(function()
-                            trade_offer_controller:AcceptTrade(requester)
-                        end)
+                    for _, arg in ipairs(args) do
+                        accept_trade_from(arg)
                     end
                     return -- Hentikan pembuatan popup UI di PlayerGui
                 end
@@ -616,6 +623,7 @@ _G.NoirHub_AutoTrade_Cleanup = function()
     if _G.OriginalTradeOfferPopUp and trade_offer_controller then
         trade_offer_controller.PopUp = _G.OriginalTradeOfferPopUp
     end
+    if auto_accept_trade_offer_conn then pcall(function() auto_accept_trade_offer_conn:Disconnect() end); auto_accept_trade_offer_conn = nil end
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
     if auto_accept_trade_completed_conn then pcall(function() auto_accept_trade_completed_conn:Disconnect() end); auto_accept_trade_completed_conn = nil end
@@ -655,6 +663,7 @@ local function start_receiver_trade_loop()
 end
 
 local function toggle_auto_accept(enable)
+    if auto_accept_trade_offer_conn then pcall(function() auto_accept_trade_offer_conn:Disconnect() end); auto_accept_trade_offer_conn = nil end
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
     if auto_accept_trade_completed_conn then pcall(function() auto_accept_trade_completed_conn:Disconnect() end); auto_accept_trade_completed_conn = nil end
@@ -669,6 +678,14 @@ local function toggle_auto_accept(enable)
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         receiver_loop_running = false
         close_trading_gui()
+    end
+
+    if trade_remotes.TradeOfferReceived then
+        auto_accept_trade_offer_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(sender_p, ...)
+            if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
+                accept_trade_from(sender_p)
+            end
+        end)
     end
 
     if trade_remotes.TradeEnded then
@@ -1952,6 +1969,7 @@ _G.NoirHub_AutoTrade_Cleanup = function()
     _G.NoirHub_AutoTrade_ScriptID = nil
     if float_drag_conn then pcall(function() float_drag_conn:Disconnect() end); float_drag_conn = nil end
     if header_drag_conn then pcall(function() header_drag_conn:Disconnect() end); header_drag_conn = nil end
+    if auto_accept_trade_offer_conn then pcall(function() auto_accept_trade_offer_conn:Disconnect() end); auto_accept_trade_offer_conn = nil end
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
     if auto_accept_trade_completed_conn then pcall(function() auto_accept_trade_completed_conn:Disconnect() end); auto_accept_trade_completed_conn = nil end
