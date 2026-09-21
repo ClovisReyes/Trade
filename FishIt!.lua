@@ -659,25 +659,24 @@ local function toggle_auto_accept(enable)
             if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
             auto_accept_active = true
             task_spawn(function()
-                task_wait(2.5)
+                task_wait(5)
                 if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
                 pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
                 local start_t = tick()
-                while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 60 do
+                while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") do
+                    if (tick() - start_t) > 90 then
+                        pcall(function()
+                            if trade_remotes.CancelTrade then trade_remotes.CancelTrade:InvokeServer() end
+                        end)
+                        break
+                    end
                     pcall(function()
                         trade_remotes.SetReady:InvokeServer(true)
                         trade_remotes.ConfirmTrade:InvokeServer()
                     end)
-                    task_wait(0.08)
+                    task_wait(0.25)
                 end
                 auto_accept_active = false
-                if local_player:GetAttribute("IsTrading") then
-                    pcall(function()
-                        if trade_remotes and trade_remotes.CancelTrade then
-                            trade_remotes.CancelTrade:InvokeServer()
-                        end
-                    end)
-                end
                 close_trading_gui()
             end)
         end)
@@ -778,28 +777,23 @@ end
 
 local function wait_for_trade_end(mode_name, chat_listener)
     local start_t = tick()
-    while local_player:GetAttribute("IsTrading") and tick() - start_t < 60 do
+    while local_player:GetAttribute("IsTrading") do
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.enabled then break end
         if chat_listener and chat_listener.is_completed() then break end
+        if (tick() - start_t) > 90 then
+            pcall(function()
+                if trade_remotes.CancelTrade then trade_remotes.CancelTrade:InvokeServer() end
+            end)
+            set_status_msg(mode_name, "Trade timeout (90s)")
+            break
+        end
         pcall(function()
             if trade_remotes.SetReady then trade_remotes.SetReady:InvokeServer(true) end
             if trade_remotes.ConfirmTrade then trade_remotes.ConfirmTrade:InvokeServer() end
         end)
         local elapsed = math_floor(tick() - start_t)
-        set_status_msg(mode_name, string_format("Accepting & Confirming trade... (%ds/60s)", elapsed))
-        task_wait(0.08)
-    end
-    if local_player:GetAttribute("IsTrading") and (not chat_listener or not chat_listener.is_completed()) then
-        pcall(function()
-            if trade_remotes and trade_remotes.CancelTrade then
-                trade_remotes.CancelTrade:InvokeServer()
-            end
-        end)
-        set_status_msg(mode_name, "Trade stuck (>60s), cancelled trade")
-        local cancel_start = tick()
-        while local_player:GetAttribute("IsTrading") and (tick() - cancel_start) < 4 do
-            task_wait(0.1)
-        end
+        set_status_msg(mode_name, string_format("Accepting & Confirming trade... (%ds/90s)", elapsed))
+        task_wait(0.25)
     end
 end
 
@@ -969,6 +963,15 @@ local function execute_trade(mode)
             end
         end
         task_wait(0.08)
+    end
+
+    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
+        local cd_start = tick()
+        while local_player:GetAttribute("IsTrading") and (tick() - cd_start) < 5.2 do
+            local rem = string_format("%.1f", math.max(0, 5.2 - (tick() - cd_start)))
+            set_status_msg(mode, string_format("Items added (%d). Server cooldown (%ss)...", #added_items, rem))
+            task_wait(0.2)
+        end
     end
 
     if local_player:GetAttribute("IsTrading") then
