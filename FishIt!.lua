@@ -596,9 +596,21 @@ pcall(function()
                 if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
                     -- Bypass GUI: Jangan pernah munculkan popup GUI di layar
                     if requester then
-                        pcall(function()
-                            trade_offer_controller:AcceptTrade(requester)
-                        end)
+                        if local_player:GetAttribute("IsTrading") or auto_accept_active then
+                            -- Sedang ada trade aktif dengan akun lain: tolak offer baru agar sesi trade saat ini tidak terputus
+                            pcall(function()
+                                if trade_offer_controller and trade_offer_controller.DeclineTrade then
+                                    trade_offer_controller:DeclineTrade(requester)
+                                elseif trade_remotes and trade_remotes.DeclineTradeOffer then
+                                    trade_remotes.DeclineTradeOffer:InvokeServer(requester)
+                                end
+                            end)
+                        else
+                            -- Tidak sedang trading: terima trade offer
+                            pcall(function()
+                                trade_offer_controller:AcceptTrade(requester)
+                            end)
+                        end
                     end
                     return -- Hentikan pembuatan popup UI di PlayerGui
                 end
