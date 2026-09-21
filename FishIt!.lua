@@ -633,7 +633,6 @@ local function start_receiver_trade_loop()
 
     receiver_loop_running = true
     task_spawn(function()
-        task_wait(5)
         local start_t = tick()
         while config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") do
             if (tick() - start_t) > 90 then
@@ -979,15 +978,6 @@ local function execute_trade(mode)
             end
         end
         task_wait(0.08)
-    end
-
-    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
-        local cd_start = tick()
-        while local_player:GetAttribute("IsTrading") and (tick() - cd_start) < 5.2 do
-            local rem = string_format("%.1f", math.max(0, 5.2 - (tick() - cd_start)))
-            set_status_msg(mode, string_format("Items added (%d). Server cooldown (%ss)...", #added_items, rem))
-            task_wait(0.2)
-        end
     end
 
     if local_player:GetAttribute("IsTrading") then
