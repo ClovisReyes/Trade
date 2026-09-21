@@ -1,39 +1,66 @@
-local ipairs, pairs, tostring, tonumber, pcall, tick, os_clock = ipairs, pairs, tostring, tonumber, pcall, tick, os.clock
-local table_find, table_insert, table_remove, table_sort, table_concat = table.find, table.insert, table.remove, table.sort, table.concat
-local string_lower, string_find, string_gsub, string_format, string_match, string_sub = string.lower, string.find, string.gsub, string.format, string.match, string.sub
-local math_max, math_min, math_floor, math_huge = math.max, math.min, math.floor, math.huge
-local task_wait, task_spawn, task_delay = task.wait, task.spawn, task.delay
+local ipairs        = ipairs
+local pairs         = pairs
+local tostring      = tostring
+local tonumber      = tonumber
+local pcall         = pcall
+local tick          = tick
+local os_clock      = os.clock
 
-if _G.NoirHub_AutoTrade_Cleanup then pcall(_G.NoirHub_AutoTrade_Cleanup) end
+local table_find    = table.find
+local table_insert  = table.insert
+local table_remove  = table.remove
+local table_sort    = table.sort
+local table_concat  = table.concat
+
+local string_lower  = string.lower
+local string_find   = string.find
+local string_gsub   = string.gsub
+local string_format = string.format
+local string_match  = string.match
+
+local task_wait     = task.wait
+local task_spawn    = task.spawn
+
+if _G.NoirHub_AutoTrade_Cleanup then
+    pcall(_G.NoirHub_AutoTrade_Cleanup)
+end
+
 local script_id = os_clock()
 _G.NoirHub_AutoTrade_ScriptID = script_id
 
 local cloneref = cloneref or function(ref) return ref end
-local players = cloneref(game:GetService("Players"))
-local local_player = players.LocalPlayer
-local player_gui = cloneref(local_player:WaitForChild("PlayerGui"))
-local user_input_service = cloneref(game:GetService("UserInputService"))
-local tween_service = cloneref(game:GetService("TweenService"))
-local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
-local http_service = cloneref(game:GetService("HttpService"))
 
-local variants_folder = replicated_storage:FindFirstChild("Variants")
+local players               = cloneref(game:GetService("Players"))
+local local_player          = players.LocalPlayer
+local player_gui            = cloneref(local_player:WaitForChild("PlayerGui"))
+local user_input_service    = cloneref(game:GetService("UserInputService"))
+local tween_service         = cloneref(game:GetService("TweenService"))
+local replicated_storage    = cloneref(game:GetService("ReplicatedStorage"))
+local http_service          = cloneref(game:GetService("HttpService"))
 
 local variables = {
-    replion        = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
-    item_utility   = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility"),
-    vendor_utility = replicated_storage:WaitForChild("Shared"):WaitForChild("VendorUtility"),
+    items                   = replicated_storage:WaitForChild("Items"),
+    variants                = replicated_storage:WaitForChild("Variants"),
+    replion                 = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
+    item_utility            = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility"),
+    vendor_utility          = replicated_storage:WaitForChild("Shared"):WaitForChild("VendorUtility"),
+    player_stats_utility    = replicated_storage:WaitForChild("Shared"):WaitForChild("PlayerStatsUtility")
 }
-
-local cache, status_labels, toggle_ctrls = nil, {}, {}
-local auto_accept_trade_started_conn, auto_accept_trade_ended_conn
-local float_drag_conn, header_drag_conn
 
 local success_replion, replion_mod = pcall(require, variables.replion)
 local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
+pcall(function()
+    if player_data and player_data.OnChange then
+        player_data:OnChange("Inventory", function()
+            if cache and cache.price_cache then
+                cache.price_cache = {}
+                cache.metadata_cache = {}
+            end
+        end)
+    end
+end)
 local item_utility = require(variables.item_utility)
-local vendor_utility = nil
-pcall(function() vendor_utility = require(variables.vendor_utility) end)
+local vendor_utility = require(variables.vendor_utility)
 
 local remote_map = {
     SendTradeOffer     = "SendTradeOffer",
@@ -43,29 +70,37 @@ local remote_map = {
     TradeOfferReceived = "TradeOfferReceived",
     TradeEnded         = "TradeEnded",
     TradeStarted       = "TradeStarted",
-    TradeCompleted     = "TradeCompleted",
     AcceptTradeOffer   = "AcceptTradeOffer",
-    CancelTrade        = "CancelTrade",
-    DeclineTradeOffer  = "DeclineTradeOffer",
 }
 
 local _net_lookup = nil
 local function get_net_lookup()
     if _net_lookup then return _net_lookup end
     _net_lookup = {}
-    
-    local trade_data_mod = replicated_storage:WaitForChild("Shared"):WaitForChild("Trading"):WaitForChild("TradeData")
-    local td = require(trade_data_mod)
-    if td and td.Remotes then
-        for k, v in pairs(td.Remotes) do
-            _net_lookup[k] = v
+
+    local net_folder = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_net@0.2.0"].net
+    local children = net_folder:GetChildren()
+
+    for i, v in ipairs(children) do
+        for _, logical_name in pairs(remote_map) do
+            if string_find(v.Name, logical_name, 1, true) then
+                for j = i + 1, #children do
+                    local next_obj = children[j]
+                    if string_match(next_obj.Name, "^RF/") or string_match(next_obj.Name, "^RE/") then
+                        _net_lookup[logical_name] = next_obj
+                        break
+                    end
+                end
+                break
+            end
         end
     end
+
     return _net_lookup
 end
 
 local remote_cache = {}
-local trade_remotes = setmetatable({}, {
+local remotes = setmetatable({}, {
     __index = function(_, key)
         if remote_cache[key] then return remote_cache[key] end
         local logical_name = remote_map[key]
@@ -74,10 +109,28 @@ local trade_remotes = setmetatable({}, {
         if remote then
             local wrapped = setmetatable({
                 instance = remote,
-                FireServer = function(_, ...) if remote:IsA("RemoteEvent") then remote:FireServer(...) else remote:InvokeServer(...) end end,
-                InvokeServer = function(_, ...) if remote:IsA("RemoteFunction") then return remote:InvokeServer(...) else remote:FireServer(...) end end,
-                IsA = function(_, className) return remote:IsA(className) end
-            }, { __index = function(_, k) return remote[k] end })
+                FireServer = function(_, ...)
+                    if remote:IsA("RemoteEvent") then
+                        remote:FireServer(...)
+                    elseif remote:IsA("RemoteFunction") then
+                        remote:InvokeServer(...)
+                    end
+                end,
+                InvokeServer = function(_, ...)
+                    if remote:IsA("RemoteFunction") then
+                        return remote:InvokeServer(...)
+                    elseif remote:IsA("RemoteEvent") then
+                        remote:FireServer(...)
+                    end
+                end,
+                IsA = function(_, className)
+                    return remote:IsA(className)
+                end
+            }, {
+                __index = function(_, k)
+                    return remote[k]
+                end
+            })
             remote_cache[key] = wrapped
             return wrapped
         end
@@ -85,445 +138,920 @@ local trade_remotes = setmetatable({}, {
     end
 })
 
+local trade_remotes = remotes
+
 local config = {
-    enabled                = false,
-    auto_accept_enabled    = false,
-    trade_favorited        = false,
-    quantity               = 0,
-    target_coin_amount     = 0,
-    trade_with             = "",
-    trade_fish_enabled     = false,
+    enabled             = false,
+    auto_accept_enabled = false,
+    trade_favorited     = false,
+    quantity            = 0,
+    target_coin_amount  = 0,
+    trade_with          = "",
+
+    trade_fish_enabled  = false,
     trade_enchants_enabled = false,
-    trade_coins_enabled    = false,
-    trade_rarity_enabled   = false,
-    selected_fish          = { "All" },
-    selected_tiers         = { "All" },
-    selected_mutations     = { "All" },
-    selected_items         = { "All" },
+    trade_coins_enabled = false,
+    trade_rarity_enabled = false,
+
+    selected_fish       = {},
+    selected_tiers      = { "All" },
+    selected_mutations  = { "All" },
+    selected_items      = {},
 }
 
-local CONFIG_FOLDER = "NoirHub"
-local CONFIG_FILE = "NoirHub/Trade_config.json"
-
-local function save_config()
-    pcall(function()
-        if not writefile then return end
-        if makefolder and isfolder then
-            if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
-        end
-        local data = {
-            trade_with             = config.trade_with,
-            quantity               = config.quantity,
-            target_coin_amount     = config.target_coin_amount,
-            trade_favorited        = config.trade_favorited,
-            auto_accept_enabled    = config.auto_accept_enabled,
-            selected_fish          = config.selected_fish,
-            selected_tiers         = config.selected_tiers,
-            selected_mutations     = config.selected_mutations,
-            selected_items         = config.selected_items,
-        }
-        writefile(CONFIG_FILE, http_service:JSONEncode(data))
-    end)
-end
-
-local function load_config()
-    pcall(function()
-        if not isfile or not readfile then return end
-        if not isfile(CONFIG_FILE) then return end
-        local raw = readfile(CONFIG_FILE)
-        if not raw or raw == "" then return end
-        local data = http_service:JSONDecode(raw)
-        if type(data) ~= "table" then return end
-
-        if type(data.trade_with) == "string" then config.trade_with = data.trade_with end
-        if type(data.quantity) == "number" then config.quantity = data.quantity end
-        if type(data.target_coin_amount) == "number" then config.target_coin_amount = data.target_coin_amount end
-        if type(data.trade_favorited) == "boolean" then config.trade_favorited = data.trade_favorited end
-        if type(data.auto_accept_enabled) == "boolean" then config.auto_accept_enabled = data.auto_accept_enabled end
-        if type(data.selected_fish) == "table" and #data.selected_fish > 0 then config.selected_fish = data.selected_fish end
-        if type(data.selected_tiers) == "table" and #data.selected_tiers > 0 then config.selected_tiers = data.selected_tiers end
-        if type(data.selected_mutations) == "table" and #data.selected_mutations > 0 then config.selected_mutations = data.selected_mutations end
-        if type(data.selected_items) == "table" and #data.selected_items > 0 then config.selected_items = data.selected_items end
-    end)
-end
-pcall(load_config)
-
-cache = {
-    is_trading_active   = false,
-    loop_running        = false,
+local cache = {
     processed_trades    = {},
+    price_cache         = {},
+    metadata_cache      = {},
+    current_item        = nil,
+    fish_list           = {},
     loaded_fish         = {},
-    loaded_enchants     = {},
     loaded_mutations    = {},
-    loaded_tiers        = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" },
-    loaded_variant_multipliers = {},
-    last_failed_offer_time     = nil,
-    status_text         = { fish = "Idle", enchant = "Idle", coin = "Idle", rarity = "Idle" },
-    status_details      = { fish = "", enchant = "", coin = "", rarity = "" },
+    loaded_enchants     = {},
+    start_time          = tick(),
+    total_caught_start  = 0,
+    caught_history      = {},
+    active_trade        = false,
+    fish_status_text    = "Idle",
+    fish_status_details = "",
+    enchant_status_text = "Idle",
+    enchant_status_details = "",
+    coin_status_text    = "Idle",
+    coin_status_details = "",
+    rarity_status_text  = "Idle",
+    rarity_status_details = "",
+    count_labels        = {},
+    last_trade_time     = nil,
     stats = {
-        fish    = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
-        rarity  = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
+        fish = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
+        rarity = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
         enchant = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
-        coin    = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
+        coin = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
     },
 }
+
+local function get_cached_sell_price(item)
+    if not item or not item.UUID then return 0 end
+    local cached = cache.price_cache[item.UUID]
+    if cached then return cached end
+
+    local sell_price = 0
+    pcall(function() sell_price = vendor_utility:GetSellPrice(item) end)
+    if not sell_price or sell_price <= 0 then
+        pcall(function() sell_price = vendor_utility.GetSellPrice(item) end)
+    end
+    if not sell_price or sell_price <= 0 then
+        local data = item.Id and item_utility:GetItemData(item.Id)
+        sell_price = (data and data.Data and (data.Data.SellPrice or data.Data.Price)) or 100
+    end
+
+    cache.price_cache[item.UUID] = sell_price
+    return sell_price
+end
 
 _G.AutoTradeConfig = config
 _G.AutoTradeCache = cache
 
-local mode_flag_map = {
-    fish    = "trade_fish_enabled",
-    rarity  = "trade_rarity_enabled",
-    enchant = "trade_enchants_enabled",
-    coin    = "trade_coins_enabled",
-}
+local function save_config()
+    pcall(function()
+        if writefile and http_service then
+            local temp_config = {}
+            for k, v in pairs(config) do
+                temp_config[k] = v
+            end
+            temp_config.enabled = false
+            temp_config.trade_fish_enabled = false
+            temp_config.trade_enchants_enabled = false
+            temp_config.trade_coins_enabled = false
+            temp_config.trade_rarity_enabled = false
 
-local tier_mapping = {
-    [1] = "common", [2] = "uncommon", [3] = "rare", [4] = "epic",
-    [5] = "legendary", [6] = "mythic", [7] = "secret", [8] = "forgotten",
-    [90] = "trophy", [95] = "collectible", [100] = "exclusive", [1000] = "dev"
-}
+            local data = http_service:JSONEncode(temp_config)
+            writefile("NoirHub_AutoTrade_Config.json", data)
+        end
+    end)
+end
 
-local function load_game_data()
-    cache.loaded_tiers = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" }
-    cache.loaded_variant_multipliers = {}
-    cache.loaded_mutations = {}
+local function log_debug(msg)
+    print(tostring(msg))
+    if _G.NoirTradeDebugLog then
+        pcall(_G.NoirTradeDebugLog, tostring(msg))
+    end
+end
 
-    local tiers_mod = replicated_storage:FindFirstChild("Tiers")
-    if tiers_mod and tiers_mod:IsA("ModuleScript") then
-        local success, tiers_data = pcall(require, tiers_mod)
-        if success and type(tiers_data) == "table" then
-            for tier_num, info in pairs(tiers_data) do
-                if type(info) == "table" and info.Name then
-                    tier_mapping[tier_num] = string_lower(info.Name)
+local function load_config()
+    pcall(function()
+        if isfile and readfile and http_service then
+            local filename = "NoirHub_AutoTrade_Config.json"
+            if isfile(filename) then
+                local data = readfile(filename)
+                local loaded = http_service:JSONDecode(data)
+                if loaded and type(loaded) == "table" then
+                    for k, v in pairs(loaded) do
+                        if config[k] ~= nil then
+                            config[k] = v
+                        end
+                    end
                 end
             end
         end
+    end)
+end
+
+load_config()
+
+local active_modes = 0
+if config.trade_fish_enabled then active_modes = active_modes + 1 end
+if config.trade_enchants_enabled then active_modes = active_modes + 1 end
+if config.trade_rarity_enabled then active_modes = active_modes + 1 end
+if config.trade_coins_enabled then active_modes = active_modes + 1 end
+
+if active_modes > 1 then
+    local found = false
+    if config.trade_fish_enabled then
+        found = true
+    end
+    if config.trade_enchants_enabled then
+        if found then config.trade_enchants_enabled = false else found = true end
+    end
+    if config.trade_rarity_enabled then
+        if found then config.trade_rarity_enabled = false else found = true end
+    end
+    if config.trade_coins_enabled then
+        if found then config.trade_coins_enabled = false end
+    end
+    save_config()
+end
+
+local auto_accept_conn = nil
+local auto_accept_trade_started_conn = nil
+local auto_accept_trade_ended_conn = nil
+local auto_accept_active = false
+
+local function click_gui_button(btn)
+    if not btn then return end
+    pcall(function()
+        if firesignal then
+            firesignal(btn.MouseButton1Click)
+            firesignal(btn.Activated)
+        elseif getconnections then
+            for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
+                conn:Fire()
+            end
+        end
+    end)
+end
+
+local function is_trade_prompt(prompt_gui)
+    if not prompt_gui then return false end
+    local is_trade = false
+    pcall(function()
+        for _, desc in ipairs(prompt_gui:GetDescendants()) do
+            if desc:IsA("TextLabel") and desc.Text then
+                local text = string_lower(desc.Text)
+                if string_find(text, "trade request", 1, true) or (string_find(text, "trade", 1, true) and string_find(text, "accept", 1, true)) then
+                    is_trade = true
+                    break
+                end
+            end
+        end
+    end)
+    return is_trade
+end
+
+local function dismiss_trade_prompt()
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            local frame = prompt_gui:FindFirstChild("Frame")
+
+            for _, desc in ipairs(prompt_gui:GetDescendants()) do
+                if desc:IsA("GuiButton") and (desc.Name == "No" or desc.Name == "Cancel" or desc.Name == "Decline") then
+                    click_gui_button(desc)
+                end
+            end
+
+            for _, child in ipairs(prompt_gui:GetChildren()) do
+                if child.Name ~= "Blackout" and child.Name ~= "Frame" and child.Name ~= "UIListLayout" and child.Name ~= "UIGridLayout" then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+
+            if blackout then blackout.Visible = false end
+            if frame then frame.Visible = false end
+        end
+    end)
+end
+
+local function apply_prompt_visibility()
+    pcall(function()
+        local prompt_gui = player_gui:FindFirstChild("Prompt")
+        if prompt_gui then
+            local blackout = prompt_gui:FindFirstChild("Blackout")
+            local frame = prompt_gui:FindFirstChild("Frame")
+
+            if config.auto_accept_enabled then
+                prompt_gui.Enabled = false
+                if blackout then blackout.Visible = false end
+                if frame then frame.Visible = false end
+            else
+                prompt_gui.Enabled = true
+            end
+        end
+    end)
+end
+
+local function close_trading_gui()
+    auto_accept_active = false
+    pcall(function()
+        local t_gui = player_gui:FindFirstChild("! Trading")
+        if t_gui then
+            t_gui.Enabled = false
+            local frame = t_gui:FindFirstChild("Frame")
+            if frame then frame.Visible = false end
+
+            for _, btn_name in ipairs({"Close", "Decline", "X"}) do
+                local btn = t_gui:FindFirstChild(btn_name, true)
+                if btn and btn:IsA("GuiButton") then
+                    click_gui_button(btn)
+                end
+            end
+        end
+    end)
+end
+
+local function toggle_auto_accept(enable)
+    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
+    if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
+    if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
+
+    config.auto_accept_enabled = enable
+
+    if not enable then
+        dismiss_trade_prompt()
     end
 
-    if variants_folder then
-        for _, variant in ipairs(variants_folder:GetChildren()) do
-            if variant:IsA("ModuleScript") then
-                local success, data = pcall(require, variant)
-                if success and type(data) == "table" then
-                    local mult = tonumber(data.SellMultiplier or (data.Data and data.Data.SellMultiplier)) or 1
-                    local name = (data.Data and data.Data.Name) or variant.Name
-                    if name then
-                        table_insert(cache.loaded_mutations, name)
-                        cache.loaded_variant_multipliers[string_lower(name)] = mult
-                        cache.loaded_variant_multipliers[name] = mult
+    apply_prompt_visibility()
+
+    if not trade_remotes then return end
+
+    auto_accept_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(requester)
+        if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+
+        if not config.auto_accept_enabled then
+            pcall(function()
+                local prompt_gui = player_gui:FindFirstChild("Prompt")
+                if prompt_gui then
+                    prompt_gui.Enabled = true
+                    local blackout = prompt_gui:FindFirstChild("Blackout")
+                    if blackout then blackout.Visible = true end
+                    local frame = prompt_gui:FindFirstChild("Frame")
+                    if frame then frame.Visible = true end
+                end
+            end)
+            return
+        end
+
+        pcall(function()
+            trade_remotes.AcceptTradeOffer:InvokeServer(requester, true)
+        end)
+        apply_prompt_visibility()
+        task_wait(0.05)
+        dismiss_trade_prompt()
+        apply_prompt_visibility()
+    end)
+
+    auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
+        if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+        close_trading_gui()
+        dismiss_trade_prompt()
+    end)
+
+    if not enable then return end
+
+    auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
+        if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+        auto_accept_active = true
+
+        pcall(function()
+            local t_gui = player_gui:FindFirstChild("! Trading")
+            if t_gui then
+                t_gui.Enabled = true
+                local frame = t_gui:FindFirstChild("Frame")
+                if frame then
+                    frame.Visible = true
+                end
+            end
+        end)
+
+        task_spawn(function()
+            task_wait(0.5)
+            if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
+
+            pcall(function()
+                trade_remotes.SetReady:InvokeServer(true)
+            end)
+
+            local start_time = tick()
+            while config.auto_accept_enabled and auto_accept_active and local_player:GetAttribute("IsTrading") and (tick() - start_time) < 60 do
+                pcall(function()
+                    local t_gui = player_gui:FindFirstChild("! Trading")
+                    if t_gui then
+                        t_gui.Enabled = true
+                        local frame = t_gui:FindFirstChild("Frame")
+                        if frame then frame.Visible = true end
                     end
-                    if data.Data and data.Data.Id then
-                        cache.loaded_variant_multipliers[data.Data.Id] = mult
+                end)
+
+                pcall(function()
+                    trade_remotes.ConfirmTrade:InvokeServer()
+                end)
+                pcall(function()
+                    trade_remotes.SetReady:InvokeServer(true)
+                end)
+
+                pcall(function()
+                    local t_gui = player_gui:FindFirstChild("! Trading")
+                    if t_gui then
+                        for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
+                            local btn = t_gui:FindFirstChild(btn_name, true)
+                            if btn and btn:IsA("GuiButton") then
+                                click_gui_button(btn)
+                            end
+                        end
+                    end
+                end)
+
+                task_wait(0.4)
+            end
+
+            close_trading_gui()
+        end)
+    end)
+end
+
+local function get_item_count(item_name)
+    local count = 0
+    pcall(function()
+        if player_data then
+            local inventory = player_data:Get("Inventory")
+            local items = inventory and inventory.Items or {}
+            for _, item in ipairs(items) do
+                if item.Id then
+                    local data = item_utility:GetItemData(item.Id)
+                    if data and data.Data and (data.Data.Name == item_name or (item_name == "Ruby" and data.Data.Name == "Ruby Gemstone") or (item_name == "Ruby Gemstone" and data.Data.Name == "Ruby")) then
+                        count = count + (item.Amount or 1)
                     end
                 end
+            end
+        end
+    end)
+    return count
+end
+
+local function get_runic_count()
+    return get_item_count("Runic Enchant Stone")
+end
+
+local function get_inventory_enchants(bypass_favorited)
+    local enchants = {}
+    local success, err = pcall(function()
+        if player_data then
+            local inventory = player_data:Get("Inventory")
+            local items = inventory and inventory.Items or {}
+            for _, item in ipairs(items) do
+                if item.Id then
+                    local include_item = true
+                    if not bypass_favorited and item.Favorited and not config.trade_favorited then
+                        include_item = false
+                    end
+
+                    if include_item then
+                        local data = item_utility:GetItemData(item.Id)
+                        if data and data.Data then
+                            local name = data.Data.Name
+                            local is_enchant = string_find(name, "Enchant", 1, true) or data.Data.Type == "Enchants" or data.Data.Type == "Enchant"
+                            if is_enchant then
+                                enchants[name] = (enchants[name] or 0) + (item.Amount or 1)
+                            end
+                        end
+                    end
+                end
+            end
+        else
+        end
+    end)
+    if not success then
+        warn("get_inventory_enchants error: " .. tostring(err))
+    end
+    return enchants
+end
+
+local function strip_quantity(str)
+    return string_gsub(str, "%s*%(x%d+%)", "")
+end
+
+local function load_game_data()
+    cache.loaded_tiers = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" }
+
+    for _, variant in ipairs(variables.variants:GetChildren()) do
+        if variant:IsA("ModuleScript") then
+            local success, data = pcall(require, variant)
+            if success and type(data) == "table" and data.Data and data.Data.Name then
+                table_insert(cache.loaded_mutations, data.Data.Name)
             end
         end
     end
     if not table_find(cache.loaded_mutations, "Shiny") then
         table_insert(cache.loaded_mutations, "Shiny")
     end
-    if not cache.loaded_variant_multipliers["shiny"] then
-        cache.loaded_variant_multipliers["shiny"] = 1.5
-    end
     table_sort(cache.loaded_mutations)
+
+    for _, item in ipairs(variables.items:GetDescendants()) do
+        if item:IsA("ModuleScript") then
+            local success, item_data = pcall(require, item)
+            if success and type(item_data) == "table" and item_data.Data then
+                if item_data.Data.Type == "Fish" then
+                    cache.loaded_fish[item_data.Data.Name] = item_data.Data
+                elseif item_data.Data.Type == "Enchant Stones" then
+                    cache.loaded_enchants[item_data.Data.Name] = item_data.Data
+                end
+            end
+        end
+    end
 end
 pcall(load_game_data)
 
-local function strip_quantity(str) return string_gsub(str, "%s*%(x%d+%)", "") end
-
-local function format_number(n)
-    if not n or n ~= n then return "0" end
-    local num = tonumber(n) or 0
-    local formatted = tostring(math_floor(num))
-    local k
-    while true do
-        formatted, k = string_gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
-        if k == 0 then break end
-    end
-    return formatted
-end
-
-local function parse_coin_input(str)
-    if not str or str == "" then return 0 end
-    local clean = string_gsub(string_lower(str), "[%s,%$]", "")
-    local num, suffix = string_match(clean, "^([%d%.]+)([kmbte]?)$")
-    if not num then
-        num = string_match(clean, "^([%d%.]+)")
-    end
-    local val = tonumber(num) or 0
-    if suffix == "k" then val = val * 1e3
-    elseif suffix == "m" then val = val * 1e6
-    elseif suffix == "b" then val = val * 1e9
-    elseif suffix == "t" then val = val * 1e12
-    end
-    return math_floor(val)
-end
-
-local function get_item_mutation(item)
-    if not item or not item.Metadata then return "None" end
-    local v = item.Metadata.VariantId
-    if v and v ~= "" and v ~= "None" then return tostring(v) end
-    return "None"
-end
-
-local function is_item_shiny(item)
-    if not item then return false end
-    if item.Metadata and item.Metadata.Shiny == true then return true end
-    if item.Shiny == true then return true end
-    return false
-end
-
-local function calculate_fish_coin_value(item)
-    if not item or not item.Id then return 0 end
-    if vendor_utility then
-        local ok, price = pcall(function() return vendor_utility:GetSellPrice(item) end)
-        if ok and type(price) == "number" and price > 0 then
-            return math_floor(price)
-        end
-    end
-
-    local item_info = item_utility:GetItemData(item.Id)
-    if not item_info or not item_info.Data or item_info.Data.Type ~= "Fish" then
-        return 0
-    end
-
-    local base_price = tonumber(item_info.SellPrice) or 0
-    local mult = 1
-    local meta = item.Metadata
-    if meta and meta.VariantId and meta.VariantId ~= "" and meta.VariantId ~= "None" then
-        local vname = tostring(meta.VariantId)
-        local vmult = cache.loaded_variant_multipliers[string_lower(vname)] or cache.loaded_variant_multipliers[vname]
-        if vmult then mult = mult * vmult end
-    end
-    if is_item_shiny(item) then
-        mult = mult * (cache.loaded_variant_multipliers["shiny"] or 1.5)
-    end
-    return math_floor(base_price * mult)
-end
-
-local function select_fish_for_coin_trade(target_coins, already_sent_coins)
-    if not player_data then return {}, 0 end
-    local remaining_deficit = target_coins - already_sent_coins
-    if remaining_deficit <= 0 then return {}, 0 end
-
-    local inventory = player_data:Get("Inventory")
-    local items = inventory and inventory.Items or {}
-
-    local candidate_pool = {}
-    for _, itm in ipairs(items) do
-        if itm and itm.Id then
-            local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
-            if not is_fav or config.trade_favorited then
-                local val = calculate_fish_coin_value(itm)
-                if val > 0 then
-                    table_insert(candidate_pool, {
-                        item = itm,
-                        value = val
-                    })
-                end
-            end
-        end
-    end
-
-    if #candidate_pool == 0 then return {}, 0 end
-
-    table_sort(candidate_pool, function(a, b) return a.value > b.value end)
-
-    local chosen = {}
-    local current_sum = 0
-    local used_indices = {}
-
-    for i, entry in ipairs(candidate_pool) do
-        if #chosen >= 20 then break end
-        if current_sum + entry.value <= remaining_deficit then
-            table_insert(chosen, entry.item)
-            current_sum = current_sum + entry.value
-            used_indices[i] = true
-            if current_sum == remaining_deficit then break end
-        end
-    end
-
-    if current_sum < remaining_deficit and #chosen < 20 then
-        local deficit_left = remaining_deficit - current_sum
-        local best_single_idx = nil
-        local best_single_val = math_huge
-
-        for i, entry in ipairs(candidate_pool) do
-            if not used_indices[i] then
-                if entry.value >= deficit_left and entry.value < best_single_val then
-                    best_single_val = entry.value
-                    best_single_idx = i
-                end
-            end
-        end
-
-        if best_single_idx then
-            table_insert(chosen, candidate_pool[best_single_idx].item)
-            current_sum = current_sum + candidate_pool[best_single_idx].value
-            used_indices[best_single_idx] = true
-        else
-            local remaining_small = {}
-            for i, entry in ipairs(candidate_pool) do
-                if not used_indices[i] then
-                    table_insert(remaining_small, { idx = i, entry = entry })
-                end
-            end
-            table_sort(remaining_small, function(a, b) return a.entry.value < b.entry.value end)
-
-            for _, s_entry in ipairs(remaining_small) do
-                if #chosen >= 20 then break end
-                table_insert(chosen, s_entry.entry.item)
-                current_sum = current_sum + s_entry.entry.value
-                used_indices[s_entry.idx] = true
-                if current_sum >= remaining_deficit then break end
-            end
-        end
-    end
-
-    return chosen, current_sum
-end
-
-local function get_inventory_items(type_filter, bypass_favorited)
-    local result = {}
-    pcall(function()
-        if not player_data then return end
-        local inv = player_data:Get("Inventory")
-        for _, item in ipairs(inv and inv.Items or {}) do
-            if item and item.Id then
-                local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
-                if bypass_favorited or not is_fav or config.trade_favorited then
-                    local data = item_utility:GetItemData(item.Id)
-                    if data and data.Data then
-                        local name = data.Data.Name
-                        local item_type = data.Data.Type
-                        local match = false
-                        if type_filter == "Fish" and item_type == "Fish" then
-                            match = true
-                        elseif type_filter == "Enchant" and item_type == "Enchant Stones" then
-                            match = true
-                        end
-                        if match then
-                            result[name] = (result[name] or 0) + (item.Amount or 1)
-                        end
-                    end
-                end
-            end
-        end
-    end)
-    return result
-end
-
-local function get_owned_options(type_filter)
-    local list, counts = {}, get_inventory_items(type_filter, false)
-    for name, qty in pairs(counts) do table_insert(list, name .. " (x" .. qty .. ")") end
-    table_sort(list)
-    return list
-end
-
-local function get_other_players()
-    local list = {}
-    for _, p in ipairs(players:GetPlayers()) do
-        if p ~= local_player then table_insert(list, p.Name) end
-    end
-    table_sort(list)
-    return list
-end
-
 local function find_target_player()
     if config.trade_with == "" then return nil end
-    local target_clean = string_lower(config.trade_with)
     for _, player in ipairs(players:GetPlayers()) do
-        if string_lower(player.Name) == target_clean or string_lower(player.DisplayName) == target_clean then
+        if player.Name == config.trade_with or player.DisplayName == config.trade_with then
             return player
         end
     end
     return nil
 end
 
+local tier_mapping = {
+    [1] = "common",
+    [2] = "uncommon",
+    [3] = "rare",
+    [4] = "epic",
+    [5] = "legendary",
+    [6] = "mythic",
+    [7] = "secret",
+    [8] = "forgotten"
+}
+
+local function get_item_mutation(item)
+    if not item then return "None" end
+    local meta = item.Metadata
+    if meta then
+        if meta.VariantId and meta.VariantId ~= "" and meta.VariantId ~= "None" then
+            return tostring(meta.VariantId)
+        end
+        if meta.Mutation and meta.Mutation ~= "" and meta.Mutation ~= "None" then
+            return tostring(meta.Mutation)
+        end
+        if meta.Variant and meta.Variant ~= "" and meta.Variant ~= "None" then
+            return tostring(meta.Variant)
+        end
+    end
+    if item.Mutation and item.Mutation ~= "" and item.Mutation ~= "None" then
+        return tostring(item.Mutation)
+    end
+    if item.Variant and item.Variant ~= "" and item.Variant ~= "None" then
+        return tostring(item.Variant)
+    end
+    return "None"
+end
+
+local function is_item_shiny(item)
+    if not item then return false end
+    local meta = item.Metadata
+    if meta then
+        if meta.Shiny == true or meta.Shiny == 1 or (type(meta.Shiny) == "string" and string_lower(meta.Shiny) == "true") then return true end
+    end
+    if item.Shiny == true or item.Shiny == 1 or (type(item.Shiny) == "string" and string_lower(item.Shiny) == "true") then return true end
+    local mut = string_lower(get_item_mutation(item))
+    return string_find(mut, "shiny") ~= nil
+end
+
+local function is_item_big(item)
+    if not item then return false end
+    local meta = item.Metadata
+    if meta then
+        if meta.Big == true or meta.Big == 1 or meta.Giant == true or meta.Giant == 1 then return true end
+        if type(meta.Big) == "string" and string_lower(meta.Big) == "true" then return true end
+    end
+    if item.Big == true or item.Big == 1 or item.Giant == true or item.Giant == 1 then return true end
+    if type(item.Big) == "string" and string_lower(item.Big) == "true" then return true end
+    local mut = string_lower(get_item_mutation(item))
+    return string_find(mut, "big") ~= nil or string_find(mut, "giant") ~= nil
+end
+
+local function is_item_sparkling(item)
+    if not item then return false end
+    local meta = item.Metadata
+    if meta and (meta.Sparkling == true or meta.Sparkling == 1 or (type(meta.Sparkling) == "string" and string_lower(meta.Sparkling) == "true")) then return true end
+    return item.Sparkling == true or item.Sparkling == 1 or (type(item.Sparkling) == "string" and string_lower(item.Sparkling) == "true")
+end
+
 local function should_trade_fish(item_data, inventory_item)
-    local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
-    if not config.enabled or (is_fav and not config.trade_favorited) then return false end
-    local name_match = #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil
-    if not name_match then
-        local fish_name = string_lower(item_data.Data.Name)
-        for _, sel in ipairs(config.selected_fish) do
-            if fish_name == string_lower(strip_quantity(sel)) then name_match = true; break end
-        end
-    end
-    local mut_match = #config.selected_mutations == 0 or table_find(config.selected_mutations, "All") ~= nil
-    if not mut_match then
-        local mut_name = string_lower(get_item_mutation(inventory_item))
-        for _, sel in ipairs(config.selected_mutations) do
-            if mut_name == string_lower(strip_quantity(sel)) then mut_match = true; break end
-        end
-    end
-    return name_match and mut_match
-end
+    if not config.enabled then return false end
 
-local function should_trade_fish_by_rarity(item_data, inventory_item)
-    local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
-    if not config.enabled or (is_fav and not config.trade_favorited) then return false end
-    local rarity_match = #config.selected_tiers == 0 or table_find(config.selected_tiers, "All") ~= nil
-    if not rarity_match then
-        local raw_tier = item_data.Data.Tier
-        local tier_name = type(raw_tier) == "number" and (tier_mapping[raw_tier] or "") or string_lower(tostring(raw_tier))
-        for _, sel in ipairs(config.selected_tiers) do
-            if tier_name == string_lower(strip_quantity(sel)) then rarity_match = true; break end
-        end
-    end
-    local mut_match = #config.selected_mutations == 0 or table_find(config.selected_mutations, "All") ~= nil
-    if not mut_match then
-        local mut_name = string_lower(get_item_mutation(inventory_item))
-        for _, sel in ipairs(config.selected_mutations) do
-            if mut_name == string_lower(strip_quantity(sel)) then mut_match = true; break end
-        end
-    end
-    return rarity_match and mut_match
-end
+    local name_match = false
+    local mutation_match = false
 
-local function collect_round_robin(items, key_extractor, selected_keys, limit)
-    local buckets, bucket_keys, items_to_trade, added = {}, {}, {}, {}
-    for _, k in ipairs(selected_keys) do
-        local lk = string_lower(strip_quantity(k))
-        if lk ~= "all" then buckets[lk] = {}; table_insert(bucket_keys, lk) end
+    local fish_name = string_lower(item_data.Data.Name)
+    local has_all_fish = table_find(config.selected_fish, "All") ~= nil
+    if has_all_fish then
+        name_match = true
+    elseif #config.selected_fish > 0 then
+        for _, selected_name in ipairs(config.selected_fish) do
+            if fish_name == string_lower(selected_name) then
+                name_match = true
+                break
+            end
+        end
+    else
+        name_match = false
     end
-    for _, item in ipairs(items) do
-        local k = key_extractor(item)
-        if k and buckets[k] then table_insert(buckets[k], item) end
-    end
-    for pass = 1, 20 do
-        if #items_to_trade >= limit then break end
-        local added_any = false
-        for _, k in ipairs(bucket_keys) do
-            if #items_to_trade >= limit then break end
-            for _, item in ipairs(buckets[k] or {}) do
-                if not added[item.UUID] then
-                    added[item.UUID] = true
-                    table_insert(items_to_trade, item)
-                    added_any = true
+
+    local has_all_mutation = table_find(config.selected_mutations, "All") ~= nil
+    if #config.selected_mutations == 0 or has_all_mutation then
+        mutation_match = true
+    else
+        local mutation_name = get_item_mutation(inventory_item)
+        if mutation_name and mutation_name ~= "None" then
+            for _, selected_mutation in ipairs(config.selected_mutations) do
+                if string_lower(mutation_name) == string_lower(selected_mutation) then
+                    mutation_match = true
                     break
                 end
             end
         end
+    end
+
+    local should_trade = name_match and mutation_match
+
+    if inventory_item.Favorited and not config.trade_favorited then
+        should_trade = false
+    end
+
+    return should_trade;
+end
+
+local function should_trade_fish_by_rarity(item_data, inventory_item)
+    if not config.enabled then return false end
+
+    local rarity_match = false
+    local mutation_match = false
+
+    local has_all_rarity = table_find(config.selected_tiers, "All") ~= nil
+    if #config.selected_tiers == 0 or has_all_rarity then
+        rarity_match = true
+    else
+        local raw_tier = item_data.Data.Tier
+        local tier_name = ""
+        if type(raw_tier) == "number" then
+            tier_name = tier_mapping[raw_tier] or ""
+        elseif type(raw_tier) == "string" then
+            tier_name = string_lower(raw_tier)
+        end
+
+        for _, selected_tier in ipairs(config.selected_tiers) do
+            if tier_name == string_lower(selected_tier) then
+                rarity_match = true
+                break
+            end
+        end
+    end
+
+    local has_all_mutation = table_find(config.selected_mutations, "All") ~= nil
+    if #config.selected_mutations == 0 or has_all_mutation then
+        mutation_match = true
+    else
+        local mutation_name = get_item_mutation(inventory_item)
+        if mutation_name and mutation_name ~= "None" then
+            for _, selected_mutation in ipairs(config.selected_mutations) do
+                if string_lower(mutation_name) == string_lower(selected_mutation) then
+                    mutation_match = true
+                    break
+                end
+            end
+        end
+    end
+
+    local should_trade = rarity_match and mutation_match
+
+    if inventory_item.Favorited and not config.trade_favorited then
+        should_trade = false
+    end
+
+    return should_trade;
+end
+
+local function collect_round_robin_rarity(player_data_items, selected_tiers, limit)
+    local buckets = {}
+    local bucket_keys = {}
+
+    for _, tier in ipairs(selected_tiers) do
+        local t_lower = string_lower(tier)
+        if t_lower ~= "all" then
+            buckets[t_lower] = {}
+            table_insert(bucket_keys, t_lower)
+        end
+    end
+
+    for _, fish_item in ipairs(player_data_items) do
+        if fish_item and fish_item.Id then
+            local fish_data = item_utility:GetItemData(fish_item.Id)
+            if fish_data and fish_data.Data and fish_data.Data.Type == "Fish" then
+                if should_trade_fish_by_rarity(fish_data, fish_item) then
+                    local raw_tier = fish_data.Data.Tier
+                    local tier_name = ""
+                    if type(raw_tier) == "number" then
+                        tier_name = tier_mapping[raw_tier] or ""
+                    elseif type(raw_tier) == "string" then
+                        tier_name = string_lower(raw_tier)
+                    end
+                    if buckets[tier_name] then
+                        table_insert(buckets[tier_name], fish_item)
+                    end
+                end
+            end
+        end
+    end
+
+    local items_to_trade = {}
+    local added_uuids = {}
+    local max_pass = 20
+
+    for pass = 1, max_pass do
+        if #items_to_trade >= limit then break end
+        local added_any = false
+
+        for _, key in ipairs(bucket_keys) do
+            if #items_to_trade >= limit then break end
+            local bucket = buckets[key]
+            if bucket then
+                for i = 1, #bucket do
+                    local item = bucket[i]
+                    if not added_uuids[item.UUID] and not table_find(cache.processed_trades, item.UUID) then
+                        added_uuids[item.UUID] = true
+                        table_insert(items_to_trade, item)
+                        added_any = true
+                        break
+                    end
+                end
+            end
+        end
+
         if not added_any then break end
     end
+
     return items_to_trade
+end
+
+local function collect_round_robin_names(player_data_items, selected_fish, limit)
+    local buckets = {}
+    local bucket_keys = {}
+
+    for _, f_name in ipairs(selected_fish) do
+        local n_lower = string_lower(f_name)
+        if n_lower ~= "all" then
+            buckets[n_lower] = {}
+            table_insert(bucket_keys, n_lower)
+        end
+    end
+
+    for _, fish_item in ipairs(player_data_items) do
+        if fish_item and fish_item.Id then
+            local fish_data = item_utility:GetItemData(fish_item.Id)
+            if fish_data and fish_data.Data and fish_data.Data.Type == "Fish" then
+                if should_trade_fish(fish_data, fish_item) then
+                    local name_lower = string_lower(fish_data.Data.Name)
+                    if buckets[name_lower] then
+                        table_insert(buckets[name_lower], fish_item)
+                    end
+                end
+            end
+        end
+    end
+
+    local items_to_trade = {}
+    local added_uuids = {}
+    local max_pass = 20
+
+    for pass = 1, max_pass do
+        if #items_to_trade >= limit then break end
+        local added_any = false
+
+        for _, key in ipairs(bucket_keys) do
+            if #items_to_trade >= limit then break end
+            local bucket = buckets[key]
+            if bucket then
+                for i = 1, #bucket do
+                    local item = bucket[i]
+                    if not added_uuids[item.UUID] and not table_find(cache.processed_trades, item.UUID) then
+                        added_uuids[item.UUID] = true
+                        table_insert(items_to_trade, item)
+                        added_any = true
+                        break
+                    end
+                end
+            end
+        end
+
+        if not added_any then break end
+    end
+
+    return items_to_trade
+end
+
+local function log_inventory_fish()
+    local log_lines = {}
+    table_insert(log_lines, "=== CURRENT INVENTORY FISH LOG ===")
+
+    local fish_count = 0
+    local match_count = 0
+
+    local success, err = pcall(function()
+        if player_data then
+            local inventory = player_data:Get("Inventory")
+            local items = inventory and inventory.Items or {}
+
+            if #items == 0 then
+                table_insert(log_lines, "No items found in inventory.")
+                return
+            end
+
+            for _, item in ipairs(items) do
+                if item.Id then
+                    local data = item_utility:GetItemData(item.Id)
+                    if data and data.Data and data.Data.Type == "Fish" then
+                        fish_count = fish_count + 1
+                        local fish_name = data.Data.Name
+                        local tier = data.Data.Tier or "Unknown"
+                        local mutation = get_item_mutation(item)
+                        local shiny_str = is_item_shiny(item) and " [Shiny]" or ""
+                        local big_str = is_item_big(item) and " [Big]" or ""
+                        local is_favorited = item.Favorited and " [Favorited]" or ""
+                        local matches = should_trade_fish(data, item)
+                        local matches_filter = matches and " [MATCHES FILTER]" or ""
+                        if matches then
+                            match_count = match_count + 1
+                        end
+                        table_insert(log_lines, string_format("[%d] %s | Tier: %s | Mutation: %s%s%s%s%s | UUID: %s",
+                            fish_count, fish_name, tier, mutation, shiny_str, big_str, is_favorited, matches_filter, item.UUID))
+                    end
+                end
+            end
+
+            if fish_count == 0 then
+                table_insert(log_lines, "No fish items found in inventory.")
+            else
+                table_insert(log_lines, string_format("Total fish found: %d | Matches Filter: %d", fish_count, match_count))
+            end
+        else
+            table_insert(log_lines, "Player data (replion) is not loaded.")
+        end
+    end)
+
+    if not success then
+        table_insert(log_lines, "Error logging inventory: " .. tostring(err))
+    end
+    table_insert(log_lines, "==================================")
+
+    local log_text = table_concat(log_lines, "\n")
+    print(log_text)
+
+    pcall(function()
+        if writefile then
+            writefile("trade_inventory_log.txt", log_text)
+            print("Successfully wrote trade_inventory_log.txt to executor workspace.")
+        end
+    end)
+end
+
+local function decline_active_trade()
+    pcall(function()
+        local trading_gui = local_player.PlayerGui:FindFirstChild("! Trading")
+        if trading_gui then
+            local frame = trading_gui:FindFirstChild("Frame")
+            if frame then
+                local interior = frame:FindFirstChild("Interior")
+                local decline = interior and interior:FindFirstChild("Decline")
+                if decline then
+                    click_gui_button(decline)
+                else
+                    local close = frame:FindFirstChild("Close")
+                    if close then
+                        click_gui_button(close)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function find_success_notification()
+    return false
+end
+
+local function listen_for_trade_completion(on_completed)
+    local completed = false
+    local connections = {}
+
+    local function check_text(text)
+        if not text or completed then return end
+        text = tostring(text)
+        if text:find("completed") and (text:find("Trade") or text:find("with")) then
+            completed = true
+            if on_completed then
+                pcall(on_completed)
+            end
+        end
+    end
+
+    pcall(function()
+        local TextChatService = game:GetService("TextChatService")
+        if TextChatService then
+            local conn = TextChatService.MessageReceived:Connect(function(msg)
+                if msg then check_text(msg.Text) end
+            end)
+            table_insert(connections, conn)
+        end
+    end)
+
+    pcall(function()
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local chat_events = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+        if chat_events then
+            local msg_event = chat_events:FindFirstChild("OnMessageDoneFiltering")
+            if msg_event then
+                local conn = msg_event.OnClientEvent:Connect(function(data)
+                    if data and data.Message then
+                        check_text(data.Message)
+                    end
+                end)
+                table_insert(connections, conn)
+            end
+        end
+    end)
+
+    pcall(function()
+        if trade_remotes and trade_remotes.TradeEnded then
+            local conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
+                if not completed then
+                    completed = true
+                    if on_completed then
+                        pcall(on_completed)
+                    end
+                end
+            end)
+            table_insert(connections, conn)
+        end
+    end)
+
+    return {
+        is_completed = function()
+            return completed
+        end,
+        disconnect = function()
+            for _, conn in ipairs(connections) do
+                pcall(function() conn:Disconnect() end)
+            end
+        end
+    }
 end
 
 local function get_mode_display_name(mode_name)
     if mode_name == "enchant" then
-        if #config.selected_items > 0 and config.selected_items[1] ~= "All" then return table_concat(config.selected_items, "/") end
+        if #config.selected_items > 0 and config.selected_items[1] ~= "All" then
+            local names = {}
+            for _, item in ipairs(config.selected_items) do
+                table_insert(names, item)
+            end
+            if #names > 0 then return table_concat(names, "/") end
+        end
         return "Enchant Stone"
     elseif mode_name == "fish" then
-        if #config.selected_fish > 0 and config.selected_fish[1] ~= "All" then return table_concat(config.selected_fish, "/") end
+        if #config.selected_fish > 0 and config.selected_fish[1] ~= "All" then
+            local names = {}
+            for _, fish in ipairs(config.selected_fish) do
+                table_insert(names, fish)
+            end
+            if #names > 0 then return table_concat(names, "/") end
+        end
         return "Fish"
     elseif mode_name == "rarity" then
         if #config.selected_tiers > 0 and config.selected_tiers[1] ~= "All" then
             local names = {}
             for _, tier in ipairs(config.selected_tiers) do
-                local t_name = type(tier) == "number" and (tier_mapping[tier] and tier_mapping[tier]:sub(1,1):upper() .. tier_mapping[tier]:sub(2)) or (tostring(tier):sub(1,1):upper() .. tostring(tier):sub(2):lower())
-                if t_name and tier ~= "All" then table_insert(names, t_name) end
+                local t_name = tier_mapping[tier]
+                if t_name then table_insert(names, t_name:sub(1,1):upper() .. t_name:sub(2)) end
             end
             if #names > 0 then return table_concat(names, "/") end
         end
@@ -534,516 +1062,1128 @@ local function get_mode_display_name(mode_name)
     return "Items"
 end
 
-local function update_status_ui(mode_name)
+local function set_status_msg(mode_name, msg, details_override)
     local s = cache.stats[mode_name]
     if not s then return end
-    local details = ""
+
+    local target = config.quantity
+    local progress_str
     if mode_name == "coin" then
-        local target = config.target_coin_amount or 0
-        local current = s.total_coins or 0
-        local target_str = target == 0 and "∞" or format_number(target)
-        details = string_format("Sent: %s / %s Coins (%d fish) | Fails: %d", format_number(current), target_str, s.total_items, s.failed)
+        target = config.target_coin_amount
+        local current_coins = s.total_coins or 0
+        progress_str = (target == 0) and (current_coins .. "/∞") or (current_coins .. "/" .. target)
     else
-        local target = config.quantity
-        local current = s.total_items
-        local progress = target == 0 and (current .. "/∞") or (current .. "/" .. target)
-        details = string_format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress, s.attempts, s.failed)
+        progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
     end
-    cache.status_details[mode_name] = details
-    local lbl = status_labels[mode_name]
-    if lbl then
-        lbl.Text = cache.status_details[mode_name] == "" and cache.status_text[mode_name] or (cache.status_text[mode_name] .. "\n" .. cache.status_details[mode_name])
+
+    local details
+    if mode_name == "coin" then
+        details = details_override or string.format("Coins Sent: %d/%d | Items Sent: %d | Attempts: %d | Failed: %d", s.total_coins or 0, target, s.total_items, s.attempts, s.failed)
+    else
+        details = details_override or string.format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
     end
-end
 
-local function set_status_msg(mode_name, msg, details_override)
-    if msg then cache.status_text[mode_name] = msg end
-    if details_override then cache.status_details[mode_name] = details_override end
-    update_status_ui(mode_name)
-end
-
-local trade_offer_controller = nil
-if not _G.OriginalTradeOfferPopUp then
-    pcall(function()
-        local mod = replicated_storage:FindFirstChild("Controllers") and replicated_storage.Controllers:FindFirstChild("Trading") and replicated_storage.Controllers.Trading:FindFirstChild("TradeOfferController")
-        if mod then
-            local toc = require(mod)
-            if toc and toc.PopUp then
-                _G.OriginalTradeOfferPopUp = toc.PopUp
-            end
+    if mode_name == "fish" then
+        if msg then cache.fish_status_text = msg end
+        cache.fish_status_details = details
+        if status_val_lbl then
+            status_val_lbl.Text = cache.fish_status_details == "" and cache.fish_status_text or (cache.fish_status_text .. "\n" .. cache.fish_status_details)
         end
-    end)
-end
-
-local original_popup = _G.OriginalTradeOfferPopUp
-pcall(function()
-    local mod = replicated_storage:FindFirstChild("Controllers") and replicated_storage.Controllers:FindFirstChild("Trading") and replicated_storage.Controllers.Trading:FindFirstChild("TradeOfferController")
-    if mod then
-        trade_offer_controller = require(mod)
-        if trade_offer_controller and original_popup then
-            trade_offer_controller.PopUp = function(...)
-                local args = {...}
-                local self_or_req = args[1]
-                local req = args[2]
-                local requester = nil
-                if typeof(self_or_req) == "Instance" and self_or_req:IsA("Player") then
-                    requester = self_or_req
-                elseif typeof(req) == "Instance" and req:IsA("Player") then
-                    requester = req
-                end
-
-                if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
-                    -- Bypass GUI: Jangan pernah munculkan popup GUI di layar
-                    if requester and not local_player:GetAttribute("IsTrading") and not auto_accept_active then
-                        pcall(function()
-                            trade_offer_controller:AcceptTrade(requester)
-                        end)
-                    end
-                    return -- Hentikan pembuatan popup UI di PlayerGui
-                end
-                return original_popup(...)
-            end
+    elseif mode_name == "rarity" then
+        if msg then cache.rarity_status_text = msg end
+        cache.rarity_status_details = details
+        if rarity_status_val_lbl then
+            rarity_status_val_lbl.Text = cache.rarity_status_details == "" and cache.rarity_status_text or (cache.rarity_status_text .. "\n" .. cache.rarity_status_details)
+        end
+    elseif mode_name == "enchant" then
+        if msg then cache.enchant_status_text = msg end
+        cache.enchant_status_details = details
+        if enchant_status_val_lbl then
+            enchant_status_val_lbl.Text = cache.enchant_status_details == "" and cache.enchant_status_text or (cache.enchant_status_text .. "\n" .. cache.enchant_status_details)
+        end
+    elseif mode_name == "coin" then
+        if msg then cache.coin_status_text = msg end
+        cache.coin_status_details = details
+        if coin_status_val_lbl then
+            coin_status_val_lbl.Text = cache.coin_status_details == "" and cache.coin_status_text or (cache.coin_status_text .. "\n" .. cache.coin_status_details)
         end
     end
-end)
-
-_G.NoirHub_AutoTrade_Cleanup = function()
-    if _G.OriginalTradeOfferPopUp and trade_offer_controller then
-        trade_offer_controller.PopUp = _G.OriginalTradeOfferPopUp
-    end
-    if auto_accept_conn then pcall(function() auto_accept_conn:Disconnect() end); auto_accept_conn = nil end
-    if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
-    if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
-end
-
-local function close_trading_gui()
-    -- Bypass GUI: We don't touch PlayerGui to avoid triggering BAC
-end
-
-local auto_accept_active = false
-local function toggle_auto_accept(enable)
-    if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
-    if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
-
-    config.auto_accept_enabled = enable
-    save_config()
-    if not trade_remotes or not enable then return end
-
-    auto_accept_trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
-        if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-        auto_accept_active = false
-        close_trading_gui()
-    end)
-
-    auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
-        if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-        auto_accept_active = true
-        task_spawn(function()
-            task_wait(2.5)
-            if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
-            pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
-            local start_t = tick()
-            while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") and (tick() - start_t) < 60 do
-                pcall(function()
-                    trade_remotes.SetReady:InvokeServer(true)
-                    trade_remotes.ConfirmTrade:InvokeServer()
-                end)
-                task_wait(0.08)
-            end
-            if local_player:GetAttribute("IsTrading") then
-                pcall(function()
-                    if trade_remotes and trade_remotes.CancelTrade then
-                        trade_remotes.CancelTrade:InvokeServer()
-                    end
-                end)
-            end
-            close_trading_gui()
-        end)
-    end)
-end
-
-local function listen_for_trade_completion(on_completed)
-    local completed, connections = false, {}
-    local function trigger_done()
-        if completed then return end
-        completed = true
-        if on_completed then pcall(on_completed) end
-    end
-
-    pcall(function()
-        local TextChatService = game:GetService("TextChatService")
-        if TextChatService then
-            table_insert(connections, TextChatService.MessageReceived:Connect(function(msg)
-                if not msg or completed then return end
-                local lower_t = string_lower(tostring(msg.Text))
-                if string_find(lower_t, "completed", 1, true) and (string_find(lower_t, "trade", 1, true) or string_find(lower_t, "with", 1, true)) then
-                    trigger_done()
-                end
-            end))
-        end
-    end)
-
-    pcall(function()
-        if trade_remotes and trade_remotes.TradeCompleted then
-            table_insert(connections, trade_remotes.TradeCompleted.OnClientEvent:Connect(trigger_done))
-        end
-    end)
-
-    pcall(function()
-        if trade_remotes and trade_remotes.TradeEnded then
-            table_insert(connections, trade_remotes.TradeEnded.OnClientEvent:Connect(trigger_done))
-        end
-    end)
-
-    return {
-        is_completed = function() return completed end,
-        disconnect = function() for _, conn in ipairs(connections) do pcall(function() conn:Disconnect() end) end end
-    }
-end
-
-local function start_trade_session(target_player, mode)
-    if not target_player or not trade_remotes then return false, "No remotes" end
-    if local_player:GetAttribute("IsTrading") then
-        close_trading_gui()
-        local clear_start = tick()
-        while local_player:GetAttribute("IsTrading") and (tick() - clear_start) < 2 do
-            task_wait(0.1)
-        end
-        if local_player:GetAttribute("IsTrading") then
-            pcall(function()
-                if trade_remotes and trade_remotes.CancelTrade then
-                    trade_remotes.CancelTrade:InvokeServer()
-                end
-            end)
-            local cancel_wait = tick()
-            while local_player:GetAttribute("IsTrading") and (tick() - cancel_wait) < 3 do
-                task_wait(0.1)
-            end
-        end
-    end
-
-    if cache.last_failed_offer_time then
-        local elapsed = tick() - cache.last_failed_offer_time
-        if elapsed < 10 then
-            set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 10 - elapsed) .. ")")
-            task_wait(10 - elapsed)
-        end
-        cache.last_failed_offer_time = nil
-    end
-
-    set_status_msg(mode, "Waiting for target to accept offer...")
-    
-    local success, err = trade_remotes.SendTradeOffer:InvokeServer(target_player)
-    if success == false then
-        cache.last_failed_offer_time = tick()
-        set_status_msg(mode, "Failed: " .. (err or "Declined"))
-        return false, err
-    end
-    
-
-    local start_t = tick()
-    while not local_player:GetAttribute("IsTrading") and (tick() - start_t) < 10 do
-        task_wait(0.1)
-    end
-    if not local_player:GetAttribute("IsTrading") then
-        cache.last_failed_offer_time = tick()
-        set_status_msg(mode, "Trade request timed out")
-        return false, "Timeout"
-    end
-    task_wait(0.3)
-    return true
 end
 
 local function wait_for_trade_end(mode_name, chat_listener)
     local start_t = tick()
-    while local_player:GetAttribute("IsTrading") and tick() - start_t < 60 do
-        if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.enabled then break end
-        if chat_listener and chat_listener.is_completed() then break end
-        pcall(function()
-            if trade_remotes.SetReady then trade_remotes.SetReady:InvokeServer(true) end
-            if trade_remotes.ConfirmTrade then trade_remotes.ConfirmTrade:InvokeServer() end
-        end)
-        local elapsed = math_floor(tick() - start_t)
-        set_status_msg(mode_name, string_format("Accepting & Confirming trade... (%ds/60s)", elapsed))
-        task_wait(0.08)
-    end
-    if local_player:GetAttribute("IsTrading") and (not chat_listener or not chat_listener.is_completed()) then
-        pcall(function()
-            if trade_remotes and trade_remotes.CancelTrade then
-                trade_remotes.CancelTrade:InvokeServer()
-            end
-        end)
-        set_status_msg(mode_name, "Trade stuck (>60s), cancelled trade")
-        local cancel_start = tick()
-        while local_player:GetAttribute("IsTrading") and (tick() - cancel_start) < 4 do
-            task_wait(0.1)
-        end
-    end
-end
-
-local function collect_trade_items(mode)
-    local inventory = player_data and player_data:Get("Inventory")
-    local items = inventory and inventory.Items or {}
-    local total_sent = cache.stats[mode].total_items
-    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
-    local items_to_trade = {}
-
-    if mode == "fish" then
-        local has_all = #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil
-        if #config.selected_fish > 1 and not has_all then
-            items_to_trade = collect_round_robin(items, function(it)
-                local d = item_utility:GetItemData(it.Id)
-                return (d and d.Data and d.Data.Type == "Fish" and should_trade_fish(d, it)) and string_lower(d.Data.Name) or nil
-            end, config.selected_fish, limit)
-        else
-            for _, item in ipairs(items) do
-                if #items_to_trade >= limit then break end
-                local d = item and item.Id and item_utility:GetItemData(item.Id)
-                if d and d.Data and d.Data.Type == "Fish" and should_trade_fish(d, item) then
-                    local count_in_stack = tonumber(item.Amount) or 1
-                    local can_take = math_min(limit - #items_to_trade, count_in_stack)
-                    for _ = 1, can_take do
-                        table_insert(items_to_trade, item)
-                    end
-                end
-            end
-        end
-    elseif mode == "rarity" then
-        local has_all = #config.selected_tiers == 0 or table_find(config.selected_tiers, "All") ~= nil
-        if #config.selected_tiers > 1 and not has_all then
-            items_to_trade = collect_round_robin(items, function(it)
-                local d = item_utility:GetItemData(it.Id)
-                if d and d.Data and d.Data.Type == "Fish" and should_trade_fish_by_rarity(d, it) then
-                    local raw_tier = d.Data.Tier
-                    return type(raw_tier) == "number" and (tier_mapping[raw_tier] or "") or string_lower(tostring(raw_tier))
-                end
-                return nil
-            end, config.selected_tiers, limit)
-        else
-            for _, item in ipairs(items) do
-                if #items_to_trade >= limit then break end
-                local d = item and item.Id and item_utility:GetItemData(item.Id)
-                if d and d.Data and d.Data.Type == "Fish" and should_trade_fish_by_rarity(d, item) then
-                    local count_in_stack = tonumber(item.Amount) or 1
-                    local can_take = math_min(limit - #items_to_trade, count_in_stack)
-                    for _ = 1, can_take do
-                        table_insert(items_to_trade, item)
-                    end
-                end
-            end
-        end
-    elseif mode == "enchant" then
-        for _, item in ipairs(items) do
-            if #items_to_trade >= limit then break end
-            if item and item.Id then
-                local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
-                if not (is_fav and not config.trade_favorited) then
-                    local d = item_utility:GetItemData(item.Id)
-                    if d and d.Data and d.Data.Type == "Enchant Stones" then
-                        local name = d.Data.Name
-                        local match = #config.selected_items == 0 or table_find(config.selected_items, "All") ~= nil
-                        if not match then
-                            for _, sel in ipairs(config.selected_items) do
-                                if string_lower(name) == string_lower(strip_quantity(sel)) then match = true; break end
-                            end
-                        end
-                        if match then
-                            local count_in_stack = tonumber(item.Amount) or 1
-                            local can_take = math_min(limit - #items_to_trade, count_in_stack)
-                            for _ = 1, can_take do
-                                table_insert(items_to_trade, item)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    elseif mode == "coin" then
-        local target_coins = config.target_coin_amount or 0
-        local already_sent = cache.stats.coin.total_coins or 0
-        local chosen, _ = select_fish_for_coin_trade(target_coins, already_sent)
-        items_to_trade = chosen
-    end
-    return items_to_trade
-end
-
-local function execute_trade(mode)
-    local target_player = find_target_player()
-    if not target_player or not player_data then
-        set_status_msg(mode, config.trade_with ~= "" and "Waiting: Target player tidak ditemukan di server" or "Waiting: Target player belum dipilih di panel kanan")
-        return
-    end
-
-    local s = cache.stats[mode]
-    if mode == "coin" then
-        if config.target_coin_amount > 0 and (s.total_coins or 0) >= config.target_coin_amount then
-            config.enabled = false
-            config.trade_coins_enabled = false
-            if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
-            set_status_msg("coin", string_format("Selesai! Berhasil mengirim %s Coins (%d ikan)", format_number(s.total_coins), s.total_items))
-            return
-        end
-    else
-        if config.quantity > 0 and s.total_items >= config.quantity then
-            config.enabled = false
-            local flag_name = mode_flag_map[mode]
-            if flag_name then config[flag_name] = false end
-            if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
-            set_status_msg(mode, string_format("Selesai! Berhasil mengirim %d/%d item", s.total_items, config.quantity))
-            return
-        end
-    end
-
-    local items_to_trade = collect_trade_items(mode)
-    if #items_to_trade == 0 then
-        config.enabled = false
-        local flag_name = mode_flag_map[mode]
-        if flag_name then config[flag_name] = false end
-        if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
-        local done_msg = mode == "coin" and "Selesai! Tidak ada ikan di bag untuk ditukar." or ("Selesai! Tidak ada " .. get_mode_display_name(mode) .. " di bag.")
-        set_status_msg(mode, done_msg)
-        return
-    end
-
-    s.attempts = s.attempts + 1
-    update_status_ui(mode)
-
-    local success, err = start_trade_session(target_player, mode)
-    if not success then s.failed = s.failed + 1; update_status_ui(mode); return end
-
-    local added_items, added_coins = {}, 0
-    local category = (mode == "enchant") and "Enchant Stones" or "Fish"
-    
-    local trade_success = false
-    local function mark_success()
-        if not trade_success then
-            trade_success = true
-            s.success_trades = s.success_trades + 1
-            s.last_items = #added_items
-            s.total_items = s.total_items + #added_items
-            if mode == "coin" then
-                local sent_subtotal = 0
-                for _, itm in ipairs(added_items) do
-                    sent_subtotal = sent_subtotal + calculate_fish_coin_value(itm)
-                end
-                s.total_coins = (s.total_coins or 0) + sent_subtotal
-            end
-            update_status_ui(mode)
-        end
-    end
-    local chat_listener = listen_for_trade_completion(mark_success)
-
-    local add_start_time = tick()
-    for idx, item in ipairs(items_to_trade) do
-        if not config.enabled or not local_player:GetAttribute("IsTrading") or _G.NoirHub_AutoTrade_ScriptID ~= script_id then break end
-        if (tick() - add_start_time) > 20 then
-            -- 20s watchdog limit on AddItem phase
+    while local_player:GetAttribute("IsTrading") and tick() - start_t < 15 do
+        if chat_listener and chat_listener.is_completed() then
             break
         end
-        if item and item.UUID then
-            set_status_msg(mode, string_format("Adding %s... (%d/%d)", get_mode_display_name(mode), idx, #items_to_trade))
-            local ok, res = pcall(function() return trade_remotes.AddItem:InvokeServer(category, item.UUID) end)
-            if ok and res ~= false then
-                table_insert(added_items, item)
-                if mode == "coin" then added_coins = added_coins + calculate_fish_coin_value(item) end
+
+        local stage = "Waiting PlayersReady..."
+
+        pcall(function()
+            if trade_remotes then
+                if trade_remotes.SetReady then pcall(function() trade_remotes.SetReady:InvokeServer(true) end) end
+                if trade_remotes.ConfirmTrade then pcall(function() trade_remotes.ConfirmTrade:InvokeServer() end) end
+            end
+        end)
+
+        pcall(function()
+            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
+            if t_gui then
+                local frame = t_gui:FindFirstChild("Frame")
+                local interior = frame and frame:FindFirstChild("Interior")
+                local buttons = interior and interior:FindFirstChild("Buttons")
+                if buttons then
+                    for _, child in ipairs(buttons:GetChildren()) do
+                        if child:IsA("GuiButton") and child.Name ~= "Decline" then
+                            click_gui_button(child)
+                        end
+                    end
+                end
+
+                for _, btn_name in ipairs({"Accept", "Confirm", "Ready"}) do
+                    local btn = t_gui:FindFirstChild(btn_name, true)
+                    if btn and btn:IsA("GuiButton") then
+                        click_gui_button(btn)
+                    end
+                end
+            end
+        end)
+
+        pcall(function()
+            local t_gui = local_player.PlayerGui:FindFirstChild("! Trading")
+            if t_gui then
+                local seconds = nil
+                for _, desc in ipairs(t_gui:GetDescendants()) do
+                    if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+                        local text = desc.Text or ""
+                        local sec = string_match(text, "%((%d)s?%)") or string_match(text, "^(%d)$") or string_match(text, "Countdown: (%d)") or string_match(text, "Confirm%s*%(?(%d)%)?") or string_match(text, "Ready%s*%(?(%d)%)?")
+                        if sec then
+                            seconds = sec
+                            break
+                        end
+                    end
+                end
+
+                if seconds then
+                    stage = "Waiting lock countdown (" .. seconds .. "s)..."
+                else
+                    stage = "Accepting & Confirming trade..."
+                end
+            end
+        end)
+
+        if not (chat_listener and chat_listener.is_completed()) then
+            set_status_msg(mode_name, stage)
+        end
+        task_wait(0.1)
+    end
+end
+
+local function start_trade_session(target_player, mode)
+    if not target_player or not trade_remotes then return false, "No remotes" end
+
+    if not local_player:GetAttribute("IsTrading") then
+        if cache.last_trade_time then
+            local elapsed = tick() - cache.last_trade_time
+            if elapsed < 5 then
+                set_status_msg(mode, nil, "Cooldown (" .. string.format("%.1fs", 5 - elapsed) .. ")")
+                task_wait(5 - elapsed)
             end
         end
+
+        set_status_msg(mode, "Waiting for target to accept offer...")
+        local success, err = trade_remotes.SendTradeOffer:InvokeServer(target_player)
+        if not success then
+            cache.last_trade_time = tick()
+            set_status_msg(mode, "Failed: " .. (err or "Declined"))
+            return false, err
+        end
+
+        local start_time = tick()
+        while not local_player:GetAttribute("IsTrading") and tick() - start_time < 10 do
+            task_wait(0.1)
+        end
+
+        if not local_player:GetAttribute("IsTrading") then
+            cache.last_trade_time = tick()
+            set_status_msg(mode, "Trade request timed out")
+            return false, "Timeout"
+        end
+
+        pcall(function()
+            local pgui = local_player:FindFirstChild("PlayerGui")
+            if pgui then
+                local t_gui = pgui:FindFirstChild("! Trading") or pgui:FindFirstChild("Trading") or pgui:FindFirstChild("Trade")
+                if t_gui then
+                    t_gui.Enabled = true
+                    local container = t_gui:FindFirstChild("Frame") or t_gui:FindFirstChild("Container") or t_gui:FindFirstChild("Main")
+                    if container then container.Visible = true end
+                end
+            end
+        end)
+
+        task_wait(0.5)
+    end
+
+    return true
+end
+
+local function update_mode_status(mode_name)
+    local s = cache.stats[mode_name]
+    if not s then return end
+
+    local target = config.quantity
+    local progress_str
+    if mode_name == "coin" then
+        target = config.target_coin_amount
+        local current_coins = s.total_coins or 0
+        progress_str = (target == 0) and (current_coins .. "/∞") or (current_coins .. "/" .. target)
+    else
+        progress_str = (target == 0) and (s.total_items .. "/∞") or (s.total_items .. "/" .. target)
+    end
+
+    local display_name = get_mode_display_name(mode_name)
+    local text
+    if mode_name == "coin" then
+        local current_coins = s.total_coins or 0
+        if target > 0 and current_coins >= target then
+            text = string.format("Completed! %d/%d coins sent (%d items)", current_coins, target, s.total_items)
+        elseif (s.attempts or 0) == 0 and (s.success_trades or 0) == 0 then
+            text = string.format("Starting Trade: Coin (%s)", progress_str)
+        elseif (s.success_trades or 0) > 0 then
+            text = string.format("Active: Coin - %d coins sent (%s)", current_coins, progress_str)
+        else
+            text = string.format("Trading: Coin (%s)", progress_str)
+        end
+    else
+        if target > 0 and s.total_items >= target then
+            text = string.format("Completed! %d/%d items sent", s.total_items, target)
+        elseif (s.attempts or 0) == 0 and (s.success_trades or 0) == 0 then
+            text = string.format("Starting Trade: %s (%s)", display_name, progress_str)
+        elseif (s.success_trades or 0) > 0 then
+            text = string.format("Active: %s - %d items sent (%s)", display_name, s.total_items, progress_str)
+        else
+            text = string.format("Trading: %s (%s)", display_name, progress_str)
+        end
+    end
+
+    local details
+    if mode_name == "coin" then
+        details = string.format("Coins Sent: %d/%d | Items Sent: %d | Attempts: %d | Failed: %d", s.total_coins or 0, target, s.total_items, s.attempts, s.failed)
+    else
+        details = string.format("Items Sent: %d | Progress: %s | Attempts: %d | Failed: %d", s.total_items, progress_str, s.attempts, s.failed)
+    end
+
+    if mode_name == "fish" then
+        cache.fish_status_text = text
+        cache.fish_status_details = details
+        if status_val_lbl then
+            status_val_lbl.Text = cache.fish_status_details == "" and cache.fish_status_text or (cache.fish_status_text .. "\n" .. cache.fish_status_details)
+        end
+    elseif mode_name == "rarity" then
+        cache.rarity_status_text = text
+        cache.rarity_status_details = details
+        if rarity_status_val_lbl then
+            rarity_status_val_lbl.Text = cache.rarity_status_details == "" and cache.rarity_status_text or (cache.rarity_status_text .. "\n" .. cache.rarity_status_details)
+        end
+    elseif mode_name == "enchant" then
+        cache.enchant_status_text = text
+        cache.enchant_status_details = details
+        if enchant_status_val_lbl then
+            enchant_status_val_lbl.Text = cache.enchant_status_details == "" and cache.enchant_status_text or (cache.enchant_status_text .. "\n" .. cache.enchant_status_details)
+        end
+    elseif mode_name == "coin" then
+        cache.coin_status_text = text
+        cache.coin_status_details = details
+        if coin_status_val_lbl then
+            coin_status_val_lbl.Text = cache.coin_status_details == "" and cache.coin_status_text or (cache.coin_status_text .. "\n" .. cache.coin_status_details)
+        end
+    end
+end
+
+local function try_trade_fish()
+    cache.processed_trades = {}
+    local target_player = find_target_player()
+    if not target_player or not player_data then
+        local err_msg = "Error: Target player belum dipilih"
+        if config.trade_with ~= "" and player_data then
+            err_msg = "Error: Target player tidak ditemukan"
+        end
+        set_status_msg("fish", err_msg)
+        return
+    end
+
+    local total_sent = cache.stats.fish.total_items
+    if config.quantity > 0 and total_sent >= config.quantity then
+        config.enabled = false
+        if byname_toggle_ctrl then
+            byname_toggle_ctrl.set_state(false)
+            config.trade_fish_enabled = false
+        end
+        save_config()
+        return
+    end
+
+    local inventory = player_data:Get("Inventory")
+    local player_data_items = inventory and inventory.Items or {}
+
+    local items_to_trade = {}
+    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
+
+    local has_all_fish = table_find(config.selected_fish, "All") ~= nil
+    if #config.selected_fish > 1 and not has_all_fish then
+        items_to_trade = collect_round_robin_names(player_data_items, config.selected_fish, limit)
+    else
+        for _, fish_item in ipairs(player_data_items) do
+            if #items_to_trade >= limit then break end
+            if fish_item and fish_item.Id then
+                local fish_data = item_utility:GetItemData(fish_item.Id)
+                if fish_data and fish_data.Data.Type == "Fish" then
+                    if should_trade_fish(fish_data, fish_item) then
+                        if not table_find(cache.processed_trades, fish_item.UUID) then
+                            table_insert(items_to_trade, fish_item)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if #items_to_trade == 0 then
+        local item_name = get_mode_display_name("fish")
+        set_status_msg("fish", "Error: Tidak ada lagi " .. item_name .. " di inventory")
+        config.enabled = false
+        if byname_toggle_ctrl then
+            byname_toggle_ctrl.set_state(false)
+            config.trade_fish_enabled = false
+        end
+        save_config()
+        return
+    end
+
+    cache.stats.fish.attempts = cache.stats.fish.attempts + 1
+    update_mode_status("fish")
+
+    local success, err = start_trade_session(target_player, "fish")
+    if not success then
+        cache.stats.fish.failed = cache.stats.fish.failed + 1
+        update_mode_status("fish")
+        return
+    end
+
+    local added_items = {}
+    set_status_msg("fish", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
+    for _, item in ipairs(items_to_trade) do
+        if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
+
+        local add_success = false
+        for attempt = 1, 2 do
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
+            end)
+            if ok and res ~= false then
+                add_success = true
+                break
+            end
+            task_wait(0.04)
+        end
+
+        if add_success then
+            table_insert(cache.processed_trades, item.UUID)
+            table_insert(added_items, item)
+        end
+        task_wait(0.03)
+    end
+
+    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
+        local trade_success = false
+        local function mark_success()
+            if not trade_success then
+                trade_success = true
+                cache.stats.fish.success_trades = cache.stats.fish.success_trades + 1
+                cache.stats.fish.last_items = #added_items
+                cache.stats.fish.total_items = cache.stats.fish.total_items + #added_items
+                update_mode_status("fish")
+            end
+        end
+
+        local chat_listener = listen_for_trade_completion(mark_success)
+
+        pcall(function()
+            trade_remotes.SetReady:InvokeServer(true)
+        end)
+
+        wait_for_trade_end("fish", chat_listener)
+
+        if chat_listener.is_completed() or (not local_player:GetAttribute("IsTrading") and #added_items > 0) then
+            mark_success()
+        end
+
+        chat_listener.disconnect()
+
+        if trade_success then
+            if config.quantity > 0 and cache.stats.fish.total_items >= config.quantity then
+                config.enabled = false
+                if byname_toggle_ctrl then
+                    byname_toggle_ctrl.set_state(false)
+                    config.trade_fish_enabled = false
+                end
+                save_config()
+            end
+        else
+            cache.stats.fish.failed = cache.stats.fish.failed + 1
+            update_mode_status("fish")
+        end
+    else
+        cache.stats.fish.failed = cache.stats.fish.failed + 1
+        update_mode_status("fish")
+    end
+end
+
+local function try_trade_rarity()
+    cache.processed_trades = {}
+    local target_player = find_target_player()
+    if not target_player or not player_data then
+        local err_msg = "Error: Target player belum dipilih"
+        if config.trade_with ~= "" and player_data then
+            err_msg = "Error: Target player tidak ditemukan"
+        end
+        set_status_msg("rarity", err_msg)
+        return
+    end
+
+    local total_sent = cache.stats.rarity.total_items
+    if config.quantity > 0 and total_sent >= config.quantity then
+        config.enabled = false
+        if rarity_toggle_ctrl then
+            rarity_toggle_ctrl.set_state(false)
+            config.trade_rarity_enabled = false
+        end
+        save_config()
+        return
+    end
+
+    local inventory = player_data:Get("Inventory")
+    local player_data_items = inventory and inventory.Items or {}
+
+    local items_to_trade = {}
+    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
+
+    local has_all_tier = table_find(config.selected_tiers, "All") ~= nil
+    if #config.selected_tiers > 1 and not has_all_tier then
+        items_to_trade = collect_round_robin_rarity(player_data_items, config.selected_tiers, limit)
+    else
+        for _, fish_item in ipairs(player_data_items) do
+            if #items_to_trade >= limit then break end
+            if fish_item and fish_item.Id then
+                local fish_data = item_utility:GetItemData(fish_item.Id)
+                if fish_data and fish_data.Data.Type == "Fish" then
+                    if should_trade_fish_by_rarity(fish_data, fish_item) then
+                        if not table_find(cache.processed_trades, fish_item.UUID) then
+                            table_insert(items_to_trade, fish_item)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if #items_to_trade == 0 then
+        local rarity_name = get_mode_display_name("rarity")
+        set_status_msg("rarity", "Error: Tidak ada lagi " .. rarity_name .. " di inventory")
+        config.enabled = false
+        if rarity_toggle_ctrl then
+            rarity_toggle_ctrl.set_state(false)
+            config.trade_rarity_enabled = false
+        end
+        save_config()
+        return
+    end
+
+    cache.stats.rarity.attempts = cache.stats.rarity.attempts + 1
+    update_mode_status("rarity")
+
+    local success, err = start_trade_session(target_player, "rarity")
+    if not success then
+        cache.stats.rarity.failed = cache.stats.rarity.failed + 1
+        update_mode_status("rarity")
+        return
+    end
+
+    local added_items = {}
+    set_status_msg("rarity", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
+    for _, item in ipairs(items_to_trade) do
+        if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
+
+        local add_success = false
+        for attempt = 1, 2 do
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer("Fish", item.UUID)
+            end)
+            if ok and res ~= false then
+                add_success = true
+                break
+            end
+            task_wait(0.04)
+        end
+
+        if add_success then
+            table_insert(cache.processed_trades, item.UUID)
+            table_insert(added_items, item)
+        end
+        task_wait(0.03)
         task_wait(0.08)
     end
 
-    if local_player:GetAttribute("IsTrading") then
-        pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
-        wait_for_trade_end(mode, chat_listener)
-    end
-
-    if chat_listener.is_completed() then
-        mark_success()
-    end
-    chat_listener.disconnect()
-
-    if not trade_success then
-        s.failed = s.failed + 1
-        cache.last_failed_offer_time = tick()
-        close_trading_gui()
-        update_status_ui(mode)
-    else
-        cache.last_failed_offer_time = nil
-        set_status_msg(mode, "Trade done! Syncing inventory...")
-        local clear_start = tick()
-        while local_player:GetAttribute("IsTrading") and (tick() - clear_start) < 4 do
-            task_wait(0.1)
+    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
+        local trade_success = false
+        local function mark_success()
+            if not trade_success then
+                trade_success = true
+                cache.stats.rarity.success_trades = cache.stats.rarity.success_trades + 1
+                cache.stats.rarity.last_items = #added_items
+                cache.stats.rarity.total_items = cache.stats.rarity.total_items + #added_items
+                update_mode_status("rarity")
+            end
         end
-        task_wait(0.4)
 
-        if mode == "coin" then
-            if config.target_coin_amount > 0 and (s.total_coins or 0) >= config.target_coin_amount then
+        local chat_listener = listen_for_trade_completion(mark_success)
+
+        pcall(function()
+            trade_remotes.SetReady:InvokeServer(true)
+        end)
+
+        wait_for_trade_end("rarity", chat_listener)
+
+        if chat_listener.is_completed() or (not local_player:GetAttribute("IsTrading") and #added_items > 0) then
+            mark_success()
+        end
+
+        chat_listener.disconnect()
+
+        if trade_success then
+            if config.quantity > 0 and cache.stats.rarity.total_items >= config.quantity then
                 config.enabled = false
-                config.trade_coins_enabled = false
-                if toggle_ctrls.coin then toggle_ctrls.coin.set_state(false) end
-                set_status_msg("coin", string_format("Selesai! Berhasil mengirim %s Coins (%d ikan)", format_number(s.total_coins), s.total_items))
+                if rarity_toggle_ctrl then
+                    rarity_toggle_ctrl.set_state(false)
+                    config.trade_rarity_enabled = false
+                end
+                save_config()
             end
         else
-            if config.quantity > 0 and s.total_items >= config.quantity then
-                config.enabled = false
-                local flag_name = mode_flag_map[mode]
-                if flag_name then config[flag_name] = false end
-                if toggle_ctrls[mode] then toggle_ctrls[mode].set_state(false) end
-                set_status_msg(mode, string_format("Selesai! Berhasil mengirim %d/%d item", s.total_items, config.quantity))
+            cache.stats.rarity.failed = cache.stats.rarity.failed + 1
+            update_mode_status("rarity")
+        end
+    else
+        cache.stats.rarity.failed = cache.stats.rarity.failed + 1
+        update_mode_status("rarity")
+    end
+end
+
+local function try_trade_enchant()
+    cache.processed_trades = {}
+    local target_player = find_target_player()
+    if not target_player or not player_data then
+        local err_msg = "Error: Target player belum dipilih"
+        if config.trade_with ~= "" and player_data then
+            err_msg = "Error: Target player tidak ditemukan"
+        end
+        set_status_msg("enchant", err_msg)
+        return
+    end
+
+    local total_sent = cache.stats.enchant.total_items
+    if config.quantity > 0 and total_sent >= config.quantity then
+        config.enabled = false
+        if enchant_toggle_ctrl then
+            enchant_toggle_ctrl.set_state(false)
+            config.trade_enchants_enabled = false
+        end
+        save_config()
+        return
+    end
+
+    local inventory = player_data:Get("Inventory")
+    local player_data_items = inventory and inventory.Items or {}
+
+    local items_to_trade = {}
+    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
+    for _, item in ipairs(player_data_items) do
+        if #items_to_trade >= limit then
+            break
+        end
+
+        if item and item.Id then
+            local item_data = item_utility:GetItemData(item.Id)
+            if item_data then
+                local has_all_enchant = table_find(config.selected_items, "All") ~= nil
+                if has_all_enchant or table_find(config.selected_items, item_data.Data.Name) then
+                    if not table_find(cache.processed_trades, item.UUID) then
+                        table_insert(items_to_trade, item)
+                    end
+                end
             end
         end
+    end
+
+    if #items_to_trade == 0 then
+        local item_name = get_mode_display_name("enchant")
+        set_status_msg("enchant", "Error: Tidak ada lagi " .. item_name .. " di inventory")
+        config.enabled = false
+        if enchant_toggle_ctrl then
+            enchant_toggle_ctrl.set_state(false)
+            config.trade_enchants_enabled = false
+        end
+        save_config()
+        return
+    end
+
+    cache.stats.enchant.attempts = cache.stats.enchant.attempts + 1
+    update_mode_status("enchant")
+
+    local success, err = start_trade_session(target_player, "enchant")
+    if not success then
+        cache.stats.enchant.failed = cache.stats.enchant.failed + 1
+        update_mode_status("enchant")
+        return
+    end
+
+    local added_items = {}
+    set_status_msg("enchant", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
+    for _, item in ipairs(items_to_trade) do
+        if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
+
+        local item_data = item_utility:GetItemData(item.Id)
+        local add_success = false
+        for attempt = 1, 2 do
+            local pref_type = (item_data and item_data.Data and item_data.Data.Type) or "Items"
+            for _, cat_type in ipairs({pref_type, "Items", "Item", "Fish"}) do
+                local ok, res = pcall(function()
+                    return trade_remotes.AddItem:InvokeServer(cat_type, item.UUID)
+                end)
+                if ok and res ~= false then
+                    add_success = true
+                    break
+                end
+            end
+            if add_success then break end
+            task_wait(0.04)
+        end
+
+        if add_success then
+            table_insert(cache.processed_trades, item.UUID)
+            table_insert(added_items, item)
+        end
+        task_wait(0.03)
+        task_wait(0.08)
+    end
+
+    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
+        local trade_success = false
+        local function mark_success()
+            if not trade_success then
+                trade_success = true
+                cache.stats.enchant.success_trades = cache.stats.enchant.success_trades + 1
+                cache.stats.enchant.last_items = #added_items
+                cache.stats.enchant.total_items = cache.stats.enchant.total_items + #added_items
+                update_mode_status("enchant")
+            end
+        end
+
+        local chat_listener = listen_for_trade_completion(mark_success)
+
+        pcall(function()
+            trade_remotes.SetReady:InvokeServer(true)
+        end)
+
+        wait_for_trade_end("enchant", chat_listener)
+
+        if chat_listener.is_completed() or (not local_player:GetAttribute("IsTrading") and #added_items > 0) then
+            mark_success()
+        end
+
+        chat_listener.disconnect()
+
+        if trade_success then
+            if config.quantity > 0 and cache.stats.enchant.total_items >= config.quantity then
+                config.enabled = false
+                if enchant_toggle_ctrl then
+                    enchant_toggle_ctrl.set_state(false)
+                    config.trade_enchants_enabled = false
+                end
+                save_config()
+            end
+        else
+            cache.stats.enchant.failed = cache.stats.enchant.failed + 1
+            update_mode_status("enchant")
+        end
+    else
+        cache.stats.enchant.failed = cache.stats.enchant.failed + 1
+        update_mode_status("enchant")
+    end
+end
+
+local function coin_fish_comparator(a, b)
+    if a.SpecialScore ~= b.SpecialScore then
+        return a.SpecialScore > b.SpecialScore
+    end
+    return a.SellPrice > b.SellPrice
+end
+
+local function choose_fishes_by_range(fish_list, target_amount, max_slots)
+    max_slots = max_slots or 20
+    table_sort(fish_list, coin_fish_comparator)
+
+    local selected_fishes = {}
+    local accumulated_amount = 0
+    local effective_target = (target_amount > 0) and (target_amount * 1.5) or 0
+
+    for _, fish in ipairs(fish_list) do
+        table_insert(selected_fishes, fish)
+        accumulated_amount = accumulated_amount + fish.SellPrice
+
+        if (effective_target > 0 and accumulated_amount >= effective_target) or #selected_fishes >= max_slots then
+            break
+        end
+    end
+
+    if target_amount == 0 and #selected_fishes < max_slots then
+        for _, fish in ipairs(fish_list) do
+            if #selected_fishes >= max_slots then break end
+            if not table_find(selected_fishes, fish) then
+                table_insert(selected_fishes, fish)
+            end
+        end
+    end
+
+    return selected_fishes
+end
+
+local function try_trade_by_coin()
+    cache.processed_trades = {}
+    local target_player = find_target_player()
+    if not target_player or not player_data then
+        local err_msg = "Error: Target player belum dipilih"
+        if config.trade_with ~= "" and player_data then
+            err_msg = "Error: Target player tidak ditemukan"
+        end
+        set_status_msg("coin", err_msg)
+        return
+    end
+
+    local current_coins = cache.stats.coin.total_coins or 0
+    local target_coins = config.target_coin_amount
+    local remaining_target = 0
+    if target_coins > 0 then
+        remaining_target = math.max(0, target_coins - current_coins)
+        if remaining_target <= 0 then
+            config.enabled = false
+            if coin_toggle_ctrl then
+                coin_toggle_ctrl.set_state(false)
+                config.trade_coins_enabled = false
+            end
+            save_config()
+            return
+        end
+    end
+
+    local inventory = player_data:Get("Inventory")
+    local player_data_items = inventory and inventory.Items or {}
+    local fish_list = {}
+    for _, item in ipairs(player_data_items) do
+        if item and item.Id then
+            local data = item_utility:GetItemData(item.Id)
+            if data and data.Data and data.Data.Type == "Fish" then
+                if not (item.Favorited and not config.trade_favorited) then
+                    local mut_name = get_item_mutation(item)
+                    local is_mutation = (mut_name ~= "None")
+                    local is_shiny = is_item_shiny(item)
+                    local is_big = is_item_big(item)
+                    local is_sparkling = is_item_sparkling(item)
+
+                    local special_score = 0
+                    if is_shiny then special_score = special_score + 2 end
+                    if is_mutation then special_score = special_score + 2 end
+                    if is_big then special_score = special_score + 2 end
+                    if is_sparkling then special_score = special_score + 1 end
+
+                    local sell_price = get_cached_sell_price(item)
+
+                    table_insert(fish_list, {
+                        UUID = item.UUID,
+                        Name = data.Data.Name,
+                        SellPrice = sell_price,
+                        SpecialScore = special_score
+                    })
+                end
+            end
+        end
+    end
+
+    if #fish_list == 0 then
+        set_status_msg("coin", "Error: Tidak ada lagi fish di inventory")
+        config.enabled = false
+        if coin_toggle_ctrl then
+            coin_toggle_ctrl.set_state(false)
+            config.trade_coins_enabled = false
+        end
+        save_config()
+        return
+    end
+
+    local selected = choose_fishes_by_range(fish_list, remaining_target, 20)
+
+    local items_to_trade = {}
+    local total_selected_value = 0
+    for _, fish in ipairs(selected) do
+        if not table_find(cache.processed_trades, fish.UUID) then
+            table_insert(items_to_trade, fish)
+            total_selected_value = total_selected_value + (fish.SellPrice or 0)
+        end
+    end
+
+    log_debug(string_format("[TradeByCoin] Target: %d | Remaining: %d | Total Fish Available: %d | Selected Fish Count: %d | Total Est. Value: %d coins",
+        target_coins, remaining_target, #fish_list, #items_to_trade, total_selected_value))
+
+    if #items_to_trade == 0 or #selected == 0 then
+        set_status_msg("coin", "Error: Tidak ada lagi fish di inventory")
+        config.enabled = false
+        if coin_toggle_ctrl then
+            coin_toggle_ctrl.set_state(false)
+            config.trade_coins_enabled = false
+        end
+        save_config()
+        return
+    end
+
+    cache.stats.coin.attempts = cache.stats.coin.attempts + 1
+    update_mode_status("coin")
+
+    local success, err = start_trade_session(target_player, "coin")
+    if not success then
+        cache.stats.coin.failed = cache.stats.coin.failed + 1
+        update_mode_status("coin")
+        return
+    end
+
+    local added_items = {}
+    local added_coins = 0
+    set_status_msg("coin", "Offer accepted! Adding " .. #items_to_trade .. " item(s)...")
+    for idx, fish in ipairs(items_to_trade) do
+        if not config.enabled or not local_player:GetAttribute("IsTrading") then break end
+
+        local add_success = false
+        for attempt = 1, 2 do
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer("Fish", fish.UUID)
+            end)
+            if ok and res ~= false then
+                add_success = true
+                break
+            end
+            task_wait(0.04)
+        end
+
+        if add_success then
+            table_insert(cache.processed_trades, fish.UUID)
+            table_insert(added_items, fish)
+            added_coins = added_coins + (fish.SellPrice or 0)
+            log_debug(string_format("  [+] Added Slot %d/%d: %s (Price: %d, Score: %d)", idx, #items_to_trade, fish.Name, fish.SellPrice or 0, fish.SpecialScore or 0))
+        else
+            log_debug(string_format("  [-] Failed to add Slot %d/%d: %s (UUID: %s)", idx, #items_to_trade, fish.Name, fish.UUID))
+        end
+        task_wait(0.03)
+    end
+
+    if #added_items > 0 and local_player:GetAttribute("IsTrading") then
+        local trade_success = false
+        local function mark_success()
+            if not trade_success then
+                trade_success = true
+                cache.stats.coin.success_trades = cache.stats.coin.success_trades + 1
+                cache.stats.coin.last_items = #added_items
+                cache.stats.coin.total_items = cache.stats.coin.total_items + #added_items
+                cache.stats.coin.total_coins = (cache.stats.coin.total_coins or 0) + added_coins
+                update_mode_status("coin")
+            end
+        end
+
+        local chat_listener = listen_for_trade_completion(mark_success)
+
+        pcall(function()
+            trade_remotes.SetReady:InvokeServer(true)
+        end)
+
+        wait_for_trade_end("coin", chat_listener)
+
+        if chat_listener.is_completed() or (not local_player:GetAttribute("IsTrading") and #added_items > 0) then
+            mark_success()
+        end
+
+        chat_listener.disconnect()
+
+        if trade_success then
+            if config.target_coin_amount > 0 and cache.stats.coin.total_coins >= config.target_coin_amount then
+                config.enabled = false
+                if coin_toggle_ctrl then
+                    coin_toggle_ctrl.set_state(false)
+                    config.trade_coins_enabled = false
+                end
+                save_config()
+            end
+        else
+            cache.stats.coin.failed = cache.stats.coin.failed + 1
+            update_mode_status("coin")
+        end
+    else
+        cache.stats.coin.failed = cache.stats.coin.failed + 1
+        update_mode_status("coin")
     end
 end
 
 local function run_auto_trade_loop()
     if cache.loop_running then return end
     cache.loop_running = true
-    for _, mode in ipairs({"fish", "rarity", "enchant", "coin"}) do
-        task_spawn(function()
-            local flag_name = mode_flag_map[mode]
-            while _G.NoirHub_AutoTrade_ScriptID == script_id do
-                if config.enabled and config[flag_name] then
-                    if not cache.is_trading_active and not local_player:GetAttribute("IsTrading") then
-                        cache.is_trading_active = true
-                        pcall(function() execute_trade(mode) end)
-                        cache.is_trading_active = false
-                    end
+
+    log_inventory_fish()
+
+    task_spawn(function()
+        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+            if config.enabled and config.trade_fish_enabled then
+                if not cache.is_trading_active then
+                    cache.is_trading_active = true
+                    pcall(try_trade_fish)
+                    cache.is_trading_active = false
                 end
-                task_wait(3)
             end
+            task_wait(3)
+        end
+    end)
+
+    task_spawn(function()
+        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+            if config.enabled and config.trade_rarity_enabled then
+                if not cache.is_trading_active then
+                    cache.is_trading_active = true
+                    pcall(try_trade_rarity)
+                    cache.is_trading_active = false
+                end
+            end
+            task_wait(3)
+        end
+    end)
+
+    task_spawn(function()
+        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+            if config.enabled and config.trade_enchants_enabled then
+                if not cache.is_trading_active then
+                    cache.is_trading_active = true
+                    pcall(function()
+                        if config.trade_enchants_enabled and #config.selected_items > 0 then
+                            try_trade_enchant()
+                        end
+                    end)
+                    cache.is_trading_active = false
+                end
+            end
+            task_wait(3)
+        end
+    end)
+
+    task_spawn(function()
+        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+            if config.enabled and config.trade_coins_enabled and config.target_coin_amount > 0 then
+                if not cache.is_trading_active then
+                    cache.is_trading_active = true
+                    pcall(try_trade_by_coin)
+                    cache.is_trading_active = false
+                end
+            end
+            task_wait(3)
+        end
+    end)
+end
+_G.run_auto_trade_loop = run_auto_trade_loop
+
+local trade_ended_conn = nil
+pcall(function()
+    if trade_remotes and trade_remotes.TradeEnded then
+        trade_ended_conn = trade_remotes.TradeEnded.OnClientEvent:Connect(function()
+            cache.last_trade_time = tick()
+            cache.active_trade = false
         end)
     end
-end
+end)
 
 local function create_ui()
     local parent_gui = nil
     if gethui then
-        local ok, res = pcall(gethui)
-        if ok and res then parent_gui = res end
+        pcall(function() parent_gui = gethui() end)
     end
     if not parent_gui then
-        local ok, core = pcall(function() return cloneref(game:GetService("CoreGui")) end)
-        if ok and core then parent_gui = core end
+        pcall(function()
+            local test_gui = Instance.new("ScreenGui")
+            test_gui.Parent = game:GetService("CoreGui")
+            test_gui:Destroy()
+            parent_gui = game:GetService("CoreGui")
+        end)
     end
     if not parent_gui then
-        parent_gui = player_gui
+        parent_gui = local_player:WaitForChild("PlayerGui")
     end
 
-    local function clear_old(cont)
-        if not cont then return end
+    local function clear_old_guis(container)
+        if not container then return end
         pcall(function()
-            for _, c in ipairs(cont:GetChildren()) do
-                if c.Name == "NoirHub_AutoTrade" or c.Name == "AutoTrade" then c:Destroy() end
+            for _, child in ipairs(container:GetChildren()) do
+                if child.Name == "NoirHub_AutoTrade" or child.Name == "AutoTrade" then
+                    pcall(function() child:Destroy() end)
+                end
             end
         end)
     end
-    clear_old(parent_gui)
+
+    clear_old_guis(parent_gui)
+    clear_old_guis(local_player:FindFirstChild("PlayerGui"))
+    if gethui then clear_old_guis(gethui()) end
+    pcall(function() clear_old_guis(game:GetService("CoreGui")) end)
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "AutoTrade"
     gui.ResetOnSpawn = false
-    gui.DisplayOrder = 2147483647
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.Parent = parent_gui
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 2147483647
+
+    local success_parent = pcall(function()
+        gui.Parent = parent_gui
+    end)
+    if not success_parent then
+        parent_gui = local_player:WaitForChild("PlayerGui")
+        gui.Parent = parent_gui
+    end
+
+    task_spawn(function()
+        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+            task_wait(1)
+            pcall(function()
+                if gui and gui.Parent then
+                    gui.Enabled = true
+                    gui.DisplayOrder = 2147483647
+                end
+            end)
+        end
+    end)
+
+    local byname_fav_toggle = nil
+    local enchant_fav_toggle = nil
+    local coin_fav_toggle = nil
+    local rarity_fav_toggle = nil
+
+    local function sync_fav_toggles(active)
+        config.trade_favorited = active
+        save_config()
+        if byname_fav_toggle then byname_fav_toggle.set_state(active) end
+        if enchant_fav_toggle then enchant_fav_toggle.set_state(active) end
+        if coin_fav_toggle then coin_fav_toggle.set_state(active) end
+        if rarity_fav_toggle then rarity_fav_toggle.set_state(active) end
+
+        cache.loaded_fish = get_owned_fish_options()
+        cache.loaded_enchants = get_owned_enchant_options()
+
+        if item_panel and item_panel.Visible and populate_items_panel and fish_dropdown_btn then
+            pcall(function() populate_items_panel(fish_dropdown_btn) end)
+        end
+        if enchant_panel and enchant_panel.Visible and populate_enchants_panel and enchant_dropdown_btn then
+            pcall(function() populate_enchants_panel(enchant_dropdown_btn) end)
+        end
+    end
+
+    local function sync_qty_boxes(val)
+        config.quantity = val
+        save_config()
+        if qty_box then qty_box.Text = tostring(val) end
+        if es_qty_box then es_qty_box.Text = tostring(val) end
+        if r_qty_box then r_qty_box.Text = tostring(val) end
+    end
+
+    local function truncate_string(str, max_len)
+        if #str > max_len then
+            return string.sub(str, 1, max_len - 2) .. ".."
+        end
+        return str
+    end
+
+    local function safe_set_scroll(scroll)
+        pcall(function()
+            scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+        end)
+        pcall(function()
+            scroll.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y
+        end)
+    end
+
+    local function get_other_players()
+        local list = {}
+        for _, p in ipairs(players:GetPlayers()) do
+            if p ~= local_player then
+                table_insert(list, p.Name)
+            end
+        end
+        table_sort(list)
+        return list
+    end
+
+    local function get_owned_enchant_options()
+        local list = {}
+        local counts = get_inventory_enchants(true)
+        for name, qty in pairs(counts) do
+            table_insert(list, name .. " (x" .. qty .. ")")
+        end
+        table_sort(list)
+        return list
+    end
+
+    local function get_owned_fish_options()
+        local list = {}
+        local counts = {}
+        local success, err = pcall(function()
+            if player_data then
+                local inventory = player_data:Get("Inventory")
+                local items = inventory and inventory.Items or {}
+                for _, item in ipairs(items) do
+                    if item.Id then
+                        local include_item = true
+                        if item.Favorited and not config.trade_favorited then
+                            include_item = false
+                        end
+
+                        if include_item then
+                            local data = item_utility:GetItemData(item.Id)
+                            if data and data.Data then
+                                local name = data.Data.Name
+                                if data.Data.Type == "Fish" then
+                                    counts[name] = (counts[name] or 0) + (item.Amount or 1)
+                                end
+                            end
+                        end
+                    end
+                end
+            else
+            end
+        end)
+        if not success then
+            warn("get_owned_fish_options error: " .. tostring(err))
+        end
+        for name, qty in pairs(counts) do
+            table_insert(list, name .. " (x" .. qty .. ")")
+        end
+        table_sort(list)
+        return list
+    end
+
+    cache.loaded_fish = get_owned_fish_options()
+    cache.loaded_enchants = get_owned_enchant_options()
 
     local BG_COLOR = Color3.fromRGB(15, 15, 15)
     local SIDEBAR_COLOR = Color3.fromRGB(10, 10, 10)
@@ -1051,6 +2191,7 @@ local function create_ui()
     local TEXT_COLOR = Color3.fromRGB(240, 240, 240)
     local MUTED_COLOR = Color3.fromRGB(150, 150, 150)
     local CARD_COLOR = Color3.fromRGB(22, 22, 22)
+    local TOGGLE_ON_COLOR = Color3.fromRGB(255, 0, 255)
     local INPUT_BG_COLOR = Color3.fromRGB(28, 28, 28)
 
     local font_face = Font.fromEnum(Enum.Font.SourceSans)
@@ -1060,335 +2201,93 @@ local function create_ui()
         font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     end)
 
-    local function create_corner(parent, radius)
-        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, radius); c.Parent = parent; return c
-    end
-    local function create_stroke(parent, color, thickness)
-        local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = thickness or 1; s.Parent = parent; return s
-    end
-
+    local ply_dropdown_btn
+    local target_lbl
+    local fish_dropdown_btn
+    local enchant_dropdown_btn
+    local rarity_dropdown_btn
+    local close_detector
+    local active_dropdown_list = nil
     local player_panel
+    local item_panel
+    local enchant_panel
+    local rarity_panel
+    local status_val_lbl = nil
+    local enchant_status_val_lbl = nil
+    local coin_status_val_lbl = nil
+    local rarity_status_val_lbl = nil
+    local sb_status = nil
+    local populate_items_panel
+    local populate_enchants_panel
+    local qty_box
+    local es_qty_box
+    local r_qty_box
+
     local main = Instance.new("Frame")
     main.Name = "MainFrame"
     main.Size = UDim2.new(0, 250, 0, 200)
     main.Position = UDim2.new(0.5, -178, 0.5, -100)
     main.BackgroundColor3 = BG_COLOR
-    main.BackgroundTransparency = 0
+    main.BackgroundTransparency = 0.3
     main.BorderSizePixel = 0
     main.Active = true
-    main.ZIndex = 1
+    main.ZIndex = 10
     main.Parent = gui
-    create_corner(main, 10); create_stroke(main, Color3.fromRGB(45, 45, 45))
 
-    local floating_btn = Instance.new("TextButton")
-    floating_btn.Name = "FloatingRestore"
-    floating_btn.Size = UDim2.new(0, 38, 0, 38)
-    floating_btn.Position = UDim2.new(0, 15, 0.5, -19)
-    floating_btn.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-    floating_btn.BackgroundTransparency = 0
-    floating_btn.Text = "N"
-    floating_btn.TextColor3 = ACCENT_COLOR
-    floating_btn.TextSize = 22
-    floating_btn.FontFace = font_bold
-    floating_btn.Visible = false
-    floating_btn.ZIndex = 20
-    floating_btn.Parent = gui
-    create_corner(floating_btn, 9); create_stroke(floating_btn, ACCENT_COLOR, 1.5)
+    local main_stroke = Instance.new("UIStroke")
+    main_stroke.Color = Color3.fromRGB(45, 45, 45)
+    main_stroke.Thickness = 1
+    main_stroke.Parent = main
 
-    local float_dragging, float_drag_start, float_start_pos
-    floating_btn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            float_dragging = true
-            float_drag_start = input.Position
-            float_start_pos = floating_btn.Position
-            local end_conn
-            end_conn = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    float_dragging = false
-                    if end_conn then end_conn:Disconnect(); end_conn = nil end
-                    pcall(function()
-                        local vp_size = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Vector2.new(1920, 1080)
-                        local abs_pos = floating_btn.AbsolutePosition
-                        local dist_left = abs_pos.X
-                        local dist_right = vp_size.X - (abs_pos.X + 40)
-                        local dist_bottom = vp_size.Y - (abs_pos.Y + 40)
+    local main_corner = Instance.new("UICorner")
+    main_corner.CornerRadius = UDim.new(0, 10)
+    main_corner.Parent = main
 
-                        local target_pos
-                        if dist_bottom < math.min(dist_left, dist_right) and dist_bottom < 120 then
-                            local target_x = math.clamp(abs_pos.X, 15, vp_size.X - 55)
-                            local target_y = vp_size.Y - 55
-                            target_pos = UDim2.new(0, target_x, 0, target_y)
-                        elseif dist_left <= dist_right then
-                            local target_x = 15
-                            local target_y = math.clamp(abs_pos.Y, 20, vp_size.Y - 60)
-                            target_pos = UDim2.new(0, target_x, 0, target_y)
-                        else
-                            local target_x = vp_size.X - 55
-                            local target_y = math.clamp(abs_pos.Y, 20, vp_size.Y - 60)
-                            target_pos = UDim2.new(0, target_x, 0, target_y)
-                        end
-
-                        tween_service:Create(floating_btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                            Position = target_pos
-                        }):Play()
-                    end)
-                end
-            end)
-        end
-    end)
-    float_drag_conn = user_input_service.InputChanged:Connect(function(input)
-        if float_dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - float_drag_start
-            floating_btn.Position = UDim2.new(float_start_pos.X.Scale, float_start_pos.X.Offset + delta.X, float_start_pos.Y.Scale, float_start_pos.Y.Offset + delta.Y)
-        end
-    end)
-    floating_btn.MouseButton1Click:Connect(function()
-        if not float_dragging then main.Visible = true; floating_btn.Visible = false end
-    end)
-
-    local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 24)
-    header.BackgroundColor3 = SIDEBAR_COLOR
-    header.BackgroundTransparency = 0
-    header.ZIndex = 2
-    header.Parent = main
-    create_corner(header, 10)
-
-    local title_lbl = Instance.new("TextLabel")
-    title_lbl.Size = UDim2.new(1, -90, 1, 0)
-    title_lbl.Position = UDim2.new(0, 10, 0, 0)
-    title_lbl.BackgroundTransparency = 1
-    title_lbl.Text = "NØIR Hub"
-    title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title_lbl.TextSize = 10
-    title_lbl.FontFace = font_bold
-    title_lbl.TextXAlignment = Enum.TextXAlignment.Left
-    title_lbl.ZIndex = 3
-    title_lbl.Parent = header
-
-    local min_btn = Instance.new("TextButton")
-    min_btn.Name = "MinimizeBtn"
-    min_btn.Size = UDim2.new(0, 22, 0, 22)
-    min_btn.Position = UDim2.new(1, -74, 0.5, -11)
-    min_btn.BackgroundTransparency = 1
-    min_btn.Text = "-"
-    min_btn.TextColor3 = MUTED_COLOR
-    min_btn.TextSize = 14
-    min_btn.Font = Enum.Font.SourceSansBold
-    min_btn.ZIndex = 3
-    min_btn.Parent = header
-    min_btn.MouseEnter:Connect(function() min_btn.TextColor3 = ACCENT_COLOR end)
-    min_btn.MouseLeave:Connect(function() min_btn.TextColor3 = MUTED_COLOR end)
-    min_btn.MouseButton1Click:Connect(function() main.Visible = false; floating_btn.Visible = true end)
-
-    local is_expanded = false
-    local saved_normal_size = UDim2.new(0, 250, 0, 200)
-    local saved_normal_pos = UDim2.new(0.5, -178, 0.5, -100)
-
-    local restore_btn = Instance.new("TextButton")
-    restore_btn.Name = "RestoreBtn"
-    restore_btn.Size = UDim2.new(0, 22, 0, 22)
-    restore_btn.Position = UDim2.new(1, -50, 0.5, -11)
-    restore_btn.BackgroundTransparency = 1
-    restore_btn.Text = "[]"
-    restore_btn.TextColor3 = MUTED_COLOR
-    restore_btn.TextSize = 10
-    restore_btn.Font = Enum.Font.SourceSansBold
-    restore_btn.ZIndex = 3
-    restore_btn.Parent = header
-    restore_btn.MouseEnter:Connect(function() restore_btn.TextColor3 = ACCENT_COLOR end)
-    restore_btn.MouseLeave:Connect(function() restore_btn.TextColor3 = MUTED_COLOR end)
-    restore_btn.MouseButton1Click:Connect(function()
-        is_expanded = not is_expanded
-        if is_expanded then
-            saved_normal_size = main.Size
-            saved_normal_pos = main.Position
-            restore_btn.Text = "[-]"
-            local target_size = UDim2.new(1, -125, 1 - saved_normal_pos.Y.Scale, -saved_normal_pos.Y.Offset - 10)
-            local target_pos = UDim2.new(0, 10, saved_normal_pos.Y.Scale, saved_normal_pos.Y.Offset)
-            tween_service:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                Size = target_size,
-                Position = target_pos
-            }):Play()
-        else
-            restore_btn.Text = "[]"
-            tween_service:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                Size = saved_normal_size,
-                Position = saved_normal_pos
-            }):Play()
-        end
-    end)
-
-    local close_btn = Instance.new("TextButton")
-    close_btn.Name = "CloseBtn"
-    close_btn.Size = UDim2.new(0, 22, 0, 22)
-    close_btn.Position = UDim2.new(1, -26, 0.5, -11)
-    close_btn.BackgroundTransparency = 1
-    close_btn.Text = "X"
-    close_btn.TextColor3 = MUTED_COLOR
-    close_btn.TextSize = 12
-    close_btn.Font = Enum.Font.SourceSansBold
-    close_btn.ZIndex = 3
-    close_btn.Parent = header
-    close_btn.MouseEnter:Connect(function() close_btn.TextColor3 = Color3.fromRGB(255, 60, 60) end)
-    close_btn.MouseLeave:Connect(function() close_btn.TextColor3 = MUTED_COLOR end)
-    close_btn.MouseButton1Click:Connect(function()
-        pcall(_G.NoirHub_AutoTrade_Cleanup)
-    end)
-
-    local dragging, drag_start, start_pos
-    local header_end_conn
-    header.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging, drag_start, start_pos = true, input.Position, main.Position
-            if header_end_conn then header_end_conn:Disconnect(); header_end_conn = nil end
-            header_end_conn = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    if header_end_conn then header_end_conn:Disconnect(); header_end_conn = nil end
-                    if not is_expanded then
-                        saved_normal_pos = main.Position
-                    end
-                end
-            end)
-        end
-    end)
-    header_drag_conn = user_input_service.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - drag_start
-            main.Position = UDim2.new(start_pos.X.Scale, start_pos.X.Offset + delta.X, start_pos.Y.Scale, start_pos.Y.Offset + delta.Y)
-        end
-    end)
-
-    local close_detector = Instance.new("TextButton")
+    close_detector = Instance.new("TextButton")
+    close_detector.Name = "CloseDetector"
     close_detector.Size = UDim2.new(0, 5000, 0, 5000)
     close_detector.Position = UDim2.new(0.5, -2500, 0.5, -2500)
-    close_detector.BackgroundTransparency = 1
+    close_detector.BackgroundTransparency = 0.99
+    close_detector.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     close_detector.Text = ""
-    close_detector.ZIndex = 8
+    close_detector.ZIndex = 5
+    close_detector.Active = true
     close_detector.Visible = false
     close_detector.Parent = main
 
-    local drawer_panels = {}
-    close_detector.MouseButton1Click:Connect(function()
-        for _, p in pairs(drawer_panels) do p.Visible = false end
-        close_detector.Visible = false
+    close_detector.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            item_panel.Visible = false
+            enchant_panel.Visible = false
+            rarity_panel.Visible = false
+            if active_dropdown_list then
+                active_dropdown_list.Visible = false
+                active_dropdown_list = nil
+            end
+            close_detector.Visible = false
+        end
     end)
 
-    local function create_drawer(name)
-        local panel = Instance.new("Frame")
-        panel.Name = name
-        panel.Size = UDim2.new(0, 150, 1, -34)
-        panel.Position = UDim2.new(1, -160, 0, 28)
-        panel.BackgroundColor3 = BG_COLOR
-        panel.BackgroundTransparency = 0
-        panel.Visible = false
-        panel.ZIndex = 10
-        panel.Parent = main
-        create_corner(panel, 10); create_stroke(panel, Color3.fromRGB(45, 45, 45))
-
-        local search = Instance.new("TextBox")
-        search.Size = UDim2.new(1, -20, 0, 24)
-        search.Position = UDim2.new(0, 10, 0, 10)
-        search.BackgroundColor3 = INPUT_BG_COLOR
-        search.Text = ""
-        search.PlaceholderText = "Search..."
-        search.PlaceholderColor3 = MUTED_COLOR
-        search.TextColor3 = TEXT_COLOR
-        search.TextSize = 9
-        search.FontFace = font_face
-        search.TextXAlignment = Enum.TextXAlignment.Center
-        search.ClearTextOnFocus = false
-        search.ZIndex = 10
-        search.Parent = panel
-        create_corner(search, 5); create_stroke(search, Color3.fromRGB(45, 45, 45))
-
-        local scroll = Instance.new("ScrollingFrame")
-        scroll.Size = UDim2.new(1, -12, 1, -52)
-        scroll.Position = UDim2.new(0, 6, 0, 47)
-        scroll.BackgroundTransparency = 1
-        scroll.ScrollBarThickness = 3
-        scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
-        scroll.ZIndex = 10
-        scroll.Parent = panel
-        local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 2); layout.Parent = scroll
-        drawer_panels[name] = panel
-        return panel, search, scroll
-    end
-
-    local item_panel, item_search, item_scroll = create_drawer("ItemSelectionPanel")
-    local enchant_panel, enchant_search, enchant_scroll = create_drawer("EnchantSelectionPanel")
-    local rarity_panel, _, rarity_scroll = create_drawer("RaritySelectionPanel")
-
-    local function populate_drawer(scroll, options, selected_list, is_multi, callback, query)
-        for _, c in ipairs(scroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-        local q = string_lower(query or "")
-        local match_count = 0
-        local full_opts = { "All" }
-        for _, opt in ipairs(options) do table_insert(full_opts, opt) end
-        for _, opt in ipairs(full_opts) do
-            local clean = strip_quantity(opt)
-            if q == "" or string_find(string_lower(clean), q) then
-                match_count = match_count + 1
-                local is_selected = table_find(selected_list, clean) ~= nil
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, -6, 0, 24)
-                btn.BackgroundColor3 = is_selected and Color3.fromRGB(24, 24, 24) or Color3.fromRGB(0, 0, 0)
-                btn.BackgroundTransparency = is_selected and 0 or 1
-                btn.Text = ""
-                btn.ZIndex = 12
-                btn.Parent = scroll
-                create_corner(btn, 4)
-
-                local lbl = Instance.new("TextLabel")
-                lbl.Size = UDim2.new(1, -20, 1, 0)
-                lbl.Position = UDim2.new(0, 15, 0, 0)
-                lbl.BackgroundTransparency = 1
-                lbl.Text = opt
-                lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
-                lbl.TextSize = 9
-                lbl.FontFace = font_face
-                lbl.TextXAlignment = Enum.TextXAlignment.Left
-                lbl.ZIndex = 13
-                lbl.Parent = btn
-
-                local ind = Instance.new("Frame")
-                ind.Size = UDim2.new(0, 3, 0, 14)
-                ind.Position = UDim2.new(0, 5, 0.5, -7)
-                ind.BackgroundColor3 = ACCENT_COLOR
-                ind.BorderSizePixel = 0
-                ind.Visible = is_selected
-                ind.ZIndex = 14
-                ind.Parent = btn
-
-                btn.MouseButton1Click:Connect(function()
-                    if clean == "All" then
-                        for k in pairs(selected_list) do selected_list[k] = nil end
-                        table_insert(selected_list, "All")
-                    else
-                        local all_idx = table_find(selected_list, "All")
-                        if all_idx then table_remove(selected_list, all_idx) end
-                        local idx = table_find(selected_list, clean)
-                        if idx then table_remove(selected_list, idx) else table_insert(selected_list, clean) end
-                    end
-                    callback(selected_list)
-                    save_config()
-                    populate_drawer(scroll, options, selected_list, is_multi, callback, query)
-                end)
-            end
-        end
-        scroll.CanvasSize = UDim2.new(0, 0, 0, match_count * 26 + 10)
-    end
-
     player_panel = Instance.new("Frame")
-    player_panel.Name = "PlayerPanel"
+    player_panel.Name = "PlayerSelectionPanel"
     player_panel.Size = UDim2.new(0, 100, 1, 0)
     player_panel.Position = UDim2.new(1, 5, 0, 0)
     player_panel.BackgroundColor3 = BG_COLOR
-    player_panel.BackgroundTransparency = 0
+    player_panel.BackgroundTransparency = 0.3
+    player_panel.BorderSizePixel = 0
+    player_panel.Active = true
+    player_panel.Visible = true
     player_panel.ZIndex = 10
     player_panel.Parent = main
-    create_corner(player_panel, 10); create_stroke(player_panel, Color3.fromRGB(45, 45, 45))
+
+    local p_stroke = Instance.new("UIStroke")
+    p_stroke.Color = Color3.fromRGB(45, 45, 45)
+    p_stroke.Thickness = 1
+    p_stroke.Parent = player_panel
+
+    local p_corner = Instance.new("UICorner")
+    p_corner.CornerRadius = UDim.new(0, 10)
+    p_corner.Parent = player_panel
 
     local ply_refresh = Instance.new("TextButton")
     ply_refresh.Size = UDim2.new(1, -20, 0, 26)
@@ -1398,77 +2297,1195 @@ local function create_ui()
     ply_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
     ply_refresh.TextSize = 9
     ply_refresh.FontFace = font_bold
+    ply_refresh.Active = true
     ply_refresh.ZIndex = 10
     ply_refresh.Parent = player_panel
-    create_corner(ply_refresh, 5)
 
-    local target_lbl = Instance.new("TextLabel")
+    local ply_refresh_c = Instance.new("UICorner")
+    ply_refresh_c.CornerRadius = UDim.new(0, 5)
+    ply_refresh_c.Parent = ply_refresh
+
+    ply_refresh.MouseEnter:Connect(function()
+        ply_refresh.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+    end)
+    ply_refresh.MouseLeave:Connect(function()
+        ply_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    end)
+
+    target_lbl = Instance.new("TextLabel")
     target_lbl.Size = UDim2.new(1, -12, 0, 20)
     target_lbl.Position = UDim2.new(0, 6, 0, 42)
     target_lbl.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    target_lbl.Text = config.trade_with ~= "" and config.trade_with or "None"
-    target_lbl.TextColor3 = ACCENT_COLOR
+    target_lbl.BackgroundTransparency = 0
+    target_lbl.Text = truncate_string(config.trade_with ~= "" and config.trade_with or "None", 10)
+    target_lbl.TextColor3 = Color3.fromRGB(255, 0, 255)
     target_lbl.TextSize = 9
     target_lbl.FontFace = font_bold
+    target_lbl.TextXAlignment = Enum.TextXAlignment.Center
     target_lbl.ZIndex = 10
     target_lbl.Parent = player_panel
-    create_corner(target_lbl, 4); create_stroke(target_lbl, Color3.fromRGB(45, 45, 45))
+
+    local target_lbl_corner = Instance.new("UICorner")
+    target_lbl_corner.CornerRadius = UDim.new(0, 4)
+    target_lbl_corner.Parent = target_lbl
+
+    local target_lbl_stroke = Instance.new("UIStroke")
+    target_lbl_stroke.Color = Color3.fromRGB(45, 45, 45)
+    target_lbl_stroke.Thickness = 1
+    target_lbl_stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    target_lbl_stroke.Parent = target_lbl
+
+    local p_sep = Instance.new("Frame")
+    p_sep.Size = UDim2.new(1, 0, 0, 1)
+    p_sep.Position = UDim2.new(0, 0, 0, 68)
+    p_sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    p_sep.BorderSizePixel = 0
+    p_sep.ZIndex = 10
+    p_sep.Parent = player_panel
 
     local p_scroll = Instance.new("ScrollingFrame")
     p_scroll.Size = UDim2.new(1, -12, 1, -78)
     p_scroll.Position = UDim2.new(0, 6, 0, 73)
     p_scroll.BackgroundTransparency = 1
+    p_scroll.BorderSizePixel = 0
     p_scroll.ScrollBarThickness = 3
     p_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    p_scroll.Active = true
     p_scroll.ZIndex = 10
+    safe_set_scroll(p_scroll)
+    p_scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     p_scroll.Parent = player_panel
-    local p_layout = Instance.new("UIListLayout"); p_layout.Padding = UDim.new(0, 2); p_layout.Parent = p_scroll
 
-    local function populate_players()
-        for _, c in ipairs(p_scroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-        local p_list = get_other_players()
-        for _, name in ipairs(p_list) do
-            local is_selected = config.trade_with == name
-            local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(1, -6, 0, 24)
-            btn.BackgroundColor3 = is_selected and Color3.fromRGB(24, 24, 24) or Color3.fromRGB(0, 0, 0)
-            btn.BackgroundTransparency = is_selected and 0 or 1
-            btn.Text = "  " .. name
-            btn.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
-            btn.TextSize = 9
-            btn.FontFace = font_face
-            btn.TextXAlignment = Enum.TextXAlignment.Left
-            btn.ZIndex = 12
-            btn.Parent = p_scroll
-            create_corner(btn, 4)
-            btn.MouseButton1Click:Connect(function()
-                config.trade_with = name
-                target_lbl.Text = name
-                save_config()
-                populate_players()
+    local p_layout = Instance.new("UIListLayout")
+    p_layout.Padding = UDim.new(0, 2)
+    p_layout.Parent = p_scroll
+
+    local function populate_players_panel()
+        local success, err = pcall(function()
+            for _, child in ipairs(p_scroll:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+
+            local player_list = get_other_players()
+            local match_count = 0
+
+            for _, name in ipairs(player_list) do
+                match_count = match_count + 1
+                local is_selected = (config.trade_with == name)
+                local opt_btn = Instance.new("TextButton")
+                opt_btn.Size = UDim2.new(1, -6, 0, 24)
+                opt_btn.BackgroundTransparency = is_selected and 0 or 1
+                opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                opt_btn.Text = ""
+                opt_btn.Active = true
+                opt_btn.ZIndex = 12
+                opt_btn.Parent = p_scroll
+
+                local opt_corner = Instance.new("UICorner")
+                opt_corner.CornerRadius = UDim.new(0, 4)
+                opt_corner.Parent = opt_btn
+
+                local opt_lbl = Instance.new("TextLabel")
+                opt_lbl.Size = UDim2.new(1, -20, 1, 0)
+                opt_lbl.Position = UDim2.new(0, 15, 0, 0)
+                opt_lbl.BackgroundTransparency = 1
+                opt_lbl.Text = truncate_string(name, 10)
+                opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
+                opt_lbl.TextSize = 9
+                opt_lbl.FontFace = font_face
+                opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
+                opt_lbl.ZIndex = 13
+                opt_lbl.Parent = opt_btn
+
+                local indicator = Instance.new("Frame")
+                indicator.Size = UDim2.new(0, 3, 0, 14)
+                indicator.Position = UDim2.new(0, 5, 0.5, -7)
+                indicator.BackgroundColor3 = ACCENT_COLOR
+                indicator.BorderSizePixel = 0
+                indicator.ZIndex = 14
+                indicator.Visible = is_selected
+                indicator.Parent = opt_btn
+
+                opt_btn.MouseEnter:Connect(function()
+                    if not is_selected then
+                        opt_btn.BackgroundTransparency = 0
+                        opt_btn.BackgroundColor3 = Color3.fromRGB(35, 15, 35)
+                    end
+                end)
+                opt_btn.MouseLeave:Connect(function()
+                    if not is_selected then
+                        opt_btn.BackgroundTransparency = 1
+                    else
+                        opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                    end
+                end)
+
+                opt_btn.MouseButton1Click:Connect(function()
+                    config.trade_with = name
+                    if target_lbl then
+                        target_lbl.Text = truncate_string(name, 10)
+                    end
+                    save_config()
+                    populate_players_panel()
+                end)
+            end
+
+            p_scroll.CanvasSize = UDim2.new(0, 0, 0, match_count * 26 + 10)
+        end)
+        if not success then
+            warn("populate_players_panel error: " .. tostring(err))
+            print("populate_players_panel error: " .. tostring(err))
+        end
+    end
+
+    ply_refresh.Activated:Connect(function()
+        ply_refresh.Text = "Refreshed!"
+        populate_players_panel()
+        task_wait(1)
+        ply_refresh.Text = "Refresh"
+    end)
+
+    populate_players_panel()
+
+    item_panel = Instance.new("Frame")
+    item_panel.Name = "ItemSelectionPanel"
+    item_panel.Size = UDim2.new(0, 150, 1, -34)
+    item_panel.Position = UDim2.new(1, -160, 0, 28)
+    item_panel.BackgroundColor3 = BG_COLOR
+    item_panel.BackgroundTransparency = 0.3
+    item_panel.BorderSizePixel = 0
+    item_panel.Active = true
+    item_panel.Visible = false
+    item_panel.ZIndex = 10
+    item_panel.Parent = main
+
+    local i_stroke = Instance.new("UIStroke")
+    i_stroke.Color = Color3.fromRGB(45, 45, 45)
+    i_stroke.Thickness = 1
+    i_stroke.Parent = item_panel
+
+    local i_corner = Instance.new("UICorner")
+    i_corner.CornerRadius = UDim.new(0, 10)
+    i_corner.Parent = item_panel
+
+    local item_search_box = Instance.new("TextBox")
+    item_search_box.Size = UDim2.new(1, -20, 0, 24)
+    item_search_box.Position = UDim2.new(0, 10, 0, 10)
+    item_search_box.BackgroundColor3 = INPUT_BG_COLOR
+    item_search_box.Text = ""
+    item_search_box.PlaceholderText = "Search..."
+    item_search_box.PlaceholderColor3 = MUTED_COLOR
+    item_search_box.TextColor3 = TEXT_COLOR
+    item_search_box.TextSize = 9
+    item_search_box.FontFace = font_face
+    item_search_box.TextXAlignment = Enum.TextXAlignment.Center
+    item_search_box.Active = true
+    item_search_box.ZIndex = 10
+    item_search_box.Parent = item_panel
+
+    local isb_c = Instance.new("UICorner")
+    isb_c.CornerRadius = UDim.new(0, 5)
+    isb_c.Parent = item_search_box
+
+    local isb_stroke = Instance.new("UIStroke")
+    isb_stroke.Color = Color3.fromRGB(45, 45, 45)
+    isb_stroke.Thickness = 1
+    isb_stroke.Parent = item_search_box
+
+    local isb_padding = Instance.new("UIPadding")
+    isb_padding.PaddingLeft = UDim.new(0, 8)
+    isb_padding.PaddingRight = UDim.new(0, 8)
+    isb_padding.Parent = item_search_box
+
+    local i_sep = Instance.new("Frame")
+    i_sep.Size = UDim2.new(1, 0, 0, 1)
+    i_sep.Position = UDim2.new(0, 0, 0, 42)
+    i_sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    i_sep.BorderSizePixel = 0
+    i_sep.ZIndex = 10
+    i_sep.Parent = item_panel
+
+    local i_scroll = Instance.new("ScrollingFrame")
+    i_scroll.Size = UDim2.new(1, -12, 1, -52)
+    i_scroll.Position = UDim2.new(0, 6, 0, 47)
+    i_scroll.BackgroundTransparency = 1
+    i_scroll.BorderSizePixel = 0
+    i_scroll.ScrollBarThickness = 3
+    i_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    i_scroll.Active = true
+    i_scroll.ZIndex = 10
+    safe_set_scroll(i_scroll)
+    i_scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    i_scroll.Parent = item_panel
+
+    local i_layout = Instance.new("UIListLayout")
+    i_layout.Padding = UDim.new(0, 2)
+    i_layout.Parent = i_scroll
+
+    populate_items_panel = function(update_dropdown_btn)
+        local success, err = pcall(function()
+            for _, child in ipairs(i_scroll:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+
+            local fish_options = cache.loaded_fish or {}
+            local query = string_lower(item_search_box.Text)
+            if query == "search..." then query = "" end
+            local match_count = 0
+
+            local options_list = {}
+            table_insert(options_list, "All")
+            for _, opt in ipairs(fish_options) do
+                table_insert(options_list, opt)
+            end
+
+            for _, opt in ipairs(options_list) do
+                local clean_opt = strip_quantity(opt)
+                if query == "" or string_find(string_lower(clean_opt), query) then
+                    match_count = match_count + 1
+                    local is_selected = table_find(config.selected_fish, clean_opt) ~= nil
+                    local opt_btn = Instance.new("TextButton")
+                    opt_btn.Size = UDim2.new(1, -6, 0, 24)
+                    opt_btn.BackgroundTransparency = is_selected and 0 or 1
+                    opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                    opt_btn.Text = ""
+                    opt_btn.Active = true
+                    opt_btn.ZIndex = 12
+                    opt_btn.Parent = i_scroll
+
+                    local opt_corner = Instance.new("UICorner")
+                    opt_corner.CornerRadius = UDim.new(0, 4)
+                    opt_corner.Parent = opt_btn
+
+                    local opt_lbl = Instance.new("TextLabel")
+                    opt_lbl.Size = UDim2.new(1, -20, 1, 0)
+                    opt_lbl.Position = UDim2.new(0, 15, 0, 0)
+                    opt_lbl.BackgroundTransparency = 1
+                    opt_lbl.Text = opt
+                    opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
+                    opt_lbl.TextSize = 9
+                    opt_lbl.FontFace = font_face
+                    opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
+                    opt_lbl.ZIndex = 13
+                    opt_lbl.Parent = opt_btn
+
+                    local indicator = Instance.new("Frame")
+                    indicator.Size = UDim2.new(0, 3, 0, 14)
+                    indicator.Position = UDim2.new(0, 5, 0.5, -7)
+                    indicator.BackgroundColor3 = ACCENT_COLOR
+                    indicator.BorderSizePixel = 0
+                    indicator.ZIndex = 14
+                    indicator.Visible = is_selected
+                    indicator.Parent = opt_btn
+
+                    opt_btn.MouseEnter:Connect(function()
+                        if not is_selected then
+                            opt_btn.BackgroundTransparency = 0
+                            opt_btn.BackgroundColor3 = Color3.fromRGB(35, 15, 35)
+                        end
+                    end)
+                    opt_btn.MouseLeave:Connect(function()
+                        if not is_selected then
+                            opt_btn.BackgroundTransparency = 1
+                        else
+                            opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                        end
+                    end)
+
+                    opt_btn.MouseButton1Click:Connect(function()
+                        if clean_opt == "All" then
+                            config.selected_fish = { "All" }
+                        else
+                            local all_idx = table_find(config.selected_fish, "All")
+                            if all_idx then table_remove(config.selected_fish, all_idx) end
+
+                            local idx = table_find(config.selected_fish, clean_opt)
+                            if idx then
+                                table_remove(config.selected_fish, idx)
+                            else
+                                table_insert(config.selected_fish, clean_opt)
+                            end
+                        end
+
+                        config.trade_fish_enabled = #config.selected_fish > 0
+
+                        if #config.selected_fish == 0 then
+                            update_dropdown_btn.Text = "Select Option"
+                        elseif #config.selected_fish == 1 then
+                            update_dropdown_btn.Text = tostring(config.selected_fish[1])
+                        else
+                            update_dropdown_btn.Text = tostring(#config.selected_fish) .. " selected"
+                        end
+
+                        save_config()
+                        populate_items_panel(update_dropdown_btn)
+                    end)
+                end
+            end
+
+            i_scroll.CanvasSize = UDim2.new(0, 0, 0, match_count * 26 + 10)
+        end)
+        if not success then
+            warn("populate_items_panel error: " .. tostring(err))
+            print("populate_items_panel error: " .. tostring(err))
+        end
+    end
+
+    local item_search_thread = nil
+    item_search_box:GetPropertyChangedSignal("Text"):Connect(function()
+        if item_search_thread then pcall(function() task.cancel(item_search_thread) end) end
+        item_search_thread = task.delay(0.12, function()
+            if fish_dropdown_btn then
+                populate_items_panel(fish_dropdown_btn)
+            end
+        end)
+    end)
+
+    enchant_panel = Instance.new("Frame")
+    enchant_panel.Name = "EnchantSelectionPanel"
+    enchant_panel.Size = UDim2.new(0, 150, 1, -34)
+    enchant_panel.Position = UDim2.new(1, -160, 0, 28)
+    enchant_panel.BackgroundColor3 = BG_COLOR
+    enchant_panel.BackgroundTransparency = 0.3
+    enchant_panel.BorderSizePixel = 0
+    enchant_panel.Active = true
+    enchant_panel.Visible = false
+    enchant_panel.ZIndex = 10
+    enchant_panel.Parent = main
+
+    local en_stroke = Instance.new("UIStroke")
+    en_stroke.Color = Color3.fromRGB(45, 45, 45)
+    en_stroke.Thickness = 1
+    en_stroke.Parent = enchant_panel
+
+    local en_corner = Instance.new("UICorner")
+    en_corner.CornerRadius = UDim.new(0, 10)
+    en_corner.Parent = enchant_panel
+
+    local enchant_search_box = Instance.new("TextBox")
+    enchant_search_box.Size = UDim2.new(1, -20, 0, 24)
+    enchant_search_box.Position = UDim2.new(0, 10, 0, 10)
+    enchant_search_box.BackgroundColor3 = INPUT_BG_COLOR
+    enchant_search_box.Text = ""
+    enchant_search_box.PlaceholderText = "Search..."
+    enchant_search_box.PlaceholderColor3 = MUTED_COLOR
+    enchant_search_box.TextColor3 = TEXT_COLOR
+    enchant_search_box.TextSize = 9
+    enchant_search_box.FontFace = font_face
+    enchant_search_box.TextXAlignment = Enum.TextXAlignment.Center
+    enchant_search_box.Active = true
+    enchant_search_box.ZIndex = 10
+    enchant_search_box.Parent = enchant_panel
+
+    local esb_c = Instance.new("UICorner")
+    esb_c.CornerRadius = UDim.new(0, 5)
+    esb_c.Parent = enchant_search_box
+
+    local esb_stroke = Instance.new("UIStroke")
+    esb_stroke.Color = Color3.fromRGB(45, 45, 45)
+    esb_stroke.Thickness = 1
+    esb_stroke.Parent = enchant_search_box
+
+    local esb_padding = Instance.new("UIPadding")
+    esb_padding.PaddingLeft = UDim.new(0, 8)
+    esb_padding.PaddingRight = UDim.new(0, 8)
+    esb_padding.Parent = enchant_search_box
+
+    local en_sep = Instance.new("Frame")
+    en_sep.Size = UDim2.new(1, 0, 0, 1)
+    en_sep.Position = UDim2.new(0, 0, 0, 42)
+    en_sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    en_sep.BorderSizePixel = 0
+    en_sep.ZIndex = 10
+    en_sep.Parent = enchant_panel
+
+    local en_scroll = Instance.new("ScrollingFrame")
+    en_scroll.Size = UDim2.new(1, -12, 1, -52)
+    en_scroll.Position = UDim2.new(0, 6, 0, 47)
+    en_scroll.BackgroundTransparency = 1
+    en_scroll.BorderSizePixel = 0
+    en_scroll.ScrollBarThickness = 3
+    en_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    en_scroll.Active = true
+    en_scroll.ZIndex = 10
+    safe_set_scroll(en_scroll)
+    en_scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    en_scroll.Parent = enchant_panel
+
+    local en_layout = Instance.new("UIListLayout")
+    en_layout.Padding = UDim.new(0, 2)
+    en_layout.Parent = en_scroll
+
+    populate_enchants_panel = function(update_dropdown_btn)
+        local success, err = pcall(function()
+            for _, child in ipairs(en_scroll:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+
+            local enchant_options = cache.loaded_enchants or {}
+            local query = string_lower(enchant_search_box.Text)
+            if query == "search..." then query = "" end
+            local match_count = 0
+
+            local options_list = {}
+            table_insert(options_list, "All")
+            for _, opt in ipairs(enchant_options) do
+                table_insert(options_list, opt)
+            end
+
+            for _, opt in ipairs(options_list) do
+                local clean_opt = strip_quantity(opt)
+                if query == "" or string_find(string_lower(clean_opt), query) then
+                    match_count = match_count + 1
+                    local is_selected = table_find(config.selected_items, clean_opt) ~= nil
+
+                    local opt_btn = Instance.new("TextButton")
+                    opt_btn.Size = UDim2.new(1, -6, 0, 24)
+                    opt_btn.BackgroundTransparency = is_selected and 0 or 1
+                    opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                    opt_btn.Text = ""
+                    opt_btn.Active = true
+                    opt_btn.ZIndex = 12
+                    opt_btn.Parent = en_scroll
+
+                    local opt_corner = Instance.new("UICorner")
+                    opt_corner.CornerRadius = UDim.new(0, 4)
+                    opt_corner.Parent = opt_btn
+
+                    local opt_lbl = Instance.new("TextLabel")
+                    opt_lbl.Size = UDim2.new(1, -20, 1, 0)
+                    opt_lbl.Position = UDim2.new(0, 15, 0, 0)
+                    opt_lbl.BackgroundTransparency = 1
+                    opt_lbl.Text = opt
+                    opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
+                    opt_lbl.TextSize = 9
+                    opt_lbl.FontFace = font_face
+                    opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
+                    opt_lbl.ZIndex = 13
+                    opt_lbl.Parent = opt_btn
+
+                    local indicator = Instance.new("Frame")
+                    indicator.Size = UDim2.new(0, 3, 0, 14)
+                    indicator.Position = UDim2.new(0, 5, 0.5, -7)
+                    indicator.BackgroundColor3 = ACCENT_COLOR
+                    indicator.BorderSizePixel = 0
+                    indicator.ZIndex = 14
+                    indicator.Visible = is_selected
+                    indicator.Parent = opt_btn
+
+                    opt_btn.MouseEnter:Connect(function()
+                        if not is_selected then
+                            opt_btn.BackgroundTransparency = 0
+                            opt_btn.BackgroundColor3 = Color3.fromRGB(35, 15, 35)
+                        end
+                    end)
+                    opt_btn.MouseLeave:Connect(function()
+                        if not is_selected then
+                            opt_btn.BackgroundTransparency = 1
+                        else
+                            opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                        end
+                    end)
+
+                    opt_btn.MouseButton1Click:Connect(function()
+                        if clean_opt == "All" then
+                            config.selected_items = { "All" }
+                        else
+                            local all_idx = table_find(config.selected_items, "All")
+                            if all_idx then table_remove(config.selected_items, all_idx) end
+
+                            local idx = table_find(config.selected_items, clean_opt)
+                            if idx then
+                                table_remove(config.selected_items, idx)
+                            else
+                                table_insert(config.selected_items, clean_opt)
+                            end
+                        end
+
+                        config.trade_enchants_enabled = #config.selected_items > 0
+
+                        if #config.selected_items == 0 then
+                            update_dropdown_btn.Text = "Select Option"
+                        elseif #config.selected_items == 1 then
+                            update_dropdown_btn.Text = tostring(config.selected_items[1])
+                        else
+                            update_dropdown_btn.Text = tostring(#config.selected_items) .. " selected"
+                        end
+
+                        save_config()
+                        populate_enchants_panel(update_dropdown_btn)
+                    end)
+                end
+            end
+
+            en_scroll.CanvasSize = UDim2.new(0, 0, 0, match_count * 26 + 10)
+        end)
+        if not success then
+            warn("populate_enchants_panel error: " .. tostring(err))
+            print("populate_enchants_panel error: " .. tostring(err))
+        end
+    end
+
+    local enchant_search_thread = nil
+    enchant_search_box:GetPropertyChangedSignal("Text"):Connect(function()
+        if enchant_search_thread then pcall(function() task.cancel(enchant_search_thread) end) end
+        enchant_search_thread = task.delay(0.12, function()
+            if enchant_dropdown_btn then
+                populate_enchants_panel(enchant_dropdown_btn)
+            end
+        end)
+    end)
+
+    rarity_panel = Instance.new("Frame")
+    rarity_panel.Name = "RaritySelectionPanel"
+    rarity_panel.Size = UDim2.new(0, 150, 1, -34)
+    rarity_panel.Position = UDim2.new(1, -160, 0, 28)
+    rarity_panel.BackgroundColor3 = BG_COLOR
+    rarity_panel.BackgroundTransparency = 0.3
+    rarity_panel.BorderSizePixel = 0
+    rarity_panel.Active = true
+    rarity_panel.Visible = false
+    rarity_panel.ZIndex = 10
+    rarity_panel.Parent = main
+
+    local r_stroke = Instance.new("UIStroke")
+    r_stroke.Color = Color3.fromRGB(45, 45, 45)
+    r_stroke.Thickness = 1
+    r_stroke.Parent = rarity_panel
+
+    local r_corner = Instance.new("UICorner")
+    r_corner.CornerRadius = UDim.new(0, 10)
+    r_corner.Parent = rarity_panel
+
+    local r_title = Instance.new("TextLabel")
+    r_title.Size = UDim2.new(1, -20, 0, 24)
+    r_title.Position = UDim2.new(0, 10, 0, 10)
+    r_title.BackgroundTransparency = 1
+    r_title.Text = "Select Rarity"
+    r_title.TextColor3 = ACCENT_COLOR
+    r_title.TextSize = 9
+    r_title.FontFace = font_bold
+    r_title.TextXAlignment = Enum.TextXAlignment.Center
+    r_title.ZIndex = 10
+    r_title.Parent = rarity_panel
+
+    local r_sep = Instance.new("Frame")
+    r_sep.Size = UDim2.new(1, 0, 0, 1)
+    r_sep.Position = UDim2.new(0, 0, 0, 42)
+    r_sep.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    r_sep.BorderSizePixel = 0
+    r_sep.ZIndex = 10
+    r_sep.Parent = rarity_panel
+
+    local r_scroll = Instance.new("ScrollingFrame")
+    r_scroll.Size = UDim2.new(1, -12, 1, -52)
+    r_scroll.Position = UDim2.new(0, 6, 0, 47)
+    r_scroll.BackgroundTransparency = 1
+    r_scroll.BorderSizePixel = 0
+    r_scroll.ScrollBarThickness = 3
+    r_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    r_scroll.Active = true
+    r_scroll.ZIndex = 10
+    safe_set_scroll(r_scroll)
+    r_scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    r_scroll.Parent = rarity_panel
+
+    local r_layout = Instance.new("UIListLayout")
+    r_layout.Padding = UDim.new(0, 2)
+    r_layout.Parent = r_scroll
+
+    local function populate_rarity_panel(update_dropdown_btn)
+        local success, err = pcall(function()
+            for _, child in ipairs(r_scroll:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+
+            local rarity_options = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" }
+            local match_count = 0
+
+            local options_list = {}
+            table_insert(options_list, "All")
+            for _, opt in ipairs(rarity_options) do
+                table_insert(options_list, opt)
+            end
+
+            for _, opt in ipairs(options_list) do
+                match_count = match_count + 1
+                local is_selected = table_find(config.selected_tiers, opt) ~= nil
+                local opt_btn = Instance.new("TextButton")
+                opt_btn.Size = UDim2.new(1, -6, 0, 24)
+                opt_btn.BackgroundTransparency = is_selected and 0 or 1
+                opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                opt_btn.Text = ""
+                opt_btn.Active = true
+                opt_btn.ZIndex = 12
+                opt_btn.Parent = r_scroll
+
+                local opt_corner = Instance.new("UICorner")
+                opt_corner.CornerRadius = UDim.new(0, 4)
+                opt_corner.Parent = opt_btn
+
+                local opt_lbl = Instance.new("TextLabel")
+                opt_lbl.Size = UDim2.new(1, -20, 1, 0)
+                opt_lbl.Position = UDim2.new(0, 15, 0, 0)
+                opt_lbl.BackgroundTransparency = 1
+                opt_lbl.Text = opt
+                opt_lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
+                opt_lbl.TextSize = 9
+                opt_lbl.FontFace = font_face
+                opt_lbl.TextXAlignment = Enum.TextXAlignment.Left
+                opt_lbl.ZIndex = 13
+                opt_lbl.Parent = opt_btn
+
+                local indicator = Instance.new("Frame")
+                indicator.Size = UDim2.new(0, 3, 0, 14)
+                indicator.Position = UDim2.new(0, 5, 0.5, -7)
+                indicator.BackgroundColor3 = ACCENT_COLOR
+                indicator.BorderSizePixel = 0
+                indicator.ZIndex = 14
+                indicator.Visible = is_selected
+                indicator.Parent = opt_btn
+
+                opt_btn.MouseEnter:Connect(function()
+                    if not is_selected then
+                        opt_btn.BackgroundTransparency = 0
+                        opt_btn.BackgroundColor3 = Color3.fromRGB(35, 15, 35)
+                    end
+                end)
+                opt_btn.MouseLeave:Connect(function()
+                    if not is_selected then
+                        opt_btn.BackgroundTransparency = 1
+                    else
+                        opt_btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                    end
+                end)
+
+                opt_btn.MouseButton1Click:Connect(function()
+                    if opt == "All" then
+                        config.selected_tiers = { "All" }
+                    else
+                        local all_idx = table_find(config.selected_tiers, "All")
+                        if all_idx then table_remove(config.selected_tiers, all_idx) end
+
+                        local idx = table_find(config.selected_tiers, opt)
+                        if idx then
+                            table_remove(config.selected_tiers, idx)
+                        else
+                            table_insert(config.selected_tiers, opt)
+                        end
+                    end
+
+                    config.trade_rarity_enabled = #config.selected_tiers > 0
+
+                    if #config.selected_tiers == 0 then
+                        update_dropdown_btn.Text = "Select Option"
+                    elseif #config.selected_tiers == 1 then
+                        update_dropdown_btn.Text = tostring(config.selected_tiers[1])
+                    else
+                        update_dropdown_btn.Text = tostring(#config.selected_tiers) .. " selected"
+                    end
+
+                    save_config()
+                    populate_rarity_panel(update_dropdown_btn)
+                end)
+            end
+
+            r_scroll.CanvasSize = UDim2.new(0, 0, 0, match_count * 26 + 10)
+        end)
+        if not success then
+            warn("populate_rarity_panel error: " .. tostring(err))
+        end
+    end
+
+    local header = Instance.new("Frame")
+    header.Name = "HeaderBar"
+    header.Size = UDim2.new(1, 0, 0, 24)
+    header.BackgroundColor3 = SIDEBAR_COLOR
+    header.BackgroundTransparency = 0.3
+    header.BorderSizePixel = 0
+    header.Active = true
+    header.ZIndex = 5
+    header.Parent = main
+
+    local header_corner = Instance.new("UICorner")
+    header_corner.CornerRadius = UDim.new(0, 10)
+    header_corner.Parent = header
+
+    local header_cover = Instance.new("Frame")
+    header_cover.Size = UDim2.new(1, 0, 0, 6)
+    header_cover.Position = UDim2.new(0, 0, 1, -6)
+    header_cover.BackgroundColor3 = SIDEBAR_COLOR
+    header_cover.BackgroundTransparency = 0.3
+    header_cover.BorderSizePixel = 0
+    header_cover.ZIndex = 5
+    header_cover.Parent = header
+
+    local header_div = Instance.new("Frame")
+    header_div.Size = UDim2.new(1, 0, 0, 1)
+    header_div.Position = UDim2.new(0, 0, 1, 0)
+    header_div.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    header_div.BorderSizePixel = 0
+    header_div.ZIndex = 5
+    header_div.Parent = header
+
+    local title_lbl = Instance.new("TextLabel")
+    title_lbl.Size = UDim2.new(1, -40, 1, 0)
+    title_lbl.Position = UDim2.new(0, 10, 0, 0)
+    title_lbl.BackgroundTransparency = 1
+    title_lbl.Text = "NØIR Hub"
+    title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title_lbl.TextSize = 10
+    title_lbl.FontFace = font_bold
+    title_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    title_lbl.ZIndex = 6
+    title_lbl.Parent = header
+
+    local dragging, drag_input, drag_start, start_pos
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging, drag_start, start_pos = true, input.Position, main.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
             end)
         end
-        p_scroll.CanvasSize = UDim2.new(0, 0, 0, #p_list * 26 + 10)
-    end
-    ply_refresh.Activated:Connect(populate_players)
-    populate_players()
+    end)
+    header.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            drag_input = input
+        end
+    end)
+    user_input_service.InputChanged:Connect(function(input)
+        if input == drag_input and dragging then
+            local delta = input.Position - drag_start
+            main.Position = UDim2.new(start_pos.X.Scale, start_pos.X.Offset + delta.X, start_pos.Y.Scale, start_pos.Y.Offset + delta.Y)
+        end
+    end)
+    local floating_btn = Instance.new("TextButton")
+    floating_btn.Name = "FloatingRestore"
+    floating_btn.Size = UDim2.new(0, 38, 0, 38)
+    floating_btn.Position = UDim2.new(0, 15, 0.5, -19)
+    floating_btn.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+    floating_btn.BackgroundTransparency = 0.3
+    floating_btn.Text = ""
+    floating_btn.Active = true
+    floating_btn.Modal = true
+    floating_btn.ZIndex = 20
+    floating_btn.Visible = false
+    floating_btn.Parent = gui
 
-    local content_scroll = Instance.new("ScrollingFrame")
-    content_scroll.Size = UDim2.new(1, -12, 1, -34)
-    content_scroll.Position = UDim2.new(0, 6, 0, 28)
-    content_scroll.BackgroundTransparency = 1
-    content_scroll.ScrollBarThickness = 3
-    content_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
-    content_scroll.ZIndex = 2
-    content_scroll.CanvasSize = UDim2.new(0, 0, 0, 180)
-    content_scroll.Parent = main
-    local content_layout = Instance.new("UIListLayout"); content_layout.Padding = UDim.new(0, 6); content_layout.Parent = content_scroll
+    local float_corner = Instance.new("UICorner")
+    float_corner.CornerRadius = UDim.new(0, 9)
+    float_corner.Parent = floating_btn
+
+    local float_stroke = Instance.new("UIStroke")
+    float_stroke.Color = ACCENT_COLOR
+    float_stroke.Thickness = 1.5
+    float_stroke.Parent = floating_btn
+
+    local float_gradient = Instance.new("UIGradient")
+    float_gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 12, 28)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 16))
+    })
+    float_gradient.Rotation = 45
+    float_gradient.Parent = floating_btn
+
+    local icon_lbl = Instance.new("TextLabel")
+    icon_lbl.Size = UDim2.new(1, 0, 1, 0)
+    icon_lbl.Position = UDim2.new(0, 0, 0, 0)
+    icon_lbl.BackgroundTransparency = 1
+    icon_lbl.Text = "N"
+    icon_lbl.TextColor3 = Color3.fromRGB(255, 0, 255)
+    icon_lbl.TextSize = 22
+    icon_lbl.FontFace = font_bold
+    icon_lbl.ZIndex = 21
+    icon_lbl.Parent = floating_btn
+
+    floating_btn.MouseEnter:Connect(function()
+        float_stroke.Thickness = 2
+        icon_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+    floating_btn.MouseLeave:Connect(function()
+        float_stroke.Thickness = 1.5
+        icon_lbl.TextColor3 = Color3.fromRGB(255, 0, 255)
+    end)
+
+    floating_btn.MouseButton1Click:Connect(function()
+        main.Visible = true
+        floating_btn.Visible = false
+    end)
+
+    local min_btn = Instance.new("TextButton")
+    min_btn.Name = "MinimizeBtn"
+    min_btn.Size = UDim2.new(0, 22, 0, 22)
+    min_btn.Position = UDim2.new(1, -26, 0.5, -11)
+    min_btn.BackgroundTransparency = 1
+    min_btn.BorderSizePixel = 0
+    min_btn.Text = "─"
+    min_btn.TextColor3 = MUTED_COLOR
+    min_btn.TextSize = 12
+    min_btn.FontFace = font_bold
+    min_btn.Active = true
+    min_btn.Modal = true
+    min_btn.ZIndex = 6
+    min_btn.Parent = header
+
+    min_btn.MouseEnter:Connect(function()
+        min_btn.TextColor3 = Color3.fromRGB(255, 0, 255)
+    end)
+    min_btn.MouseLeave:Connect(function()
+        min_btn.TextColor3 = MUTED_COLOR
+    end)
+
+    min_btn.MouseButton1Click:Connect(function()
+        main.Visible = false
+        floating_btn.Visible = true
+    end)
+
+    local container = Instance.new("Frame")
+    container.Name = "Content"
+    container.Size = UDim2.new(1, -12, 1, -34)
+    container.Position = UDim2.new(0, 6, 0, 28)
+    container.BackgroundTransparency = 1
+    container.Active = false
+    container.ZIndex = 2
+    container.Parent = main
+
+    local settings_panel = Instance.new("ScrollingFrame")
+    settings_panel.Name = "SettingsPanel"
+    settings_panel.Size = UDim2.new(1, 0, 1, 0)
+    settings_panel.Position = UDim2.new(0, 0, 0, 0)
+    settings_panel.BackgroundTransparency = 1
+    settings_panel.BorderSizePixel = 0
+    settings_panel.ScrollBarThickness = 3
+    settings_panel.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    settings_panel.Active = true
+    safe_set_scroll(settings_panel)
+    settings_panel.Parent = container
+
+    local settings_pad = Instance.new("UIPadding")
+    settings_pad.PaddingLeft = UDim.new(0, 6)
+    settings_pad.PaddingRight = UDim.new(0, 10)
+    settings_pad.PaddingTop = UDim.new(0, 6)
+    settings_pad.PaddingBottom = UDim.new(0, 6)
+    settings_pad.Parent = settings_panel
+
+    local settings_layout = Instance.new("UIListLayout")
+    settings_layout.Padding = UDim.new(0, 6)
+    settings_layout.Parent = settings_panel
+
+    local function create_accordion(parent, title_text)
+        local item_frame = Instance.new("Frame")
+        item_frame.Size = UDim2.new(1, 0, 0, 26)
+        item_frame.BackgroundColor3 = CARD_COLOR
+        item_frame.BackgroundTransparency = 0.3
+        item_frame.BorderSizePixel = 0
+        item_frame.ClipsDescendants = true
+        item_frame.Active = false
+        item_frame.Parent = parent
+
+        local accordion_stroke = Instance.new("UIStroke")
+        accordion_stroke.Color = Color3.fromRGB(35, 35, 35)
+        accordion_stroke.Thickness = 1
+        accordion_stroke.Parent = item_frame
+
+        local accordion_corner = Instance.new("UICorner")
+        accordion_corner.CornerRadius = UDim.new(0, 5)
+        accordion_corner.Parent = item_frame
+
+        local header = Instance.new("TextButton")
+        header.Size = UDim2.new(1, 0, 0, 26)
+        header.BackgroundTransparency = 1
+        header.Text = "  " .. title_text
+        header.TextColor3 = TEXT_COLOR
+        header.TextSize = 9
+        header.FontFace = font_bold
+        header.TextXAlignment = Enum.TextXAlignment.Left
+        header.Active = true
+        header.Modal = true
+        header.Parent = item_frame
+
+        local chevron = Instance.new("TextLabel")
+        chevron.Size = UDim2.new(0, 20, 1, 0)
+        chevron.Position = UDim2.new(1, -25, 0, 0)
+        chevron.BackgroundTransparency = 1
+        chevron.Text = "▼"
+        chevron.TextColor3 = ACCENT_COLOR
+        chevron.TextSize = 9
+        chevron.FontFace = font_face
+        chevron.TextXAlignment = Enum.TextXAlignment.Right
+        chevron.Parent = header
+
+        local content = Instance.new("Frame")
+        content.Name = "Content"
+        content.Size = UDim2.new(1, -12, 0, 0)
+        content.Position = UDim2.new(0, 6, 0, 28)
+        content.BackgroundTransparency = 1
+        content.Active = false
+        content.Parent = item_frame
+
+        local content_layout = Instance.new("UIListLayout")
+        content_layout.Padding = UDim.new(0, 6)
+        content_layout.SortOrder = Enum.SortOrder.LayoutOrder
+        content_layout.Parent = content
+
+        local expanded = false
+        local function toggle_expand()
+            expanded = not expanded
+            chevron.Text = expanded and "▲" or "▼"
+
+            local target_height = 26
+            if expanded then
+                target_height = 32 + content_layout.AbsoluteContentSize.Y
+            end
+
+            tween_service:Create(item_frame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1, 0, 0, target_height)
+            }):Play()
+
+            task_wait(0.21)
+            parent.CanvasSize = UDim2.new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
+        end
+
+        content_layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            if expanded then
+                item_frame.Size = UDim2.new(1, 0, 0, 32 + content_layout.AbsoluteContentSize.Y)
+            end
+        end)
+
+        header.MouseButton1Click:Connect(toggle_expand)
+
+        return content, toggle_expand
+    end
+
+    local function create_dropdown(parent, placeholder, options, default, is_multi, callback)
+        local drop_btn = Instance.new("TextButton")
+        drop_btn.Size = UDim2.new(1, 0, 0, 22)
+        drop_btn.BackgroundColor3 = INPUT_BG_COLOR
+        drop_btn.Text = placeholder
+        drop_btn.TextColor3 = TEXT_COLOR
+        drop_btn.TextSize = 9
+        drop_btn.FontFace = font_face
+        drop_btn.TextXAlignment = Enum.TextXAlignment.Left
+        drop_btn.Active = true
+        drop_btn.Modal = true
+        drop_btn.Parent = parent
+
+        local drop_btn_c = Instance.new("UICorner")
+        drop_btn_c.CornerRadius = UDim.new(0, 4)
+        drop_btn_c.Parent = drop_btn
+
+        local d_stroke = Instance.new("UIStroke")
+        d_stroke.Color = Color3.fromRGB(45, 45, 45)
+        d_stroke.Thickness = 1
+        d_stroke.Parent = drop_btn
+
+        local padding = Instance.new("UIPadding")
+        padding.PaddingLeft = UDim.new(0, 8)
+        padding.PaddingRight = UDim.new(0, 8)
+        padding.Parent = drop_btn
+
+        local chevron = Instance.new("TextLabel")
+        chevron.Size = UDim2.new(0, 20, 1, 0)
+        chevron.Position = UDim2.new(1, -12, 0, 0)
+        chevron.BackgroundTransparency = 1
+        chevron.Text = "▼"
+        chevron.TextColor3 = MUTED_COLOR
+        chevron.TextSize = 7
+        chevron.FontFace = font_face
+        chevron.TextXAlignment = Enum.TextXAlignment.Right
+        chevron.Parent = drop_btn
+
+        local selected_values = {}
+        if type(default) == "table" then
+            for _, val in ipairs(default) do
+                table_insert(selected_values, val)
+            end
+        else
+            if default and default ~= "" then
+                table_insert(selected_values, default)
+            end
+        end
+
+        local function update_button_text()
+            if #selected_values == 0 then
+                drop_btn.Text = placeholder
+            elseif #selected_values == 1 then
+                drop_btn.Text = tostring(selected_values[1])
+            else
+                drop_btn.Text = tostring(#selected_values) .. " selected"
+            end
+        end
+        update_button_text()
+
+        local list_frame = Instance.new("Frame")
+        list_frame.Size = UDim2.new(0, 160, 0, 130)
+        list_frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        list_frame.BorderSizePixel = 0
+        list_frame.Visible = false
+        list_frame.ZIndex = 999
+        list_frame.Active = true
+        list_frame.Parent = gui
+
+        local list_stroke = Instance.new("UIStroke")
+        list_stroke.Color = Color3.fromRGB(50, 50, 50)
+        list_stroke.Thickness = 1
+        list_stroke.Parent = list_frame
+
+        local list_corner = Instance.new("UICorner")
+        list_corner.CornerRadius = UDim.new(0, 6)
+        list_corner.Parent = list_frame
+
+        local list_scroll = Instance.new("ScrollingFrame")
+        list_scroll.Size = UDim2.new(1, 0, 1, 0)
+        list_scroll.BackgroundTransparency = 1
+        list_scroll.BorderSizePixel = 0
+        list_scroll.ScrollBarThickness = 3
+        list_scroll.ScrollBarImageColor3 = MUTED_COLOR
+        list_scroll.Active = true
+        safe_set_scroll(list_scroll)
+        list_scroll.Parent = list_frame
+
+        local list_layout = Instance.new("UIListLayout")
+        list_layout.Padding = UDim.new(0, 2)
+        list_layout.Parent = list_scroll
+
+        local function populate_options()
+            for _, child in ipairs(list_scroll:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+
+            local resolved_options = options
+            if type(options) == "function" then
+                resolved_options = options()
+            end
+
+            for _, opt in ipairs(resolved_options) do
+                local opt_btn = Instance.new("TextButton")
+                opt_btn.Size = UDim2.new(1, 0, 0, 22)
+                opt_btn.BackgroundTransparency = 1
+                opt_btn.Text = opt
+                opt_btn.TextSize = 9
+                opt_btn.TextXAlignment = Enum.TextXAlignment.Left
+                local clean_opt = strip_quantity(opt)
+                local is_selected = table_find(selected_values, clean_opt) ~= nil
+                opt_btn.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
+                opt_btn.FontFace = font_face
+                opt_btn.Active = true
+                opt_btn.Parent = list_scroll
+
+                local opt_padding = Instance.new("UIPadding")
+                opt_padding.PaddingLeft = UDim.new(0, 10)
+                opt_padding.Parent = opt_btn
+
+                opt_btn.MouseButton1Click:Connect(function()
+                    local clean_opt = strip_quantity(opt)
+                    if is_multi then
+                        if opt == "All" or clean_opt == "All" then
+                            selected_values = { "All" }
+                        else
+                            local all_idx = table_find(selected_values, "All")
+                            if all_idx then table_remove(selected_values, all_idx) end
+
+                            local idx = table_find(selected_values, clean_opt)
+                            if idx then
+                                table_remove(selected_values, idx)
+                            else
+                                table_insert(selected_values, clean_opt)
+                            end
+                            if #selected_values == 0 then
+                                selected_values = { "All" }
+                            end
+                        end
+                    else
+                        selected_values = { clean_opt }
+                        list_frame.Visible = false
+                        active_dropdown_list = nil
+                        close_detector.Visible = false
+                    end
+
+                    update_button_text()
+                    populate_options()
+                    callback(selected_values)
+                end)
+            end
+            list_scroll.CanvasSize = UDim2.new(0, 0, 0, list_layout.AbsoluteContentSize.Y + 10)
+        end
+
+        drop_btn.MouseButton1Click:Connect(function()
+            local resolved_options = options
+            if type(options) == "function" then
+                resolved_options = options()
+            elseif #options == 0 then
+                local temp = {}
+                for name, _ in pairs(cache.loaded_fish) do
+                    table_insert(temp, name)
+                end
+                table_sort(temp)
+                options = temp
+                resolved_options = temp
+            end
+
+            populate_options()
+
+            if active_dropdown_list and active_dropdown_list ~= list_frame then
+                active_dropdown_list.Visible = false
+            end
+
+            list_frame.Visible = not list_frame.Visible
+            chevron.Text = list_frame.Visible and "▲" or "▼"
+            if list_frame.Visible then
+                local abs_pos = drop_btn.AbsolutePosition
+                list_frame.Position = UDim2.new(0, abs_pos.X, 0, abs_pos.Y + drop_btn.AbsoluteSize.Y + 2)
+                active_dropdown_list = list_frame
+                close_detector.Visible = true
+            else
+                active_dropdown_list = nil
+                close_detector.Visible = false
+            end
+        end)
+
+        return drop_btn
+    end
+
+    local function create_input(parent, placeholder, default, callback)
+        local box = Instance.new("TextBox")
+        box.Size = UDim2.new(1, 0, 0, 22)
+        box.BackgroundColor3 = INPUT_BG_COLOR
+        box.Text = tostring(default)
+        box.PlaceholderText = placeholder
+        box.TextColor3 = TEXT_COLOR
+        box.TextSize = 9
+        box.FontFace = font_face
+        box.Active = true
+        box.Parent = parent
+
+        local box_c = Instance.new("UICorner")
+        box_c.CornerRadius = UDim.new(0, 4)
+        box_c.Parent = box
+
+        local box_stroke = Instance.new("UIStroke")
+        box_stroke.Color = Color3.fromRGB(45, 45, 45)
+        box_stroke.Thickness = 1
+        box_stroke.Parent = box
+
+        local padding = Instance.new("UIPadding")
+        padding.PaddingLeft = UDim.new(0, 8)
+        padding.PaddingRight = UDim.new(0, 8)
+        padding.Parent = box
+
+        box.FocusLost:Connect(function()
+            callback(box.Text)
+        end)
+
+        return box
+    end
 
     local function create_toggle(parent, label_text, default, callback)
         local row = Instance.new("Frame")
         row.Size = UDim2.new(1, 0, 0, 22)
         row.BackgroundTransparency = 1
-        row.ZIndex = 3
+        row.Active = true
         row.Parent = parent
 
         local lbl = Instance.new("TextLabel")
@@ -1479,453 +3496,1076 @@ local function create_ui()
         lbl.TextSize = 9
         lbl.FontFace = font_bold
         lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.ZIndex = 4
         lbl.Parent = row
 
         local capsule = Instance.new("TextButton")
         capsule.Size = UDim2.new(0, 32, 0, 16)
         capsule.Position = UDim2.new(1, -32, 0.5, -8)
-        capsule.BackgroundColor3 = default and ACCENT_COLOR or Color3.fromRGB(45, 45, 45)
+        capsule.BackgroundColor3 = default and TOGGLE_ON_COLOR or Color3.fromRGB(45, 45, 45)
         capsule.Text = ""
-        capsule.ZIndex = 4
+        capsule.AutoButtonColor = false
+        capsule.Active = true
         capsule.Parent = row
-        create_corner(capsule, 8); create_stroke(capsule, Color3.fromRGB(35, 35, 35))
+
+        local cap_c = Instance.new("UICorner")
+        cap_c.CornerRadius = UDim.new(0.5, 0)
+        cap_c.Parent = capsule
+
+        local cap_stroke = Instance.new("UIStroke")
+        cap_stroke.Color = Color3.fromRGB(35, 35, 35)
+        cap_stroke.Thickness = 1
+        cap_stroke.Parent = capsule
 
         local knob = Instance.new("Frame")
         knob.Size = UDim2.new(0, 12, 0, 12)
         knob.Position = default and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
         knob.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
-        knob.ZIndex = 5
+        knob.BorderSizePixel = 0
         knob.Parent = capsule
-        create_corner(knob, 6)
+
+        local knob_c = Instance.new("UICorner")
+        knob_c.CornerRadius = UDim.new(0.5, 0)
+        knob_c.Parent = knob
 
         local active = default
-        local function update_visual(state)
-            tween_service:Create(knob, TweenInfo.new(0.12, Enum.EasingStyle.Quad), { Position = state and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6) }):Play()
-            tween_service:Create(capsule, TweenInfo.new(0.12, Enum.EasingStyle.Quad), { BackgroundColor3 = state and ACCENT_COLOR or Color3.fromRGB(45, 45, 45) }):Play()
+        local function update_visual(state, instant)
+            local target_pos = state and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
+            local target_color = state and TOGGLE_ON_COLOR or Color3.fromRGB(45, 45, 45)
+            if instant then
+                knob.Position = target_pos
+                capsule.BackgroundColor3 = target_color
+            else
+                tween_service:Create(knob, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Position = target_pos
+                }):Play()
+                tween_service:Create(capsule, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    BackgroundColor3 = target_color
+                }):Play()
+            end
         end
+
         capsule.MouseButton1Click:Connect(function()
             active = not active
-            update_visual(active)
+            update_visual(active, false)
             callback(active)
         end)
+
         return {
-            set_state = function(state)
-                if active == state then return end
+            set_state = function(state, instant)
+                if state == active and not instant then return end
                 active = state
-                update_visual(state)
+                update_visual(state, instant)
             end,
             Frame = row
         }
     end
 
-    local function create_accordion(title_text)
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1, 0, 0, 26)
-        frame.BackgroundColor3 = CARD_COLOR
-        frame.BackgroundTransparency = 0
-        frame.ClipsDescendants = true
-        frame.ZIndex = 2
-        frame.Parent = content_scroll
-        create_corner(frame, 5); create_stroke(frame, Color3.fromRGB(35, 35, 35))
+    local auto_accept_toggle_ctrl
+    local byname_toggle_ctrl
+    local enchant_toggle_ctrl
+    local rarity_toggle_ctrl
+    local coin_toggle_ctrl
 
-        local head = Instance.new("TextButton")
-        head.Size = UDim2.new(1, 0, 0, 26)
-        head.BackgroundTransparency = 1
-        head.Text = "  " .. title_text
-        head.TextColor3 = TEXT_COLOR
-        head.TextSize = 9
-        head.FontFace = font_bold
-        head.TextXAlignment = Enum.TextXAlignment.Left
-        head.ZIndex = 3
-        head.Parent = frame
-
-        local chev = Instance.new("TextLabel")
-        chev.Size = UDim2.new(0, 20, 1, 0)
-        chev.Position = UDim2.new(1, -25, 0, 0)
-        chev.BackgroundTransparency = 1
-        chev.Text = "v"
-        chev.TextColor3 = ACCENT_COLOR
-        chev.TextSize = 10
-        chev.Font = Enum.Font.SourceSansBold
-        chev.ZIndex = 4
-        chev.Parent = head
-
-        local inner = Instance.new("Frame")
-        inner.Size = UDim2.new(1, -12, 0, 0)
-        inner.Position = UDim2.new(0, 6, 0, 28)
-        inner.BackgroundTransparency = 1
-        inner.ZIndex = 3
-        inner.Parent = frame
-        local in_layout = Instance.new("UIListLayout"); in_layout.Padding = UDim.new(0, 6); in_layout.Parent = inner
-
-        local expanded = false
-        head.MouseButton1Click:Connect(function()
-            expanded = not expanded
-            chev.Text = expanded and "^" or "v"
-            local target_h = expanded and (32 + in_layout.AbsoluteContentSize.Y) or 26
-            tween_service:Create(frame, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { Size = UDim2.new(1, 0, 0, target_h) }):Play()
-            task_wait(0.21)
-            content_scroll.CanvasSize = UDim2.new(0, 0, 0, content_layout.AbsoluteContentSize.Y + 20)
-        end)
-        in_layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            if expanded then frame.Size = UDim2.new(1, 0, 0, 32 + in_layout.AbsoluteContentSize.Y) end
-        end)
-        return inner
-    end
-
-    local function create_stat_box(parent, mode)
-        local box = Instance.new("Frame")
-        box.Size = UDim2.new(1, 0, 0, 58)
-        box.AutomaticSize = Enum.AutomaticSize.Y
-        box.BackgroundColor3 = CARD_COLOR
-        box.BackgroundTransparency = 0
-        box.ZIndex = 3
-        box.Parent = parent
-        create_corner(box, 6); create_stroke(box, Color3.fromRGB(35, 35, 35))
-
-        local title = Instance.new("TextLabel")
-        title.Size = UDim2.new(1, -10, 0, 16)
-        title.Position = UDim2.new(0, 10, 0, 6)
-        title.BackgroundTransparency = 1
-        title.Text = "Status"
-        title.TextColor3 = ACCENT_COLOR
-        title.TextSize = 9
-        title.FontFace = font_bold
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.ZIndex = 4
-        title.Parent = box
-
-        local val = Instance.new("TextLabel")
-        val.Size = UDim2.new(1, -20, 0, 30)
-        val.Position = UDim2.new(0, 10, 0, 22)
-        val.AutomaticSize = Enum.AutomaticSize.Y
-        val.BackgroundTransparency = 1
-        val.Text = "Idle"
-        val.TextColor3 = TEXT_COLOR
-        val.TextSize = 9
-        val.FontFace = font_face
-        val.TextXAlignment = Enum.TextXAlignment.Left
-        val.TextWrapped = true
-        val.ZIndex = 4
-        val.Parent = box
-        status_labels[mode] = val
-        return val
-    end
-
-    local fav_toggles = {}
-    local function sync_fav(active)
-        config.trade_favorited = active
-        for _, t in pairs(fav_toggles) do t.set_state(active) end
-        cache.loaded_fish = get_owned_options("Fish")
-        cache.loaded_enchants = get_owned_options("Enchant")
+    local function sync_mode_toggles(active_mode)
+        if active_mode ~= "fish" and byname_toggle_ctrl then
+            byname_toggle_ctrl.set_state(false, false)
+            config.trade_fish_enabled = false
+        end
+        if active_mode ~= "enchant" and enchant_toggle_ctrl then
+            enchant_toggle_ctrl.set_state(false, false)
+            config.trade_enchants_enabled = false
+        end
+        if active_mode ~= "rarity" and rarity_toggle_ctrl then
+            rarity_toggle_ctrl.set_state(false, false)
+            config.trade_rarity_enabled = false
+        end
+        if active_mode ~= "coin" and coin_toggle_ctrl then
+            coin_toggle_ctrl.set_state(false, false)
+            config.trade_coins_enabled = false
+        end
         save_config()
     end
 
-    local qty_inputs = {}
-    local function sync_qty(val)
-        config.quantity = val
-        for _, box in pairs(qty_inputs) do box.Text = tostring(val) end
-        save_config()
-    end
+    local byname_content, byname_toggle = create_accordion(settings_panel, "Trade By Name")
+    local status_box = Instance.new("Frame")
+    status_box.Name = "1_StatusBox"
+    status_box.LayoutOrder = 1
+    status_box.Size = UDim2.new(1, 0, 0, 58)
+    status_box.AutomaticSize = Enum.AutomaticSize.Y
+    status_box.BackgroundColor3 = CARD_COLOR
+    status_box.BackgroundTransparency = 0.3
+    status_box.BorderSizePixel = 0
+    status_box.Parent = byname_content
 
-    local function sync_modes(active_mode)
-        for m, flag in pairs(mode_flag_map) do
-            if m ~= active_mode then
-                if toggle_ctrls[m] then toggle_ctrls[m].set_state(false) end
-                config[flag] = false
-            end
+    local status_box_pad = Instance.new("UIPadding")
+    status_box_pad.PaddingBottom = UDim.new(0, 6)
+    status_box_pad.PaddingRight = UDim.new(0, 10)
+    status_box_pad.Parent = status_box
+
+    local status_box_c = Instance.new("UICorner")
+    status_box_c.CornerRadius = UDim.new(0, 6)
+    status_box_c.Parent = status_box
+
+    local status_box_stroke = Instance.new("UIStroke")
+    status_box_stroke.Color = Color3.fromRGB(35, 35, 35)
+    status_box_stroke.Thickness = 1
+    status_box_stroke.Parent = status_box
+
+    local status_title = Instance.new("TextLabel")
+    status_title.Size = UDim2.new(1, -10, 0, 16)
+    status_title.Position = UDim2.new(0, 10, 0, 6)
+    status_title.BackgroundTransparency = 1
+    status_title.Text = "Status"
+    status_title.TextColor3 = ACCENT_COLOR
+    status_title.TextSize = 9
+    status_title.FontFace = font_bold
+    status_title.TextXAlignment = Enum.TextXAlignment.Left
+    status_title.Parent = status_box
+
+    status_val_lbl = Instance.new("TextLabel")
+    status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
+    status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
+    status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
+    status_val_lbl.BackgroundTransparency = 1
+    status_val_lbl.Text = "Idle"
+    status_val_lbl.TextColor3 = TEXT_COLOR
+    status_val_lbl.TextSize = 9
+    status_val_lbl.FontFace = font_face
+    status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
+    status_val_lbl.TextWrapped = true
+    status_val_lbl.Parent = status_box
+
+    local item_row = Instance.new("Frame")
+    item_row.Name = "2_ItemRow"
+    item_row.LayoutOrder = 2
+    item_row.Size = UDim2.new(1, 0, 0, 22)
+    item_row.BackgroundTransparency = 1
+    item_row.Active = false
+    item_row.Parent = byname_content
+
+    local item_lbl = Instance.new("TextLabel")
+    item_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    item_lbl.BackgroundTransparency = 1
+    item_lbl.Text = "Select Item"
+    item_lbl.TextColor3 = TEXT_COLOR
+    item_lbl.TextSize = 9
+    item_lbl.FontFace = font_bold
+    item_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    item_lbl.Parent = item_row
+
+    fish_dropdown_btn = Instance.new("TextButton")
+    fish_dropdown_btn.Size = UDim2.new(0.55, 0, 1, 0)
+    fish_dropdown_btn.Position = UDim2.new(0.45, 0, 0, 0)
+    fish_dropdown_btn.BackgroundColor3 = INPUT_BG_COLOR
+
+    local function get_fish_dropdown_text()
+        if not config.selected_fish or #config.selected_fish == 0 then
+            return "Select Option"
+        elseif #config.selected_fish == 1 then
+            return tostring(config.selected_fish[1])
+        else
+            return tostring(#config.selected_fish) .. " selected"
         end
     end
 
-    -- Tab 1: Trade By Name
-    local byname_inner = create_accordion("Trade By Name")
-    create_stat_box(byname_inner, "fish")
-    local f_row = Instance.new("Frame"); f_row.Size = UDim2.new(1, 0, 0, 22); f_row.BackgroundTransparency = 1; f_row.Parent = byname_inner
-    local f_lbl = Instance.new("TextLabel"); f_lbl.Size = UDim2.new(0.45, 0, 1, 0); f_lbl.BackgroundTransparency = 1; f_lbl.Text = "Select Item"; f_lbl.TextColor3 = TEXT_COLOR; f_lbl.TextSize = 9; f_lbl.FontFace = font_bold; f_lbl.TextXAlignment = Enum.TextXAlignment.Left; f_lbl.Parent = f_row
-    local f_drop = Instance.new("TextButton"); f_drop.Size = UDim2.new(0.55, 0, 1, 0); f_drop.Position = UDim2.new(0.45, 0, 0, 0); f_drop.BackgroundColor3 = INPUT_BG_COLOR; f_drop.Text = (#config.selected_fish > 0 and table_concat(config.selected_fish, "/") or "All"); f_drop.TextColor3 = TEXT_COLOR; f_drop.TextSize = 9; f_drop.FontFace = font_face; f_drop.Parent = f_row
-    create_corner(f_drop, 4); create_stroke(f_drop, Color3.fromRGB(45, 45, 45))
-    f_drop.MouseButton1Click:Connect(function()
+    fish_dropdown_btn.Text = get_fish_dropdown_text()
+    fish_dropdown_btn.TextColor3 = TEXT_COLOR
+    fish_dropdown_btn.TextSize = 9
+    fish_dropdown_btn.FontFace = font_face
+    fish_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
+    fish_dropdown_btn.Active = true
+    fish_dropdown_btn.Parent = item_row
+
+    local fish_dropdown_c = Instance.new("UICorner")
+    fish_dropdown_c.CornerRadius = UDim.new(0, 4)
+    fish_dropdown_c.Parent = fish_dropdown_btn
+
+    local fish_dropdown_stroke = Instance.new("UIStroke")
+    fish_dropdown_stroke.Color = Color3.fromRGB(45, 45, 45)
+    fish_dropdown_stroke.Thickness = 1
+    fish_dropdown_stroke.Parent = fish_dropdown_btn
+
+    local fish_dropdown_pad = Instance.new("UIPadding")
+    fish_dropdown_pad.PaddingLeft = UDim.new(0, 8)
+    fish_dropdown_pad.PaddingRight = UDim.new(0, 8)
+    fish_dropdown_pad.Parent = fish_dropdown_btn
+
+    local fish_chevron = Instance.new("TextLabel")
+    fish_chevron.Size = UDim2.new(0, 20, 1, 0)
+    fish_chevron.Position = UDim2.new(1, -12, 0, 0)
+    fish_chevron.BackgroundTransparency = 1
+    fish_chevron.Text = "♦"
+    fish_chevron.TextColor3 = Color3.fromRGB(192, 0, 192)
+    fish_chevron.TextSize = 8
+    fish_chevron.FontFace = font_face
+    fish_chevron.TextXAlignment = Enum.TextXAlignment.Right
+    fish_chevron.Parent = fish_dropdown_btn
+
+    fish_dropdown_btn.Activated:Connect(function()
+        item_search_box.Text = ""
+        enchant_panel.Visible = false
         item_panel.Visible = not item_panel.Visible
         close_detector.Visible = item_panel.Visible
         if item_panel.Visible then
-            cache.loaded_fish = get_owned_options("Fish")
-            populate_drawer(item_scroll, cache.loaded_fish, config.selected_fish, true, function(sel)
-                f_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
-            end, item_search.Text)
-        end
-    end)
-    item_search:GetPropertyChangedSignal("Text"):Connect(function()
-        populate_drawer(item_scroll, cache.loaded_fish, config.selected_fish, true, function(sel)
-            f_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
-        end, item_search.Text)
-    end)
-
-    local f_amt_row = Instance.new("Frame"); f_amt_row.Size = UDim2.new(1, 0, 0, 22); f_amt_row.BackgroundTransparency = 1; f_amt_row.Parent = byname_inner
-    local f_amt_lbl = Instance.new("TextLabel"); f_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); f_amt_lbl.BackgroundTransparency = 1; f_amt_lbl.Text = "Amount Fish Name"; f_amt_lbl.TextColor3 = TEXT_COLOR; f_amt_lbl.TextSize = 9; f_amt_lbl.FontFace = font_bold; f_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; f_amt_lbl.Parent = f_amt_row
-    local f_qty = Instance.new("TextBox"); f_qty.Size = UDim2.new(0.55, 0, 1, 0); f_qty.Position = UDim2.new(0.45, 0, 0, 0); f_qty.BackgroundColor3 = INPUT_BG_COLOR; f_qty.Text = tostring(config.quantity); f_qty.TextColor3 = TEXT_COLOR; f_qty.TextSize = 9; f_qty.FontFace = font_face; f_qty.Parent = f_amt_row
-    create_corner(f_qty, 4); create_stroke(f_qty, Color3.fromRGB(45, 45, 45))
-    table_insert(qty_inputs, f_qty)
-    f_qty.FocusLost:Connect(function() sync_qty(tonumber(f_qty.Text) or config.quantity) end)
-
-    local f_ref = Instance.new("TextButton"); f_ref.Size = UDim2.new(1, 0, 0, 26); f_ref.BackgroundColor3 = Color3.fromRGB(192, 0, 192); f_ref.Text = "Refresh Fish Items"; f_ref.TextColor3 = Color3.fromRGB(255, 255, 255); f_ref.TextSize = 9; f_ref.FontFace = font_bold; f_ref.Parent = byname_inner
-    create_corner(f_ref, 5)
-    f_ref.MouseButton1Click:Connect(function()
-        f_ref.Text = "Fish Items Refreshed!"
-        cache.loaded_fish = get_owned_options("Fish")
-        task_wait(1); f_ref.Text = "Refresh Fish Items"
-    end)
-    toggle_ctrls.fish = create_toggle(byname_inner, "Start Trade ByName", config.enabled and config.trade_fish_enabled, function(active)
-        if active then
-            if f_qty and f_qty.Text ~= "" then
-                local num = tonumber(f_qty.Text)
-                if num and num >= 0 then
-                    sync_qty(math_floor(num))
-                end
-            end
-            cache.stats.fish = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 }
-            config.trade_fish_enabled = true; config.enabled = true
-            sync_modes("fish"); run_auto_trade_loop()
-        else
-            config.enabled = false; config.trade_fish_enabled = false; set_status_msg("fish", "Idle")
-        end
-    end)
-    fav_toggles.fish = create_toggle(byname_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
-
-    -- Tab 2: Trade Enchant Stone
-    local en_inner = create_accordion("Trade Enchant Stone")
-    create_stat_box(en_inner, "enchant")
-    local e_row = Instance.new("Frame"); e_row.Size = UDim2.new(1, 0, 0, 22); e_row.BackgroundTransparency = 1; e_row.Parent = en_inner
-    local e_lbl = Instance.new("TextLabel"); e_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_lbl.BackgroundTransparency = 1; e_lbl.Text = "Stone Type"; e_lbl.TextColor3 = TEXT_COLOR; e_lbl.TextSize = 9; e_lbl.FontFace = font_bold; e_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_lbl.Parent = e_row
-    local e_drop = Instance.new("TextButton"); e_drop.Size = UDim2.new(0.55, 0, 1, 0); e_drop.Position = UDim2.new(0.45, 0, 0, 0); e_drop.BackgroundColor3 = INPUT_BG_COLOR; e_drop.Text = (#config.selected_items > 0 and table_concat(config.selected_items, "/") or "All"); e_drop.TextColor3 = TEXT_COLOR; e_drop.TextSize = 9; e_drop.FontFace = font_face; e_drop.Parent = e_row
-    create_corner(e_drop, 4); create_stroke(e_drop, Color3.fromRGB(45, 45, 45))
-    e_drop.MouseButton1Click:Connect(function()
-        enchant_panel.Visible = not enchant_panel.Visible
-        close_detector.Visible = enchant_panel.Visible
-        if enchant_panel.Visible then
-            cache.loaded_enchants = get_owned_options("Enchant")
-            populate_drawer(enchant_scroll, cache.loaded_enchants, config.selected_items, true, function(sel)
-                e_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
-            end, enchant_search.Text)
-        end
-    end)
-    enchant_search:GetPropertyChangedSignal("Text"):Connect(function()
-        populate_drawer(enchant_scroll, cache.loaded_enchants, config.selected_items, true, function(sel)
-            e_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
-        end, enchant_search.Text)
-    end)
-
-    local e_amt_row = Instance.new("Frame"); e_amt_row.Size = UDim2.new(1, 0, 0, 22); e_amt_row.BackgroundTransparency = 1; e_amt_row.Parent = en_inner
-    local e_amt_lbl = Instance.new("TextLabel"); e_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_amt_lbl.BackgroundTransparency = 1; e_amt_lbl.Text = "Amount Enchant Stone"; e_amt_lbl.TextColor3 = TEXT_COLOR; e_amt_lbl.TextSize = 9; e_amt_lbl.FontFace = font_bold; e_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_amt_lbl.Parent = e_amt_row
-    local e_qty = Instance.new("TextBox"); e_qty.Size = UDim2.new(0.55, 0, 1, 0); e_qty.Position = UDim2.new(0.45, 0, 0, 0); e_qty.BackgroundColor3 = INPUT_BG_COLOR; e_qty.Text = tostring(config.quantity); e_qty.TextColor3 = TEXT_COLOR; e_qty.TextSize = 9; e_qty.FontFace = font_face; e_qty.Parent = e_amt_row
-    create_corner(e_qty, 4); create_stroke(e_qty, Color3.fromRGB(45, 45, 45))
-    table_insert(qty_inputs, e_qty)
-    e_qty.FocusLost:Connect(function() sync_qty(tonumber(e_qty.Text) or config.quantity) end)
-
-    local e_ref = Instance.new("TextButton"); e_ref.Size = UDim2.new(1, 0, 0, 26); e_ref.BackgroundColor3 = Color3.fromRGB(192, 0, 192); e_ref.Text = "Check Enchant Stones"; e_ref.TextColor3 = Color3.fromRGB(255, 255, 255); e_ref.TextSize = 9; e_ref.FontFace = font_bold; e_ref.Parent = en_inner
-    create_corner(e_ref, 5)
-    e_ref.MouseButton1Click:Connect(function()
-        e_ref.Text = "Enchant Stones Checked!"
-        cache.loaded_enchants = get_owned_options("Enchant")
-        task_wait(1); e_ref.Text = "Check Enchant Stones"
-    end)
-    toggle_ctrls.enchant = create_toggle(en_inner, "Start Trade EnchantStone", config.enabled and config.trade_enchants_enabled, function(active)
-        if active then
-            if e_qty and e_qty.Text ~= "" then
-                local num = tonumber(e_qty.Text)
-                if num and num >= 0 then
-                    sync_qty(math_floor(num))
-                end
-            end
-            cache.stats.enchant = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 }
-            config.trade_enchants_enabled = true; config.enabled = true
-            sync_modes("enchant"); run_auto_trade_loop()
-        else
-            config.enabled = false; config.trade_enchants_enabled = false; set_status_msg("enchant", "Idle")
+            populate_items_panel(fish_dropdown_btn)
         end
     end)
 
-    -- Tab 3: Trade By Rarity
-    local r_inner = create_accordion("Trade By Rarity")
-    create_stat_box(r_inner, "rarity")
-    local r_row = Instance.new("Frame"); r_row.Size = UDim2.new(1, 0, 0, 22); r_row.BackgroundTransparency = 1; r_row.Parent = r_inner
-    local r_lbl = Instance.new("TextLabel"); r_lbl.Size = UDim2.new(0.45, 0, 1, 0); r_lbl.BackgroundTransparency = 1; r_lbl.Text = "Select Rarity"; r_lbl.TextColor3 = TEXT_COLOR; r_lbl.TextSize = 9; r_lbl.FontFace = font_bold; r_lbl.TextXAlignment = Enum.TextXAlignment.Left; r_lbl.Parent = r_row
-    local r_drop = Instance.new("TextButton"); r_drop.Size = UDim2.new(0.55, 0, 1, 0); r_drop.Position = UDim2.new(0.45, 0, 0, 0); r_drop.BackgroundColor3 = INPUT_BG_COLOR; r_drop.Text = (#config.selected_tiers > 0 and table_concat(config.selected_tiers, "/") or "All"); r_drop.TextColor3 = TEXT_COLOR; r_drop.TextSize = 9; r_drop.FontFace = font_face; r_drop.Parent = r_row
-    create_corner(r_drop, 4); create_stroke(r_drop, Color3.fromRGB(45, 45, 45))
-    r_drop.MouseButton1Click:Connect(function()
-        rarity_panel.Visible = not rarity_panel.Visible
-        close_detector.Visible = rarity_panel.Visible
-        if rarity_panel.Visible then
-            populate_drawer(rarity_scroll, cache.loaded_tiers, config.selected_tiers, true, function(sel)
-                r_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
-            end)
-        end
-    end)
+    local amount_row = Instance.new("Frame")
+    amount_row.Name = "3_AmountRow"
+    amount_row.LayoutOrder = 3
+    amount_row.Size = UDim2.new(1, 0, 0, 22)
+    amount_row.BackgroundTransparency = 1
+    amount_row.Active = false
+    amount_row.Parent = byname_content
 
-    local r_amt_row = Instance.new("Frame"); r_amt_row.Size = UDim2.new(1, 0, 0, 22); r_amt_row.BackgroundTransparency = 1; r_amt_row.Parent = r_inner
-    local r_amt_lbl = Instance.new("TextLabel"); r_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); r_amt_lbl.BackgroundTransparency = 1; r_amt_lbl.Text = "Amount Fish Rarity"; r_amt_lbl.TextColor3 = TEXT_COLOR; r_amt_lbl.TextSize = 9; r_amt_lbl.FontFace = font_bold; r_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; r_amt_lbl.Parent = r_amt_row
-    local r_qty = Instance.new("TextBox"); r_qty.Size = UDim2.new(0.55, 0, 1, 0); r_qty.Position = UDim2.new(0.45, 0, 0, 0); r_qty.BackgroundColor3 = INPUT_BG_COLOR; r_qty.Text = tostring(config.quantity); r_qty.TextColor3 = TEXT_COLOR; r_qty.TextSize = 9; r_qty.FontFace = font_face; r_qty.Parent = r_amt_row
-    create_corner(r_qty, 4); create_stroke(r_qty, Color3.fromRGB(45, 45, 45))
-    table_insert(qty_inputs, r_qty)
-    r_qty.FocusLost:Connect(function() sync_qty(tonumber(r_qty.Text) or config.quantity) end)
+    local amount_lbl = Instance.new("TextLabel")
+    amount_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    amount_lbl.BackgroundTransparency = 1
+    amount_lbl.Text = "Amount Fish Name"
+    amount_lbl.TextColor3 = TEXT_COLOR
+    amount_lbl.TextSize = 9
+    amount_lbl.FontFace = font_bold
+    amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    amount_lbl.Parent = amount_row
 
-    local r_ref = Instance.new("TextButton"); r_ref.Size = UDim2.new(1, 0, 0, 26); r_ref.BackgroundColor3 = Color3.fromRGB(192, 0, 192); r_ref.Text = "Refresh Fish Rarity"; r_ref.TextColor3 = Color3.fromRGB(255, 255, 255); r_ref.TextSize = 9; r_ref.FontFace = font_bold; r_ref.Parent = r_inner
-    create_corner(r_ref, 5)
-    r_ref.MouseButton1Click:Connect(function()
-        r_ref.Text = "Rarity Fish Refreshed!"
-        cache.loaded_fish = get_owned_options("Fish")
-        task_wait(1); r_ref.Text = "Refresh Fish Rarity"
-    end)
-    toggle_ctrls.rarity = create_toggle(r_inner, "Start Trade ByRarity", config.enabled and config.trade_rarity_enabled, function(active)
-        if active then
-            if r_qty and r_qty.Text ~= "" then
-                local num = tonumber(r_qty.Text)
-                if num and num >= 0 then
-                    sync_qty(math_floor(num))
-                end
-            end
-            cache.stats.rarity = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 }
-            config.trade_rarity_enabled = true; config.enabled = true
-            sync_modes("rarity"); run_auto_trade_loop()
-        else
-            config.enabled = false; config.trade_rarity_enabled = false; set_status_msg("rarity", "Idle")
-        end
-    end)
-    fav_toggles.rarity = create_toggle(r_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
+    qty_box = Instance.new("TextBox")
+    qty_box.Size = UDim2.new(0.55, 0, 1, 0)
+    qty_box.Position = UDim2.new(0.45, 0, 0, 0)
+    qty_box.BackgroundColor3 = INPUT_BG_COLOR
+    qty_box.Text = tostring(config.quantity)
+    qty_box.TextColor3 = TEXT_COLOR
+    qty_box.TextSize = 9
+    qty_box.FontFace = font_face
+    qty_box.TextXAlignment = Enum.TextXAlignment.Center
+    qty_box.ClearTextOnFocus = false
+    qty_box.Parent = amount_row
 
-    -- Tab 4: Trade By Coin
-    local c_inner = create_accordion("Trade By Coin")
-    create_stat_box(c_inner, "coin")
-    local c_row = Instance.new("Frame"); c_row.Size = UDim2.new(1, 0, 0, 22); c_row.BackgroundTransparency = 1; c_row.Parent = c_inner
-    local c_lbl = Instance.new("TextLabel"); c_lbl.Size = UDim2.new(0.45, 0, 1, 0); c_lbl.BackgroundTransparency = 1; c_lbl.Text = "Target Coins"; c_lbl.TextColor3 = TEXT_COLOR; c_lbl.TextSize = 9; c_lbl.FontFace = font_bold; c_lbl.TextXAlignment = Enum.TextXAlignment.Left; c_lbl.Parent = c_row
-    local c_box = Instance.new("TextBox"); c_box.Size = UDim2.new(0.55, 0, 1, 0); c_box.Position = UDim2.new(0.45, 0, 0, 0); c_box.BackgroundColor3 = INPUT_BG_COLOR; c_box.Text = format_number(config.target_coin_amount); c_box.TextColor3 = TEXT_COLOR; c_box.TextSize = 9; c_box.FontFace = font_face; c_box.ClearTextOnFocus = false; c_box.Parent = c_row
-    create_corner(c_box, 4); create_stroke(c_box, Color3.fromRGB(45, 45, 45))
-    c_box:GetPropertyChangedSignal("Text"):Connect(function()
-        local text = c_box.Text
-        local parsed = parse_coin_input(text)
-        if parsed and parsed >= 0 then
-            config.target_coin_amount = parsed
-            save_config()
-        elseif text == "" then
-            config.target_coin_amount = 0
-            save_config()
-        end
-    end)
-    c_box.FocusLost:Connect(function()
-        local text = c_box.Text
-        local parsed = parse_coin_input(text)
-        if parsed and parsed >= 0 then
-            config.target_coin_amount = parsed
-            c_box.Text = format_number(parsed)
-        else
-            c_box.Text = format_number(config.target_coin_amount or 0)
-        end
-        save_config()
-    end)
+    local qty_c = Instance.new("UICorner")
+    qty_c.CornerRadius = UDim.new(0, 4)
+    qty_c.Parent = qty_box
 
-    local coin_check_btn = Instance.new("TextButton")
-    coin_check_btn.Size = UDim2.new(1, 0, 0, 26)
-    coin_check_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
-    coin_check_btn.Text = "Check Bag Coin Worth"
-    coin_check_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    coin_check_btn.TextSize = 9
-    coin_check_btn.FontFace = font_bold
-    coin_check_btn.Parent = c_inner
-    create_corner(coin_check_btn, 5)
+    local qty_stroke = Instance.new("UIStroke")
+    qty_stroke.Color = Color3.fromRGB(45, 45, 45)
+    qty_stroke.Thickness = 1
+    qty_stroke.Parent = qty_box
 
-    coin_check_btn.MouseButton1Click:Connect(function()
-        local total_worth = 0
-        local total_fish = 0
-        local inv = player_data and player_data:Get("Inventory")
-        local itms = inv and inv.Items or {}
-        for _, itm in ipairs(itms) do
-            local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
-            if not is_fav or config.trade_favorited then
-                local val = calculate_fish_coin_value(itm)
-                if val > 0 then
-                    total_worth = total_worth + val
-                    total_fish = total_fish + 1
-                end
-            end
-        end
-
-        local worth_str = format_number(total_worth)
-        coin_check_btn.Text = string_format("Worth: %s Coins (%d)", worth_str, total_fish)
-        set_status_msg("coin", string_format("Inventory Worth: %s Coins", worth_str))
-        task_delay(4, function()
-            if coin_check_btn and coin_check_btn.Parent then
-                coin_check_btn.Text = "Check Bag Coin Worth"
-            end
+    qty_box.FocusLost:Connect(function()
+        local text = qty_box.Text
+        local val = (text == "") and 0 or (tonumber(text) or config.quantity)
+        task.defer(function()
+            sync_qty_boxes(val)
         end)
     end)
 
-    toggle_ctrls.coin = create_toggle(c_inner, "Start Trade ByCoin", config.enabled and config.trade_coins_enabled, function(active)
+    local refresh_btn = Instance.new("TextButton")
+    refresh_btn.Name = "4_RefreshButton"
+    refresh_btn.LayoutOrder = 4
+    refresh_btn.Size = UDim2.new(1, 0, 0, 26)
+    refresh_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    refresh_btn.Text = "Refresh Fish Items"
+    refresh_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    refresh_btn.TextSize = 9
+    refresh_btn.FontFace = font_bold
+    refresh_btn.Active = true
+    refresh_btn.Parent = byname_content
+
+    local refresh_btn_c = Instance.new("UICorner")
+    refresh_btn_c.CornerRadius = UDim.new(0, 5)
+    refresh_btn_c.Parent = refresh_btn
+
+    refresh_btn.MouseEnter:Connect(function()
+        refresh_btn.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+    end)
+    refresh_btn.MouseLeave:Connect(function()
+        refresh_btn.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    end)
+
+    refresh_btn.Activated:Connect(function()
+        refresh_btn.Text = "Fish Items Refreshed!"
+        cache.loaded_fish = get_owned_fish_options()
+        if item_panel.Visible then
+            populate_items_panel(fish_dropdown_btn)
+        end
+        task_wait(1)
+        refresh_btn.Text = "Refresh Fish Items"
+    end)
+
+    byname_toggle_ctrl = create_toggle(byname_content, "Start Trade ByName", (config.enabled and config.trade_fish_enabled), function(active)
         if active then
-            if c_box and c_box.Text ~= "" then
-                local parsed = parse_coin_input(c_box.Text)
-                if parsed and parsed > 0 then
-                    config.target_coin_amount = parsed
-                end
-            end
-            cache.stats.coin = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
-            config.trade_coins_enabled = true; config.enabled = true
-            sync_modes("coin"); run_auto_trade_loop()
+            cache.stats.fish.success_trades = 0
+            cache.stats.fish.last_items = 0
+            cache.stats.fish.total_items = 0
+            cache.stats.fish.attempts = 0
+            cache.stats.fish.failed = 0
+            update_mode_status("fish")
+
+            config.trade_fish_enabled = true
+            config.enabled = true
+            sync_mode_toggles("fish")
+            cache.processed_trades = {}
+            run_auto_trade_loop()
         else
-            config.enabled = false; config.trade_coins_enabled = false; set_status_msg("coin", "Idle")
+            config.enabled = false
+            cache.fish_status_text = "Idle"
+            cache.fish_status_details = ""
+            decline_active_trade()
         end
     end)
-    fav_toggles.coin = create_toggle(c_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
+    byname_toggle_ctrl.Frame.LayoutOrder = 5
+    byname_toggle_ctrl.Frame.Name = "5_StartTradeToggle"
 
-    local c_reset = Instance.new("TextButton"); c_reset.Size = UDim2.new(1, 0, 0, 26); c_reset.BackgroundColor3 = Color3.fromRGB(192, 0, 192); c_reset.Text = "Reset Stats By Coin"; c_reset.TextColor3 = Color3.fromRGB(255, 255, 255); c_reset.TextSize = 9; c_reset.FontFace = font_bold; c_reset.Parent = c_inner
-    create_corner(c_reset, 5)
-    c_reset.MouseButton1Click:Connect(function()
-        cache.stats.coin = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
-        update_status_ui("coin")
-        c_reset.Text = "Stats Reset!"; task_wait(1); c_reset.Text = "Reset Stats By Coin"
+    byname_fav_toggle = create_toggle(byname_content, "Trade Favorite Items", config.trade_favorited, function(active)
+        sync_fav_toggles(active)
+    end)
+    byname_fav_toggle.Frame.LayoutOrder = 6
+    byname_fav_toggle.Frame.Name = "6_FavToggle"
+
+    local enchant_content, enchant_toggle = create_accordion(settings_panel, "Trade Enchant Stone")    local enchant_status_box = Instance.new("Frame")
+    enchant_status_box.Name = "1_StatusBox"
+    enchant_status_box.LayoutOrder = 1
+    enchant_status_box.Size = UDim2.new(1, 0, 0, 58)
+    enchant_status_box.AutomaticSize = Enum.AutomaticSize.Y
+    enchant_status_box.BackgroundColor3 = CARD_COLOR
+    enchant_status_box.BackgroundTransparency = 0.3
+    enchant_status_box.BorderSizePixel = 0
+    enchant_status_box.Parent = enchant_content
+
+    local enchant_status_box_pad = Instance.new("UIPadding")
+    enchant_status_box_pad.PaddingBottom = UDim.new(0, 6)
+    enchant_status_box_pad.PaddingRight = UDim.new(0, 10)
+    enchant_status_box_pad.Parent = enchant_status_box
+
+    local enchant_status_box_c = Instance.new("UICorner")
+    enchant_status_box_c.CornerRadius = UDim.new(0, 6)
+    enchant_status_box_c.Parent = enchant_status_box
+
+    local enchant_status_box_stroke = Instance.new("UIStroke")
+    enchant_status_box_stroke.Color = Color3.fromRGB(35, 35, 35)
+    enchant_status_box_stroke.Thickness = 1
+    enchant_status_box_stroke.Parent = enchant_status_box
+
+    local enchant_status_title = Instance.new("TextLabel")
+    enchant_status_title.Size = UDim2.new(1, -10, 0, 16)
+    enchant_status_title.Position = UDim2.new(0, 10, 0, 6)
+    enchant_status_title.BackgroundTransparency = 1
+    enchant_status_title.Text = "Status"
+    enchant_status_title.TextColor3 = ACCENT_COLOR
+    enchant_status_title.TextSize = 9
+    enchant_status_title.FontFace = font_bold
+    enchant_status_title.TextXAlignment = Enum.TextXAlignment.Left
+    enchant_status_title.Parent = enchant_status_box
+
+    enchant_status_val_lbl = Instance.new("TextLabel")
+    enchant_status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
+    enchant_status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
+    enchant_status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
+    enchant_status_val_lbl.BackgroundTransparency = 1
+    enchant_status_val_lbl.Text = "Idle"
+    enchant_status_val_lbl.TextColor3 = TEXT_COLOR
+    enchant_status_val_lbl.TextSize = 9
+    enchant_status_val_lbl.FontFace = font_face
+    enchant_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    enchant_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
+    enchant_status_val_lbl.TextWrapped = true
+    enchant_status_val_lbl.Parent = enchant_status_box
+
+    local stone_row = Instance.new("Frame")
+    stone_row.Name = "2_StoneRow"
+    stone_row.LayoutOrder = 2
+    stone_row.Size = UDim2.new(1, 0, 0, 22)
+    stone_row.BackgroundTransparency = 1
+    stone_row.Active = false
+    stone_row.Parent = enchant_content
+
+    local stone_lbl = Instance.new("TextLabel")
+    stone_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    stone_lbl.BackgroundTransparency = 1
+    stone_lbl.Text = "Stone Type"
+    stone_lbl.TextColor3 = TEXT_COLOR
+    stone_lbl.TextSize = 9
+    stone_lbl.FontFace = font_bold
+    stone_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    stone_lbl.Parent = stone_row
+
+    enchant_dropdown_btn = Instance.new("TextButton")
+    enchant_dropdown_btn.Size = UDim2.new(0.55, 0, 1, 0)
+    enchant_dropdown_btn.Position = UDim2.new(0.45, 0, 0, 0)
+    enchant_dropdown_btn.BackgroundColor3 = INPUT_BG_COLOR
+
+    local function get_enchant_dropdown_text()
+        if not config.selected_items or #config.selected_items == 0 then
+            return "Select Option"
+        elseif #config.selected_items == 1 then
+            return tostring(config.selected_items[1])
+        else
+            return tostring(#config.selected_items) .. " selected"
+        end
+    end
+
+    enchant_dropdown_btn.Text = get_enchant_dropdown_text()
+    enchant_dropdown_btn.TextColor3 = TEXT_COLOR
+    enchant_dropdown_btn.TextSize = 9
+    enchant_dropdown_btn.FontFace = font_face
+    enchant_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
+    enchant_dropdown_btn.Active = true
+    enchant_dropdown_btn.Parent = stone_row
+
+    local enchant_dropdown_c = Instance.new("UICorner")
+    enchant_dropdown_c.CornerRadius = UDim.new(0, 4)
+    enchant_dropdown_c.Parent = enchant_dropdown_btn
+
+    local enchant_dropdown_stroke = Instance.new("UIStroke")
+    enchant_dropdown_stroke.Color = Color3.fromRGB(45, 45, 45)
+    enchant_dropdown_stroke.Thickness = 1
+    enchant_dropdown_stroke.Parent = enchant_dropdown_btn
+
+    local enchant_dropdown_pad = Instance.new("UIPadding")
+    enchant_dropdown_pad.PaddingLeft = UDim.new(0, 8)
+    enchant_dropdown_pad.PaddingRight = UDim.new(0, 8)
+    enchant_dropdown_pad.Parent = enchant_dropdown_btn
+
+    local enchant_chevron = Instance.new("TextLabel")
+    enchant_chevron.Size = UDim2.new(0, 20, 1, 0)
+    enchant_chevron.Position = UDim2.new(1, -12, 0, 0)
+    enchant_chevron.BackgroundTransparency = 1
+    enchant_chevron.Text = "♦"
+    enchant_chevron.TextColor3 = Color3.fromRGB(192, 0, 192)
+    enchant_chevron.TextSize = 8
+    enchant_chevron.FontFace = font_face
+    enchant_chevron.TextXAlignment = Enum.TextXAlignment.Right
+    enchant_chevron.Parent = enchant_dropdown_btn
+
+    enchant_dropdown_btn.Activated:Connect(function()
+        enchant_search_box.Text = ""
+        item_panel.Visible = false
+        enchant_panel.Visible = not enchant_panel.Visible
+        close_detector.Visible = enchant_panel.Visible
+        if enchant_panel.Visible then
+            populate_enchants_panel(enchant_dropdown_btn)
+        end
     end)
 
-    -- Tab 5: Auto Accept
-    local aa_inner = create_accordion("Auto Accept Trade")
-    toggle_ctrls.auto_accept = create_toggle(aa_inner, "Enable Auto Accept", config.auto_accept_enabled, function(state)
+    local es_amount_row = Instance.new("Frame")
+    es_amount_row.Name = "3_AmountRow"
+    es_amount_row.LayoutOrder = 3
+    es_amount_row.Size = UDim2.new(1, 0, 0, 22)
+    es_amount_row.BackgroundTransparency = 1
+    es_amount_row.Active = false
+    es_amount_row.Parent = enchant_content
+
+    local es_amount_lbl = Instance.new("TextLabel")
+    es_amount_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    es_amount_lbl.BackgroundTransparency = 1
+    es_amount_lbl.Text = "Amount Enchant Stone"
+    es_amount_lbl.TextColor3 = TEXT_COLOR
+    es_amount_lbl.TextSize = 9
+    es_amount_lbl.FontFace = font_bold
+    es_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    es_amount_lbl.Parent = es_amount_row
+
+    es_qty_box = Instance.new("TextBox")
+    es_qty_box.Size = UDim2.new(0.55, 0, 1, 0)
+    es_qty_box.Position = UDim2.new(0.45, 0, 0, 0)
+    es_qty_box.BackgroundColor3 = INPUT_BG_COLOR
+    es_qty_box.Text = tostring(config.quantity)
+    es_qty_box.TextColor3 = TEXT_COLOR
+    es_qty_box.TextSize = 9
+    es_qty_box.FontFace = font_face
+    es_qty_box.TextXAlignment = Enum.TextXAlignment.Center
+    es_qty_box.ClearTextOnFocus = false
+    es_qty_box.Parent = es_amount_row
+
+    local es_qty_c = Instance.new("UICorner")
+    es_qty_c.CornerRadius = UDim.new(0, 4)
+    es_qty_c.Parent = es_qty_box
+
+    local es_qty_stroke = Instance.new("UIStroke")
+    es_qty_stroke.Color = Color3.fromRGB(45, 45, 45)
+    es_qty_stroke.Thickness = 1
+    es_qty_stroke.Parent = es_qty_box
+
+    es_qty_box.FocusLost:Connect(function()
+        local text = es_qty_box.Text
+        local val = (text == "") and 0 or (tonumber(text) or config.quantity)
+        task.defer(function()
+            sync_qty_boxes(val)
+        end)
+    end)
+
+    local es_refresh = Instance.new("TextButton")
+    es_refresh.Name = "4_RefreshButton"
+    es_refresh.LayoutOrder = 4
+    es_refresh.Size = UDim2.new(1, 0, 0, 26)
+    es_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    es_refresh.Text = "Check Enchant Stones"
+    es_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
+    es_refresh.TextSize = 9
+    es_refresh.FontFace = font_bold
+    es_refresh.Active = true
+    es_refresh.Parent = enchant_content
+
+    local es_refresh_c = Instance.new("UICorner")
+    es_refresh_c.CornerRadius = UDim.new(0, 5)
+    es_refresh_c.Parent = es_refresh
+
+    es_refresh.MouseEnter:Connect(function()
+        es_refresh.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+    end)
+    es_refresh.MouseLeave:Connect(function()
+        es_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    end)
+
+    es_refresh.MouseButton1Click:Connect(function()
+        es_refresh.Text = "Enchant Stones Checked!"
+        cache.loaded_enchants = get_owned_enchant_options()
+        if enchant_panel.Visible then
+            populate_enchants_panel(enchant_dropdown_btn)
+        end
+
+        local counts = get_inventory_enchants(true)
+        local status_lines = { "Inventory:" }
+        local sorted_names = {}
+        for name, _ in pairs(counts) do
+            table_insert(sorted_names, name)
+        end
+        table_sort(sorted_names)
+
+        for _, name in ipairs(sorted_names) do
+            local qty = counts[name]
+            local short_name = string.gsub(name, "%s*Enchant%s*Stone", "")
+            if short_name == "" then
+                short_name = "Enchant Stone"
+            end
+            table_insert(status_lines, short_name .. " x" .. qty)
+        end
+
+        cache.enchant_status_text = table.concat(status_lines, "\n")
+        cache.enchant_status_details = ""
+        if enchant_status_val_lbl then
+            enchant_status_val_lbl.Text = cache.enchant_status_text
+        end
+
+        task_wait(1)
+        es_refresh.Text = "Check Enchant Stones"
+    end)
+
+    enchant_toggle_ctrl = create_toggle(enchant_content, "Start Trade EnchantStone", (config.enabled and config.trade_enchants_enabled), function(active)
+        if active then
+            cache.stats.enchant.success_trades = 0
+            cache.stats.enchant.last_items = 0
+            cache.stats.enchant.total_items = 0
+            cache.stats.enchant.attempts = 0
+            cache.stats.enchant.failed = 0
+            update_mode_status("enchant")
+
+            config.trade_enchants_enabled = true
+            config.enabled = true
+            sync_mode_toggles("enchant")
+            cache.processed_trades = {}
+            run_auto_trade_loop()
+        else
+            config.enabled = false
+            cache.enchant_status_text = "Idle"
+            cache.enchant_status_details = ""
+            decline_active_trade()
+        end
+    end)
+    enchant_toggle_ctrl.Frame.LayoutOrder = 5
+    enchant_toggle_ctrl.Frame.Name = "5_StartTradeToggle"
+
+    local rarity_content, rarity_toggle = create_accordion(settings_panel, "Trade By Rarity")
+    local rarity_status_box = Instance.new("Frame")
+    rarity_status_box.Name = "1_StatusBox"
+    rarity_status_box.LayoutOrder = 1
+    rarity_status_box.Size = UDim2.new(1, 0, 0, 58)
+    rarity_status_box.AutomaticSize = Enum.AutomaticSize.Y
+    rarity_status_box.BackgroundColor3 = CARD_COLOR
+    rarity_status_box.BackgroundTransparency = 0.3
+    rarity_status_box.BorderSizePixel = 0
+    rarity_status_box.Parent = rarity_content
+
+    local rarity_status_box_pad = Instance.new("UIPadding")
+    rarity_status_box_pad.PaddingBottom = UDim.new(0, 6)
+    rarity_status_box_pad.PaddingRight = UDim.new(0, 10)
+    rarity_status_box_pad.Parent = rarity_status_box
+
+    local rarity_status_box_c = Instance.new("UICorner")
+    rarity_status_box_c.CornerRadius = UDim.new(0, 6)
+    rarity_status_box_c.Parent = rarity_status_box
+
+    local rarity_status_box_stroke = Instance.new("UIStroke")
+    rarity_status_box_stroke.Color = Color3.fromRGB(35, 35, 35)
+    rarity_status_box_stroke.Thickness = 1
+    rarity_status_box_stroke.Parent = rarity_status_box
+
+    local rarity_status_title = Instance.new("TextLabel")
+    rarity_status_title.Size = UDim2.new(1, -10, 0, 16)
+    rarity_status_title.Position = UDim2.new(0, 10, 0, 6)
+    rarity_status_title.BackgroundTransparency = 1
+    rarity_status_title.Text = "Status"
+    rarity_status_title.TextColor3 = ACCENT_COLOR
+    rarity_status_title.TextSize = 9
+    rarity_status_title.FontFace = font_bold
+    rarity_status_title.TextXAlignment = Enum.TextXAlignment.Left
+    rarity_status_title.Parent = rarity_status_box
+
+    rarity_status_val_lbl = Instance.new("TextLabel")
+    rarity_status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
+    rarity_status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
+    rarity_status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
+    rarity_status_val_lbl.BackgroundTransparency = 1
+    rarity_status_val_lbl.Text = "Idle"
+    rarity_status_val_lbl.TextColor3 = TEXT_COLOR
+    rarity_status_val_lbl.TextSize = 9
+    rarity_status_val_lbl.FontFace = font_face
+    rarity_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    rarity_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
+    rarity_status_val_lbl.TextWrapped = true
+    rarity_status_val_lbl.Parent = rarity_status_box
+
+    local r_row = Instance.new("Frame")
+    r_row.Name = "2_RarityRow"
+    r_row.LayoutOrder = 2
+    r_row.Size = UDim2.new(1, 0, 0, 22)
+    r_row.BackgroundTransparency = 1
+    r_row.Active = false
+    r_row.Parent = rarity_content
+
+    local r_lbl = Instance.new("TextLabel")
+    r_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    r_lbl.BackgroundTransparency = 1
+    r_lbl.Text = "Select Rarity"
+    r_lbl.TextColor3 = TEXT_COLOR
+    r_lbl.TextSize = 9
+    r_lbl.FontFace = font_bold
+    r_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    r_lbl.Parent = r_row
+
+    rarity_dropdown_btn = Instance.new("TextButton")
+    rarity_dropdown_btn.Size = UDim2.new(0.55, 0, 1, 0)
+    rarity_dropdown_btn.Position = UDim2.new(0.45, 0, 0, 0)
+    rarity_dropdown_btn.BackgroundColor3 = INPUT_BG_COLOR
+
+    local function get_rarity_dropdown_text()
+        if not config.selected_tiers or #config.selected_tiers == 0 then
+            return "Select Option"
+        elseif #config.selected_tiers == 1 then
+            return tostring(config.selected_tiers[1])
+        else
+            return tostring(#config.selected_tiers) .. " selected"
+        end
+    end
+
+    rarity_dropdown_btn.Text = get_rarity_dropdown_text()
+    rarity_dropdown_btn.TextColor3 = TEXT_COLOR
+    rarity_dropdown_btn.TextSize = 9
+    rarity_dropdown_btn.FontFace = font_face
+    rarity_dropdown_btn.TextXAlignment = Enum.TextXAlignment.Left
+    rarity_dropdown_btn.Active = true
+    rarity_dropdown_btn.Parent = r_row
+
+    local rarity_dropdown_c = Instance.new("UICorner")
+    rarity_dropdown_c.CornerRadius = UDim.new(0, 4)
+    rarity_dropdown_c.Parent = rarity_dropdown_btn
+
+    local rarity_dropdown_stroke = Instance.new("UIStroke")
+    rarity_dropdown_stroke.Color = Color3.fromRGB(45, 45, 45)
+    rarity_dropdown_stroke.Thickness = 1
+    rarity_dropdown_stroke.Parent = rarity_dropdown_btn
+
+    local rarity_dropdown_pad = Instance.new("UIPadding")
+    rarity_dropdown_pad.PaddingLeft = UDim.new(0, 8)
+    rarity_dropdown_pad.PaddingRight = UDim.new(0, 8)
+    rarity_dropdown_pad.Parent = rarity_dropdown_btn
+
+    local rarity_chevron = Instance.new("TextLabel")
+    rarity_chevron.Size = UDim2.new(0, 20, 1, 0)
+    rarity_chevron.Position = UDim2.new(1, -12, 0, 0)
+    rarity_chevron.BackgroundTransparency = 1
+    rarity_chevron.Text = "♦"
+    rarity_chevron.TextColor3 = Color3.fromRGB(192, 0, 192)
+    rarity_chevron.TextSize = 8
+    rarity_chevron.FontFace = font_face
+    rarity_chevron.TextXAlignment = Enum.TextXAlignment.Right
+    rarity_chevron.Parent = rarity_dropdown_btn
+
+    rarity_dropdown_btn.Activated:Connect(function()
+        item_panel.Visible = false
+        enchant_panel.Visible = false
+        rarity_panel.Visible = not rarity_panel.Visible
+        close_detector.Visible = rarity_panel.Visible
+        if rarity_panel.Visible then
+            populate_rarity_panel(rarity_dropdown_btn)
+        end
+    end)
+
+    local r_amount_row = Instance.new("Frame")
+    r_amount_row.Name = "3_AmountRow"
+    r_amount_row.LayoutOrder = 3
+    r_amount_row.Size = UDim2.new(1, 0, 0, 22)
+    r_amount_row.BackgroundTransparency = 1
+    r_amount_row.Active = false
+    r_amount_row.Parent = rarity_content
+
+    local r_amount_lbl = Instance.new("TextLabel")
+    r_amount_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    r_amount_lbl.BackgroundTransparency = 1
+    r_amount_lbl.Text = "Amount Fish Rarity"
+    r_amount_lbl.TextColor3 = TEXT_COLOR
+    r_amount_lbl.TextSize = 9
+    r_amount_lbl.FontFace = font_bold
+    r_amount_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    r_amount_lbl.Parent = r_amount_row
+
+    r_qty_box = Instance.new("TextBox")
+    r_qty_box.Size = UDim2.new(0.55, 0, 1, 0)
+    r_qty_box.Position = UDim2.new(0.45, 0, 0, 0)
+    r_qty_box.BackgroundColor3 = INPUT_BG_COLOR
+    r_qty_box.Text = tostring(config.quantity)
+    r_qty_box.TextColor3 = TEXT_COLOR
+    r_qty_box.TextSize = 9
+    r_qty_box.FontFace = font_face
+    r_qty_box.TextXAlignment = Enum.TextXAlignment.Center
+    r_qty_box.ClearTextOnFocus = false
+    r_qty_box.Parent = r_amount_row
+
+    local r_qty_c = Instance.new("UICorner")
+    r_qty_c.CornerRadius = UDim.new(0, 4)
+    r_qty_c.Parent = r_qty_box
+
+    local r_qty_stroke = Instance.new("UIStroke")
+    r_qty_stroke.Color = Color3.fromRGB(45, 45, 45)
+    r_qty_stroke.Thickness = 1
+    r_qty_stroke.Parent = r_qty_box
+
+    r_qty_box.FocusLost:Connect(function()
+        local text = r_qty_box.Text
+        local val = (text == "") and 0 or (tonumber(text) or config.quantity)
+        task.defer(function()
+            sync_qty_boxes(val)
+        end)
+    end)
+
+    local r_refresh = Instance.new("TextButton")
+    r_refresh.Name = "4_RefreshButton"
+    r_refresh.LayoutOrder = 4
+    r_refresh.Size = UDim2.new(1, 0, 0, 26)
+    r_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    r_refresh.Text = "Refresh Fish Rarity"
+    r_refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
+    r_refresh.TextSize = 9
+    r_refresh.FontFace = font_bold
+    r_refresh.Active = true
+    r_refresh.Parent = rarity_content
+
+    local r_refresh_c = Instance.new("UICorner")
+    r_refresh_c.CornerRadius = UDim.new(0, 5)
+    r_refresh_c.Parent = r_refresh
+
+    r_refresh.MouseEnter:Connect(function()
+        r_refresh.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+    end)
+    r_refresh.MouseLeave:Connect(function()
+        r_refresh.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    end)
+
+    r_refresh.MouseButton1Click:Connect(function()
+        r_refresh.Text = "Rarity Fish Refreshed!"
+        task_wait(1)
+        r_refresh.Text = "Refresh Fish Rarity"
+    end)
+
+    rarity_toggle_ctrl = create_toggle(rarity_content, "Start Trade ByRarity", (config.enabled and config.trade_rarity_enabled), function(active)
+        if active then
+            cache.stats.rarity.success_trades = 0
+            cache.stats.rarity.last_items = 0
+            cache.stats.rarity.total_items = 0
+            cache.stats.rarity.attempts = 0
+            cache.stats.rarity.failed = 0
+            update_mode_status("rarity")
+
+            config.trade_rarity_enabled = true
+            config.enabled = true
+            sync_mode_toggles("rarity")
+            cache.processed_trades = {}
+            run_auto_trade_loop()
+        else
+            config.enabled = false
+            cache.rarity_status_text = "Idle"
+            cache.rarity_status_details = ""
+            decline_active_trade()
+        end
+    end)
+    rarity_toggle_ctrl.Frame.LayoutOrder = 5
+    rarity_toggle_ctrl.Frame.Name = "5_StartTradeToggle"
+
+    rarity_fav_toggle = create_toggle(rarity_content, "Trade Favorite Items", config.trade_favorited, function(active)
+        sync_fav_toggles(active)
+    end)
+    rarity_fav_toggle.Frame.LayoutOrder = 6
+    rarity_fav_toggle.Frame.Name = "6_FavToggle"
+
+    local coin_content, coin_toggle = create_accordion(settings_panel, "Trade By Coin")
+    local coin_status_box = Instance.new("Frame")
+    coin_status_box.Name = "1_StatusBox"
+    coin_status_box.LayoutOrder = 1
+    coin_status_box.Size = UDim2.new(1, 0, 0, 58)
+    coin_status_box.AutomaticSize = Enum.AutomaticSize.Y
+    coin_status_box.BackgroundColor3 = CARD_COLOR
+    coin_status_box.BackgroundTransparency = 0.3
+    coin_status_box.BorderSizePixel = 0
+    coin_status_box.Parent = coin_content
+
+    local coin_status_box_pad = Instance.new("UIPadding")
+    coin_status_box_pad.PaddingBottom = UDim.new(0, 6)
+    coin_status_box_pad.PaddingRight = UDim.new(0, 10)
+    coin_status_box_pad.Parent = coin_status_box
+
+    local coin_status_box_c = Instance.new("UICorner")
+    coin_status_box_c.CornerRadius = UDim.new(0, 6)
+    coin_status_box_c.Parent = coin_status_box
+
+    local coin_status_box_stroke = Instance.new("UIStroke")
+    coin_status_box_stroke.Color = Color3.fromRGB(35, 35, 35)
+    coin_status_box_stroke.Thickness = 1
+    coin_status_box_stroke.Parent = coin_status_box
+
+    local coin_status_title = Instance.new("TextLabel")
+    coin_status_title.Size = UDim2.new(1, -10, 0, 16)
+    coin_status_title.Position = UDim2.new(0, 10, 0, 6)
+    coin_status_title.BackgroundTransparency = 1
+    coin_status_title.Text = "Status"
+    coin_status_title.TextColor3 = ACCENT_COLOR
+    coin_status_title.TextSize = 9
+    coin_status_title.FontFace = font_bold
+    coin_status_title.TextXAlignment = Enum.TextXAlignment.Left
+    coin_status_title.Parent = coin_status_box
+
+    coin_status_val_lbl = Instance.new("TextLabel")
+    coin_status_val_lbl.Size = UDim2.new(1, -20, 0, 30)
+    coin_status_val_lbl.Position = UDim2.new(0, 10, 0, 22)
+    coin_status_val_lbl.AutomaticSize = Enum.AutomaticSize.Y
+    coin_status_val_lbl.BackgroundTransparency = 1
+    coin_status_val_lbl.Text = "Idle"
+    coin_status_val_lbl.TextColor3 = TEXT_COLOR
+    coin_status_val_lbl.TextSize = 9
+    coin_status_val_lbl.FontFace = font_face
+    coin_status_val_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    coin_status_val_lbl.TextYAlignment = Enum.TextYAlignment.Top
+    coin_status_val_lbl.TextWrapped = true
+    coin_status_val_lbl.Parent = coin_status_box
+
+    local coin_row = Instance.new("Frame")
+    coin_row.Name = "2_CoinRow"
+    coin_row.LayoutOrder = 2
+    coin_row.Size = UDim2.new(1, 0, 0, 22)
+    coin_row.BackgroundTransparency = 1
+    coin_row.Active = false
+    coin_row.Parent = coin_content
+
+    local coin_lbl = Instance.new("TextLabel")
+    coin_lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    coin_lbl.BackgroundTransparency = 1
+    coin_lbl.Text = "Target Coins"
+    coin_lbl.TextColor3 = TEXT_COLOR
+    coin_lbl.TextSize = 9
+    coin_lbl.FontFace = font_bold
+    coin_lbl.TextXAlignment = Enum.TextXAlignment.Left
+    coin_lbl.Parent = coin_row
+
+    local coin_box = Instance.new("TextBox")
+    coin_box.Size = UDim2.new(0.55, 0, 1, 0)
+    coin_box.Position = UDim2.new(0.45, 0, 0, 0)
+    coin_box.BackgroundColor3 = INPUT_BG_COLOR
+    coin_box.Text = tostring(config.target_coin_amount)
+    coin_box.TextColor3 = TEXT_COLOR
+    coin_box.TextSize = 9
+    coin_box.FontFace = font_face
+    coin_box.TextXAlignment = Enum.TextXAlignment.Center
+    coin_box.ClearTextOnFocus = false
+    coin_box.Parent = coin_row
+
+    local coin_box_c = Instance.new("UICorner")
+    coin_box_c.CornerRadius = UDim.new(0, 4)
+    coin_box_c.Parent = coin_box
+
+    local coin_box_stroke = Instance.new("UIStroke")
+    coin_box_stroke.Color = Color3.fromRGB(45, 45, 45)
+    coin_box_stroke.Thickness = 1
+    coin_box_stroke.Parent = coin_box
+
+    coin_box.FocusLost:Connect(function()
+        local text = coin_box.Text
+        local val = (text == "") and 0 or (tonumber(text) or config.target_coin_amount)
+        config.target_coin_amount = val
+        config.trade_coins_enabled = val > 0
+        save_config()
+        task.defer(function()
+            coin_box.Text = tostring(val)
+        end)
+    end)
+
+    coin_toggle_ctrl = create_toggle(coin_content, "Start Trade ByCoin", (config.enabled and config.trade_coins_enabled), function(active)
+        if active then
+            cache.stats.coin.success_trades = 0
+            cache.stats.coin.last_items = 0
+            cache.stats.coin.total_items = 0
+            cache.stats.coin.attempts = 0
+            cache.stats.coin.failed = 0
+            update_mode_status("coin")
+
+            config.trade_coins_enabled = true
+            config.enabled = true
+            sync_mode_toggles("coin")
+            cache.processed_trades = {}
+            run_auto_trade_loop()
+        else
+            config.enabled = false
+            cache.coin_status_text = "Idle"
+            cache.coin_status_details = ""
+            decline_active_trade()
+        end
+    end)
+    coin_toggle_ctrl.Frame.LayoutOrder = 3
+    coin_toggle_ctrl.Frame.Name = "3_StartTradeToggle"
+
+    coin_fav_toggle = create_toggle(coin_content, "Trade Favorite Items", config.trade_favorited, function(active)
+        sync_fav_toggles(active)
+    end)
+    coin_fav_toggle.Frame.LayoutOrder = 4
+    coin_fav_toggle.Frame.Name = "4_FavToggle"
+
+    local coin_reset = Instance.new("TextButton")
+    coin_reset.Name = "5_ResetStatsButton"
+    coin_reset.LayoutOrder = 5
+    coin_reset.Size = UDim2.new(1, 0, 0, 26)
+    coin_reset.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    coin_reset.Text = "Reset Stats By Coin"
+    coin_reset.TextColor3 = Color3.fromRGB(255, 255, 255)
+    coin_reset.TextSize = 9
+    coin_reset.FontFace = font_bold
+    coin_reset.Active = true
+    coin_reset.Parent = coin_content
+
+    local coin_reset_c = Instance.new("UICorner")
+    coin_reset_c.CornerRadius = UDim.new(0, 5)
+    coin_reset_c.Parent = coin_reset
+
+    coin_reset.MouseEnter:Connect(function()
+        coin_reset.BackgroundColor3 = Color3.fromRGB(240, 50, 240)
+    end)
+    coin_reset.MouseLeave:Connect(function()
+        coin_reset.BackgroundColor3 = Color3.fromRGB(192, 0, 192)
+    end)
+
+    coin_reset.Activated:Connect(function()
+        coin_reset.Text = "Stats Reset!"
+        cache.processed_trades = {}
+        task_wait(1)
+        coin_reset.Text = "Reset Stats By Coin"
+    end)
+
+    local auto_accept_content, auto_accept_toggle = create_accordion(settings_panel, "Auto Accept Trade")
+    auto_accept_toggle_ctrl = create_toggle(auto_accept_content, "Enable Auto Accept", config.auto_accept_enabled, function(state)
         toggle_auto_accept(state)
+        save_config()
     end)
 
-    content_scroll.CanvasSize = UDim2.new(0, 0, 0, content_layout.AbsoluteContentSize.Y + 20)
-    content_layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        content_scroll.CanvasSize = UDim2.new(0, 0, 0, content_layout.AbsoluteContentSize.Y + 20)
+    settings_panel.CanvasSize = UDim2.new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
+    settings_layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        settings_panel.CanvasSize = UDim2.new(0, 0, 0, settings_layout.AbsoluteContentSize.Y + 20)
     end)
 
     task_spawn(function()
-        while gui.Parent and _G.NoirHub_AutoTrade_ScriptID == script_id do
-            for _, mode in ipairs({"fish", "rarity", "enchant", "coin"}) do
-                update_status_ui(mode)
-                local flag_name = mode_flag_map[mode]
-                if toggle_ctrls[mode] and flag_name then
-                    toggle_ctrls[mode].set_state(config.enabled and config[flag_name])
+        while gui.Parent do
+
+            if sb_status then
+                local active_text = "Idle"
+                if config.enabled then
+                    if config.trade_fish_enabled and cache.fish_status_text ~= "Idle" then
+                        active_text = cache.fish_status_text
+                    elseif config.trade_enchants_enabled and cache.enchant_status_text ~= "Idle" then
+                        active_text = cache.enchant_status_text
+                    elseif config.trade_coins_enabled and cache.coin_status_text ~= "Idle" then
+                        active_text = cache.coin_status_text
+                    elseif config.trade_rarity_enabled and cache.rarity_status_text ~= "Idle" then
+                        active_text = cache.rarity_status_text
+                    else
+                        active_text = "Active"
+                    end
+                end
+                sb_status.Text = "Status:\n" .. active_text
+            end
+
+            if status_val_lbl then
+                if cache.fish_status_details == "" then
+                    status_val_lbl.Text = cache.fish_status_text
+                else
+                    status_val_lbl.Text = cache.fish_status_text .. "\n" .. cache.fish_status_details
                 end
             end
+            if enchant_status_val_lbl then
+                if cache.enchant_status_details == "" then
+                    enchant_status_val_lbl.Text = cache.enchant_status_text
+                else
+                    enchant_status_val_lbl.Text = cache.enchant_status_text .. "\n" .. cache.enchant_status_details
+                end
+            end
+            if coin_status_val_lbl then
+                if cache.coin_status_details == "" then
+                    coin_status_val_lbl.Text = cache.coin_status_text
+                else
+                    coin_status_val_lbl.Text = cache.coin_status_text .. "\n" .. cache.coin_status_details
+                end
+            end
+            if rarity_status_val_lbl then
+                if cache.rarity_status_details == "" then
+                    rarity_status_val_lbl.Text = cache.rarity_status_text
+                else
+                    rarity_status_val_lbl.Text = cache.rarity_status_text .. "\n" .. cache.rarity_status_details
+                end
+            end
+
+            if auto_accept_toggle_ctrl then
+                auto_accept_toggle_ctrl.set_state(config.auto_accept_enabled)
+            end
+            if byname_toggle_ctrl then
+                byname_toggle_ctrl.set_state(config.enabled and config.trade_fish_enabled)
+            end
+            if enchant_toggle_ctrl then
+                enchant_toggle_ctrl.set_state(config.enabled and config.trade_enchants_enabled)
+            end
+            if coin_toggle_ctrl then
+                coin_toggle_ctrl.set_state(config.enabled and config.trade_coins_enabled)
+            end
+            if rarity_toggle_ctrl then
+                rarity_toggle_ctrl.set_state(config.enabled and config.trade_rarity_enabled)
+            end
+
             task_wait(0.5)
         end
     end)
 end
 
-pcall(create_ui)
+local success, err = pcall(create_ui)
+if not success then
+    local err_msg = "UI Creation Error: " .. tostring(err)
+    warn(err_msg)
+    log_debug(err_msg)
+end
+pcall(log_inventory_fish)
 pcall(function() toggle_auto_accept(config.auto_accept_enabled) end)
 
 _G.NoirHub_AutoTrade_Cleanup = function()
-    config.enabled = false
-    config.trade_fish_enabled = false
-    config.trade_enchants_enabled = false
-    config.trade_rarity_enabled = false
-    config.trade_coins_enabled = false
-    config.auto_accept_enabled = false
+    if trade_ended_conn then pcall(function() trade_ended_conn:Disconnect() end); trade_ended_conn = nil end
+    pcall(function() toggle_auto_accept(false) end)
+
     _G.NoirHub_AutoTrade_ScriptID = nil
-    if float_drag_conn then pcall(function() float_drag_conn:Disconnect() end); float_drag_conn = nil end
-    if header_drag_conn then pcall(function() header_drag_conn:Disconnect() end); header_drag_conn = nil end
-    if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
-    if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
+
     pcall(function()
-        local core = gethui and pcall(gethui) and gethui() or game:GetService("CoreGui")
+        local core = gethui and gethui() or game:GetService("CoreGui")
         local old = core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
         if old then old:Destroy() end
     end)
@@ -1934,7 +4574,6 @@ _G.NoirHub_AutoTrade_Cleanup = function()
         local old = pgui and (pgui:FindFirstChild("NoirHub_AutoTrade") or pgui:FindFirstChild("AutoTrade"))
         if old then old:Destroy() end
     end)
-    if trade_offer_controller and original_popup then
-        trade_offer_controller.PopUp = original_popup
-    end
 end
+
+print("AutoTrade UI and engine initialized successfully!")
