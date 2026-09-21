@@ -596,21 +596,13 @@ pcall(function()
                 if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
                     -- Bypass GUI: Jangan pernah munculkan popup GUI di layar
                     if requester then
-                        if local_player:GetAttribute("IsTrading") or auto_accept_active then
-                            -- Sedang ada trade aktif dengan akun lain: tolak offer baru agar sesi trade saat ini tidak terputus
-                            pcall(function()
-                                if trade_offer_controller and trade_offer_controller.DeclineTrade then
-                                    trade_offer_controller:DeclineTrade(requester)
-                                elseif trade_remotes and trade_remotes.DeclineTradeOffer then
-                                    trade_remotes.DeclineTradeOffer:InvokeServer(requester)
-                                end
-                            end)
-                        else
-                            -- Tidak sedang trading: terima trade offer
-                            pcall(function()
-                                trade_offer_controller:AcceptTrade(requester)
-                            end)
+                        if local_player:GetAttribute("IsTrading") then
+                            -- Sedang ada trade aktif: abaikan offer baru agar sesi saat ini tidak terganggu
+                            return
                         end
+                        pcall(function()
+                            trade_offer_controller:AcceptTrade(requester)
+                        end)
                     end
                     return -- Hentikan pembuatan popup UI di PlayerGui
                 end
@@ -634,7 +626,35 @@ local function close_trading_gui()
     -- Bypass GUI: We don't touch PlayerGui to avoid triggering BAC
 end
 
-local auto_accept_active = false
+local receiver_loop_running = false
+local function start_receiver_trade_loop()
+    if receiver_loop_running or not config.auto_accept_enabled or not local_player:GetAttribute("IsTrading") then return end
+    if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
+
+    receiver_loop_running = true
+    task_spawn(function()
+        task_wait(5)
+        local start_t = tick()
+        while config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") do
+            if (tick() - start_t) > 90 then
+                pcall(function()
+                    if trade_remotes.CancelTrade then trade_remotes.CancelTrade:InvokeServer() end
+                end)
+                break
+            end
+
+            pcall(function()
+                if trade_remotes.SetReady then trade_remotes.SetReady:InvokeServer(true) end
+                if trade_remotes.ConfirmTrade then trade_remotes.ConfirmTrade:InvokeServer() end
+            end)
+
+            task_wait(0.25)
+        end
+        receiver_loop_running = false
+        close_trading_gui()
+    end)
+end
+
 local function toggle_auto_accept(enable)
     if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
@@ -642,13 +662,13 @@ local function toggle_auto_accept(enable)
     if auto_accept_attr_conn then pcall(function() auto_accept_attr_conn:Disconnect() end); auto_accept_attr_conn = nil end
 
     config.auto_accept_enabled = enable
-    auto_accept_active = false
+    receiver_loop_running = false
     save_config()
     if not trade_remotes or not enable then return end
 
     local function on_trade_end()
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-        auto_accept_active = false
+        receiver_loop_running = false
         close_trading_gui()
     end
 
@@ -660,7 +680,9 @@ local function toggle_auto_accept(enable)
     end
     pcall(function()
         auto_accept_attr_conn = local_player:GetAttributeChangedSignal("IsTrading"):Connect(function()
-            if not local_player:GetAttribute("IsTrading") then
+            if local_player:GetAttribute("IsTrading") then
+                start_receiver_trade_loop()
+            else
                 on_trade_end()
             end
         end)
@@ -668,30 +690,12 @@ local function toggle_auto_accept(enable)
 
     if trade_remotes.TradeStarted then
         auto_accept_trade_started_conn = trade_remotes.TradeStarted.OnClientEvent:Connect(function()
-            if not config.auto_accept_enabled or _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
-            auto_accept_active = true
-            task_spawn(function()
-                task_wait(5)
-                if not auto_accept_active or not local_player:GetAttribute("IsTrading") then return end
-                pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
-                local start_t = tick()
-                while config.auto_accept_enabled and auto_accept_active and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") do
-                    if (tick() - start_t) > 90 then
-                        pcall(function()
-                            if trade_remotes.CancelTrade then trade_remotes.CancelTrade:InvokeServer() end
-                        end)
-                        break
-                    end
-                    pcall(function()
-                        trade_remotes.SetReady:InvokeServer(true)
-                        trade_remotes.ConfirmTrade:InvokeServer()
-                    end)
-                    task_wait(0.25)
-                end
-                auto_accept_active = false
-                close_trading_gui()
-            end)
+            start_receiver_trade_loop()
         end)
+    end
+
+    if local_player:GetAttribute("IsTrading") then
+        start_receiver_trade_loop()
     end
 end
 
