@@ -28,6 +28,21 @@ task_spawn(function()
         end
     end)
 end)
+
+-- Clean AdBlock (Metamethod Hook) for TRADE OFFER EXPIRED
+task_spawn(function()
+    pcall(function()
+        if hookmetamethod then
+            local old_newindex
+            old_newindex = hookmetamethod(game, "__newindex", function(t, k, v)
+                if k == "Text" and type(v) == "string" and string_find(string_upper(v), "TRADE OFFER EXPIRED") then
+                    return old_newindex(t, k, "")
+                end
+                return old_newindex(t, k, v)
+            end)
+        end
+    end)
+end)
 local variants_folder = replicated_storage:FindFirstChild("Variants")
 
 local variables = {
@@ -620,13 +635,22 @@ pcall(function()
             trade_offer_controller.PopUp = function(...)
                 local args = {...}
                 if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
-                    if local_player:GetAttribute("IsTrading") or (tick() - receiver_accept_lock) < 3 then 
+                    if local_player:GetAttribute("IsTrading") or cache.receiver_is_accepting_trade then 
                         return 
                     end 
-                    receiver_accept_lock = tick()
-                    for _, arg in ipairs(args) do
-                        accept_trade_from(arg)
-                    end
+                    cache.receiver_is_accepting_trade = true
+                    task_spawn(function()
+                        for _, arg in ipairs(args) do
+                            pcall(function() accept_trade_from(arg) end)
+                        end
+                        local wait_start = tick()
+                        while not local_player:GetAttribute("IsTrading") and (tick() - wait_start) < 15 do
+                            task_wait(0.2)
+                        end
+                        if not local_player:GetAttribute("IsTrading") then
+                            cache.receiver_is_accepting_trade = false
+                        end
+                    end)
                     return 
                 end
                 return original_popup(...)
@@ -825,7 +849,7 @@ local function start_trade_session(target_player, mode)
     
 
     local start_t = tick()
-    while not local_player:GetAttribute("IsTrading") and (tick() - start_t) < 10 do
+    while not local_player:GetAttribute("IsTrading") and (tick() - start_t) < 20 do
         task_wait(0.1)
     end
     if not local_player:GetAttribute("IsTrading") then
