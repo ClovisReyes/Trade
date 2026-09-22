@@ -897,8 +897,8 @@ local function collect_trade_items(mode)
                     local d = item_utility:GetItemData(item.Id)
                     if d and d.Data and d.Data.Type == "Enchant Stones" then
                         local name = d.Data.Name
-                        local match = #config.selected_items == 0 or table_find(config.selected_items, "All") ~= nil
-                        if not match then
+                        local match = false
+                        if #config.selected_items > 0 and config.selected_items[1] ~= "All" then
                             for _, sel in ipairs(config.selected_items) do
                                 if string_lower(name) == string_lower(strip_quantity(sel)) then match = true; break end
                             end
@@ -1212,7 +1212,7 @@ local function create_ui()
     title_lbl.BackgroundTransparency = 1
     title_lbl.Text = "NØIR Hub"
     title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title_lbl.TextSize = 10
+    title_lbl.TextSize = 13
     title_lbl.FontFace = font_bold
     title_lbl.TextXAlignment = Enum.TextXAlignment.Left
     title_lbl.ZIndex = 3
@@ -1225,7 +1225,7 @@ local function create_ui()
     min_btn.BackgroundTransparency = 1
     min_btn.Text = "-"
     min_btn.TextColor3 = MUTED_COLOR
-    min_btn.TextSize = 14
+    min_btn.TextSize = 16
     min_btn.Font = Enum.Font.SourceSansBold
     min_btn.ZIndex = 3
     min_btn.Parent = header
@@ -1244,7 +1244,7 @@ local function create_ui()
     restore_btn.BackgroundTransparency = 1
     restore_btn.Text = "[]"
     restore_btn.TextColor3 = MUTED_COLOR
-    restore_btn.TextSize = 10
+    restore_btn.TextSize = 13
     restore_btn.Font = Enum.Font.SourceSansBold
     restore_btn.ZIndex = 3
     restore_btn.Parent = header
@@ -1278,7 +1278,7 @@ local function create_ui()
     close_btn.BackgroundTransparency = 1
     close_btn.Text = "X"
     close_btn.TextColor3 = MUTED_COLOR
-    close_btn.TextSize = 12
+    close_btn.TextSize = 14
     close_btn.Font = Enum.Font.SourceSansBold
     close_btn.ZIndex = 3
     close_btn.Parent = header
@@ -1347,7 +1347,7 @@ local function create_ui()
         search.PlaceholderText = "Search..."
         search.PlaceholderColor3 = MUTED_COLOR
         search.TextColor3 = TEXT_COLOR
-        search.TextSize = 9
+        search.TextSize = 12
         search.FontFace = font_face
         search.TextXAlignment = Enum.TextXAlignment.Center
         search.ClearTextOnFocus = false
@@ -1398,7 +1398,7 @@ local function create_ui()
                 lbl.BackgroundTransparency = 1
                 lbl.Text = opt
                 lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
-                lbl.TextSize = 9
+                lbl.TextSize = 12
                 lbl.FontFace = font_face
                 lbl.TextXAlignment = Enum.TextXAlignment.Left
                 lbl.ZIndex = 13
@@ -1448,7 +1448,7 @@ local function create_ui()
     ply_refresh.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
     ply_refresh.Text = "Refresh"
     ply_refresh.TextColor3 = Color3.fromRGB(20, 20, 20)
-    ply_refresh.TextSize = 9
+    ply_refresh.TextSize = 12
     ply_refresh.FontFace = font_bold
     ply_refresh.ZIndex = 10
     ply_refresh.Parent = player_panel
@@ -1460,7 +1460,7 @@ local function create_ui()
     target_lbl.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     target_lbl.Text = config.trade_with ~= "" and config.trade_with or "None"
     target_lbl.TextColor3 = ACCENT_COLOR
-    target_lbl.TextSize = 9
+    target_lbl.TextSize = 12
     target_lbl.FontFace = font_bold
     target_lbl.ZIndex = 10
     target_lbl.Parent = player_panel
@@ -1487,7 +1487,7 @@ local function create_ui()
             btn.BackgroundTransparency = is_selected and 0 or 1
             btn.Text = "  " .. name
             btn.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
-            btn.TextSize = 9
+            btn.TextSize = 12
             btn.FontFace = font_face
             btn.TextXAlignment = Enum.TextXAlignment.Left
             btn.ZIndex = 12
@@ -1528,7 +1528,7 @@ local function create_ui()
         lbl.BackgroundTransparency = 1
         lbl.Text = label_text
         lbl.TextColor3 = TEXT_COLOR
-        lbl.TextSize = 9
+        lbl.TextSize = 12
         lbl.FontFace = font_bold
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.ZIndex = 4
@@ -1586,7 +1586,7 @@ local function create_ui()
         head.BackgroundTransparency = 1
         head.Text = "  " .. title_text
         head.TextColor3 = TEXT_COLOR
-        head.TextSize = 9
+        head.TextSize = 12
         head.FontFace = font_bold
         head.TextXAlignment = Enum.TextXAlignment.Left
         head.ZIndex = 3
@@ -1596,9 +1596,9 @@ local function create_ui()
         chev.Size = UDim2.new(0, 20, 1, 0)
         chev.Position = UDim2.new(1, -25, 0, 0)
         chev.BackgroundTransparency = 1
-        chev.Text = "v"
+        chev.Text = "▼"
         chev.TextColor3 = ACCENT_COLOR
-        chev.TextSize = 10
+        chev.TextSize = 16
         chev.Font = Enum.Font.SourceSansBold
         chev.ZIndex = 4
         chev.Parent = head
@@ -1614,7 +1614,7 @@ local function create_ui()
         local expanded = false
         head.MouseButton1Click:Connect(function()
             expanded = not expanded
-            chev.Text = expanded and "^" or "v"
+            chev.Text = expanded and "▲" or "▼"
             local target_h = expanded and (32 + in_layout.AbsoluteContentSize.Y) or 26
             tween_service:Create(frame, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { Size = UDim2.new(1, 0, 0, target_h) }):Play()
             task_wait(0.21)
@@ -1642,7 +1642,7 @@ local function create_ui()
         title.BackgroundTransparency = 1
         title.Text = "Status"
         title.TextColor3 = ACCENT_COLOR
-        title.TextSize = 9
+        title.TextSize = 12
         title.FontFace = font_bold
         title.TextXAlignment = Enum.TextXAlignment.Left
         title.ZIndex = 4
@@ -1655,7 +1655,7 @@ local function create_ui()
         val.BackgroundTransparency = 1
         val.Text = "Idle"
         val.TextColor3 = TEXT_COLOR
-        val.TextSize = 9
+        val.TextSize = 12
         val.FontFace = font_face
         val.TextXAlignment = Enum.TextXAlignment.Left
         val.TextWrapped = true
@@ -1694,8 +1694,8 @@ local function create_ui()
     local byname_inner = create_accordion("Trade By Name")
     create_stat_box(byname_inner, "fish")
     local f_row = Instance.new("Frame"); f_row.Size = UDim2.new(1, 0, 0, 22); f_row.BackgroundTransparency = 1; f_row.Parent = byname_inner
-    local f_lbl = Instance.new("TextLabel"); f_lbl.Size = UDim2.new(0.45, 0, 1, 0); f_lbl.BackgroundTransparency = 1; f_lbl.Text = "Select Item"; f_lbl.TextColor3 = TEXT_COLOR; f_lbl.TextSize = 9; f_lbl.FontFace = font_bold; f_lbl.TextXAlignment = Enum.TextXAlignment.Left; f_lbl.Parent = f_row
-    local f_drop = Instance.new("TextButton"); f_drop.Size = UDim2.new(0.55, 0, 1, 0); f_drop.Position = UDim2.new(0.45, 0, 0, 0); f_drop.BackgroundColor3 = INPUT_BG_COLOR; f_drop.Text = (#config.selected_fish > 0 and table_concat(config.selected_fish, "/") or "All"); f_drop.TextColor3 = TEXT_COLOR; f_drop.TextSize = 9; f_drop.FontFace = font_face; f_drop.Parent = f_row
+    local f_lbl = Instance.new("TextLabel"); f_lbl.Size = UDim2.new(0.45, 0, 1, 0); f_lbl.BackgroundTransparency = 1; f_lbl.Text = "Select Item"; f_lbl.TextColor3 = TEXT_COLOR; f_lbl.TextSize = 12; f_lbl.FontFace = font_bold; f_lbl.TextXAlignment = Enum.TextXAlignment.Left; f_lbl.Parent = f_row
+    local f_drop = Instance.new("TextButton"); f_drop.Size = UDim2.new(0.55, 0, 1, 0); f_drop.Position = UDim2.new(0.45, 0, 0, 0); f_drop.BackgroundColor3 = INPUT_BG_COLOR; f_drop.Text = (#config.selected_fish > 0 and table_concat(config.selected_fish, "/") or "All"); f_drop.TextColor3 = TEXT_COLOR; f_drop.TextSize = 12; f_drop.FontFace = font_face; f_drop.Parent = f_row
     create_corner(f_drop, 4); create_stroke(f_drop, Color3.fromRGB(45, 45, 45))
     f_drop.MouseButton1Click:Connect(function()
         item_panel.Visible = not item_panel.Visible
@@ -1714,13 +1714,13 @@ local function create_ui()
     end)
 
     local f_amt_row = Instance.new("Frame"); f_amt_row.Size = UDim2.new(1, 0, 0, 22); f_amt_row.BackgroundTransparency = 1; f_amt_row.Parent = byname_inner
-    local f_amt_lbl = Instance.new("TextLabel"); f_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); f_amt_lbl.BackgroundTransparency = 1; f_amt_lbl.Text = "Amount Fish Name"; f_amt_lbl.TextColor3 = TEXT_COLOR; f_amt_lbl.TextSize = 9; f_amt_lbl.FontFace = font_bold; f_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; f_amt_lbl.Parent = f_amt_row
-    local f_qty = Instance.new("TextBox"); f_qty.Size = UDim2.new(0.55, 0, 1, 0); f_qty.Position = UDim2.new(0.45, 0, 0, 0); f_qty.BackgroundColor3 = INPUT_BG_COLOR; f_qty.Text = tostring(config.quantity); f_qty.TextColor3 = TEXT_COLOR; f_qty.TextSize = 9; f_qty.FontFace = font_face; f_qty.Parent = f_amt_row
+    local f_amt_lbl = Instance.new("TextLabel"); f_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); f_amt_lbl.BackgroundTransparency = 1; f_amt_lbl.Text = "Amount Fish Name"; f_amt_lbl.TextColor3 = TEXT_COLOR; f_amt_lbl.TextSize = 12; f_amt_lbl.FontFace = font_bold; f_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; f_amt_lbl.Parent = f_amt_row
+    local f_qty = Instance.new("TextBox"); f_qty.Size = UDim2.new(0.55, 0, 1, 0); f_qty.Position = UDim2.new(0.45, 0, 0, 0); f_qty.BackgroundColor3 = INPUT_BG_COLOR; f_qty.Text = tostring(config.quantity); f_qty.TextColor3 = TEXT_COLOR; f_qty.TextSize = 12; f_qty.FontFace = font_face; f_qty.Parent = f_amt_row
     create_corner(f_qty, 4); create_stroke(f_qty, Color3.fromRGB(45, 45, 45))
     table_insert(qty_inputs, f_qty)
     f_qty.FocusLost:Connect(function() sync_qty(tonumber(f_qty.Text) or config.quantity) end)
 
-    local f_ref = Instance.new("TextButton"); f_ref.Size = UDim2.new(1, 0, 0, 26); f_ref.BackgroundColor3 = BUTTON_COLOR; f_ref.Text = "Refresh Fish Items"; f_ref.TextColor3 = Color3.fromRGB(255, 255, 255); f_ref.TextSize = 9; f_ref.FontFace = font_bold; f_ref.Parent = byname_inner
+    local f_ref = Instance.new("TextButton"); f_ref.Size = UDim2.new(1, 0, 0, 26); f_ref.BackgroundColor3 = BUTTON_COLOR; f_ref.Text = "Refresh Fish Items"; f_ref.TextColor3 = Color3.fromRGB(255, 255, 255); f_ref.TextSize = 12; f_ref.FontFace = font_bold; f_ref.Parent = byname_inner
     create_corner(f_ref, 5)
     f_ref.MouseButton1Click:Connect(function()
         f_ref.Text = "Fish Items Refreshed!"
@@ -1748,8 +1748,8 @@ local function create_ui()
     local en_inner = create_accordion("Trade Enchant Stone")
     create_stat_box(en_inner, "enchant")
     local e_row = Instance.new("Frame"); e_row.Size = UDim2.new(1, 0, 0, 22); e_row.BackgroundTransparency = 1; e_row.Parent = en_inner
-    local e_lbl = Instance.new("TextLabel"); e_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_lbl.BackgroundTransparency = 1; e_lbl.Text = "Stone Type"; e_lbl.TextColor3 = TEXT_COLOR; e_lbl.TextSize = 9; e_lbl.FontFace = font_bold; e_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_lbl.Parent = e_row
-    local e_drop = Instance.new("TextButton"); e_drop.Size = UDim2.new(0.55, 0, 1, 0); e_drop.Position = UDim2.new(0.45, 0, 0, 0); e_drop.BackgroundColor3 = INPUT_BG_COLOR; e_drop.Text = (#config.selected_items > 0 and config.selected_items[1] ~= "All" and table_concat(config.selected_items, "/") or "Select"); e_drop.TextColor3 = TEXT_COLOR; e_drop.TextSize = 9; e_drop.FontFace = font_face; e_drop.Parent = e_row
+    local e_lbl = Instance.new("TextLabel"); e_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_lbl.BackgroundTransparency = 1; e_lbl.Text = "Stone Type"; e_lbl.TextColor3 = TEXT_COLOR; e_lbl.TextSize = 12; e_lbl.FontFace = font_bold; e_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_lbl.Parent = e_row
+    local e_drop = Instance.new("TextButton"); e_drop.Size = UDim2.new(0.55, 0, 1, 0); e_drop.Position = UDim2.new(0.45, 0, 0, 0); e_drop.BackgroundColor3 = INPUT_BG_COLOR; e_drop.Text = (#config.selected_items > 0 and config.selected_items[1] ~= "All" and table_concat(config.selected_items, "/") or "Select"); e_drop.TextColor3 = TEXT_COLOR; e_drop.TextSize = 12; e_drop.FontFace = font_face; e_drop.Parent = e_row
     create_corner(e_drop, 4); create_stroke(e_drop, Color3.fromRGB(45, 45, 45))
     e_drop.MouseButton1Click:Connect(function()
         enchant_panel.Visible = not enchant_panel.Visible
@@ -1768,13 +1768,13 @@ local function create_ui()
     end)
 
     local e_amt_row = Instance.new("Frame"); e_amt_row.Size = UDim2.new(1, 0, 0, 22); e_amt_row.BackgroundTransparency = 1; e_amt_row.Parent = en_inner
-    local e_amt_lbl = Instance.new("TextLabel"); e_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_amt_lbl.BackgroundTransparency = 1; e_amt_lbl.Text = "Amount Enchant Stone"; e_amt_lbl.TextColor3 = TEXT_COLOR; e_amt_lbl.TextSize = 9; e_amt_lbl.FontFace = font_bold; e_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_amt_lbl.Parent = e_amt_row
-    local e_qty = Instance.new("TextBox"); e_qty.Size = UDim2.new(0.55, 0, 1, 0); e_qty.Position = UDim2.new(0.45, 0, 0, 0); e_qty.BackgroundColor3 = INPUT_BG_COLOR; e_qty.Text = tostring(config.quantity); e_qty.TextColor3 = TEXT_COLOR; e_qty.TextSize = 9; e_qty.FontFace = font_face; e_qty.Parent = e_amt_row
+    local e_amt_lbl = Instance.new("TextLabel"); e_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_amt_lbl.BackgroundTransparency = 1; e_amt_lbl.Text = "Amount Enchant Stone"; e_amt_lbl.TextColor3 = TEXT_COLOR; e_amt_lbl.TextSize = 12; e_amt_lbl.FontFace = font_bold; e_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_amt_lbl.Parent = e_amt_row
+    local e_qty = Instance.new("TextBox"); e_qty.Size = UDim2.new(0.55, 0, 1, 0); e_qty.Position = UDim2.new(0.45, 0, 0, 0); e_qty.BackgroundColor3 = INPUT_BG_COLOR; e_qty.Text = tostring(config.quantity); e_qty.TextColor3 = TEXT_COLOR; e_qty.TextSize = 12; e_qty.FontFace = font_face; e_qty.Parent = e_amt_row
     create_corner(e_qty, 4); create_stroke(e_qty, Color3.fromRGB(45, 45, 45))
     table_insert(qty_inputs, e_qty)
     e_qty.FocusLost:Connect(function() sync_qty(tonumber(e_qty.Text) or config.quantity) end)
 
-    local e_ref = Instance.new("TextButton"); e_ref.Size = UDim2.new(1, 0, 0, 26); e_ref.BackgroundColor3 = BUTTON_COLOR; e_ref.Text = "Check Enchant Stones"; e_ref.TextColor3 = Color3.fromRGB(255, 255, 255); e_ref.TextSize = 9; e_ref.FontFace = font_bold; e_ref.Parent = en_inner
+    local e_ref = Instance.new("TextButton"); e_ref.Size = UDim2.new(1, 0, 0, 26); e_ref.BackgroundColor3 = BUTTON_COLOR; e_ref.Text = "Check Enchant Stones"; e_ref.TextColor3 = Color3.fromRGB(255, 255, 255); e_ref.TextSize = 12; e_ref.FontFace = font_bold; e_ref.Parent = en_inner
     create_corner(e_ref, 5)
     e_ref.MouseButton1Click:Connect(function()
         e_ref.Text = "Enchant Stones Checked!"
@@ -1801,8 +1801,8 @@ local function create_ui()
     local r_inner = create_accordion("Trade By Rarity")
     create_stat_box(r_inner, "rarity")
     local r_row = Instance.new("Frame"); r_row.Size = UDim2.new(1, 0, 0, 22); r_row.BackgroundTransparency = 1; r_row.Parent = r_inner
-    local r_lbl = Instance.new("TextLabel"); r_lbl.Size = UDim2.new(0.45, 0, 1, 0); r_lbl.BackgroundTransparency = 1; r_lbl.Text = "Select Rarity"; r_lbl.TextColor3 = TEXT_COLOR; r_lbl.TextSize = 9; r_lbl.FontFace = font_bold; r_lbl.TextXAlignment = Enum.TextXAlignment.Left; r_lbl.Parent = r_row
-    local r_drop = Instance.new("TextButton"); r_drop.Size = UDim2.new(0.55, 0, 1, 0); r_drop.Position = UDim2.new(0.45, 0, 0, 0); r_drop.BackgroundColor3 = INPUT_BG_COLOR; r_drop.Text = (#config.selected_tiers > 0 and table_concat(config.selected_tiers, "/") or "All"); r_drop.TextColor3 = TEXT_COLOR; r_drop.TextSize = 9; r_drop.FontFace = font_face; r_drop.Parent = r_row
+    local r_lbl = Instance.new("TextLabel"); r_lbl.Size = UDim2.new(0.45, 0, 1, 0); r_lbl.BackgroundTransparency = 1; r_lbl.Text = "Select Rarity"; r_lbl.TextColor3 = TEXT_COLOR; r_lbl.TextSize = 12; r_lbl.FontFace = font_bold; r_lbl.TextXAlignment = Enum.TextXAlignment.Left; r_lbl.Parent = r_row
+    local r_drop = Instance.new("TextButton"); r_drop.Size = UDim2.new(0.55, 0, 1, 0); r_drop.Position = UDim2.new(0.45, 0, 0, 0); r_drop.BackgroundColor3 = INPUT_BG_COLOR; r_drop.Text = (#config.selected_tiers > 0 and table_concat(config.selected_tiers, "/") or "All"); r_drop.TextColor3 = TEXT_COLOR; r_drop.TextSize = 12; r_drop.FontFace = font_face; r_drop.Parent = r_row
     create_corner(r_drop, 4); create_stroke(r_drop, Color3.fromRGB(45, 45, 45))
     r_drop.MouseButton1Click:Connect(function()
         rarity_panel.Visible = not rarity_panel.Visible
@@ -1815,13 +1815,13 @@ local function create_ui()
     end)
 
     local r_amt_row = Instance.new("Frame"); r_amt_row.Size = UDim2.new(1, 0, 0, 22); r_amt_row.BackgroundTransparency = 1; r_amt_row.Parent = r_inner
-    local r_amt_lbl = Instance.new("TextLabel"); r_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); r_amt_lbl.BackgroundTransparency = 1; r_amt_lbl.Text = "Amount Fish Rarity"; r_amt_lbl.TextColor3 = TEXT_COLOR; r_amt_lbl.TextSize = 9; r_amt_lbl.FontFace = font_bold; r_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; r_amt_lbl.Parent = r_amt_row
-    local r_qty = Instance.new("TextBox"); r_qty.Size = UDim2.new(0.55, 0, 1, 0); r_qty.Position = UDim2.new(0.45, 0, 0, 0); r_qty.BackgroundColor3 = INPUT_BG_COLOR; r_qty.Text = tostring(config.quantity); r_qty.TextColor3 = TEXT_COLOR; r_qty.TextSize = 9; r_qty.FontFace = font_face; r_qty.Parent = r_amt_row
+    local r_amt_lbl = Instance.new("TextLabel"); r_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); r_amt_lbl.BackgroundTransparency = 1; r_amt_lbl.Text = "Amount Fish Rarity"; r_amt_lbl.TextColor3 = TEXT_COLOR; r_amt_lbl.TextSize = 12; r_amt_lbl.FontFace = font_bold; r_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; r_amt_lbl.Parent = r_amt_row
+    local r_qty = Instance.new("TextBox"); r_qty.Size = UDim2.new(0.55, 0, 1, 0); r_qty.Position = UDim2.new(0.45, 0, 0, 0); r_qty.BackgroundColor3 = INPUT_BG_COLOR; r_qty.Text = tostring(config.quantity); r_qty.TextColor3 = TEXT_COLOR; r_qty.TextSize = 12; r_qty.FontFace = font_face; r_qty.Parent = r_amt_row
     create_corner(r_qty, 4); create_stroke(r_qty, Color3.fromRGB(45, 45, 45))
     table_insert(qty_inputs, r_qty)
     r_qty.FocusLost:Connect(function() sync_qty(tonumber(r_qty.Text) or config.quantity) end)
 
-    local r_ref = Instance.new("TextButton"); r_ref.Size = UDim2.new(1, 0, 0, 26); r_ref.BackgroundColor3 = BUTTON_COLOR; r_ref.Text = "Refresh Fish Rarity"; r_ref.TextColor3 = Color3.fromRGB(255, 255, 255); r_ref.TextSize = 9; r_ref.FontFace = font_bold; r_ref.Parent = r_inner
+    local r_ref = Instance.new("TextButton"); r_ref.Size = UDim2.new(1, 0, 0, 26); r_ref.BackgroundColor3 = BUTTON_COLOR; r_ref.Text = "Refresh Fish Rarity"; r_ref.TextColor3 = Color3.fromRGB(255, 255, 255); r_ref.TextSize = 12; r_ref.FontFace = font_bold; r_ref.Parent = r_inner
     create_corner(r_ref, 5)
     r_ref.MouseButton1Click:Connect(function()
         r_ref.Text = "Rarity Fish Refreshed!"
@@ -1849,8 +1849,8 @@ local function create_ui()
     local c_inner = create_accordion("Trade By Coin")
     create_stat_box(c_inner, "coin")
     local c_row = Instance.new("Frame"); c_row.Size = UDim2.new(1, 0, 0, 22); c_row.BackgroundTransparency = 1; c_row.Parent = c_inner
-    local c_lbl = Instance.new("TextLabel"); c_lbl.Size = UDim2.new(0.45, 0, 1, 0); c_lbl.BackgroundTransparency = 1; c_lbl.Text = "Target Coins"; c_lbl.TextColor3 = TEXT_COLOR; c_lbl.TextSize = 9; c_lbl.FontFace = font_bold; c_lbl.TextXAlignment = Enum.TextXAlignment.Left; c_lbl.Parent = c_row
-    local c_box = Instance.new("TextBox"); c_box.Size = UDim2.new(0.55, 0, 1, 0); c_box.Position = UDim2.new(0.45, 0, 0, 0); c_box.BackgroundColor3 = INPUT_BG_COLOR; c_box.Text = format_number(config.target_coin_amount); c_box.TextColor3 = TEXT_COLOR; c_box.TextSize = 9; c_box.FontFace = font_face; c_box.ClearTextOnFocus = false; c_box.Parent = c_row
+    local c_lbl = Instance.new("TextLabel"); c_lbl.Size = UDim2.new(0.45, 0, 1, 0); c_lbl.BackgroundTransparency = 1; c_lbl.Text = "Target Coins"; c_lbl.TextColor3 = TEXT_COLOR; c_lbl.TextSize = 12; c_lbl.FontFace = font_bold; c_lbl.TextXAlignment = Enum.TextXAlignment.Left; c_lbl.Parent = c_row
+    local c_box = Instance.new("TextBox"); c_box.Size = UDim2.new(0.55, 0, 1, 0); c_box.Position = UDim2.new(0.45, 0, 0, 0); c_box.BackgroundColor3 = INPUT_BG_COLOR; c_box.Text = format_number(config.target_coin_amount); c_box.TextColor3 = TEXT_COLOR; c_box.TextSize = 12; c_box.FontFace = font_face; c_box.ClearTextOnFocus = false; c_box.Parent = c_row
     create_corner(c_box, 4); create_stroke(c_box, Color3.fromRGB(45, 45, 45))
     c_box:GetPropertyChangedSignal("Text"):Connect(function()
         local text = c_box.Text
@@ -1880,7 +1880,7 @@ local function create_ui()
     coin_check_btn.BackgroundColor3 = BUTTON_COLOR
     coin_check_btn.Text = "Check Bag Coin Worth"
     coin_check_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    coin_check_btn.TextSize = 9
+    coin_check_btn.TextSize = 12
     coin_check_btn.FontFace = font_bold
     coin_check_btn.Parent = c_inner
     create_corner(coin_check_btn, 5)
@@ -1928,7 +1928,7 @@ local function create_ui()
     end)
     fav_toggles.coin = create_toggle(c_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
 
-    local c_reset = Instance.new("TextButton"); c_reset.Size = UDim2.new(1, 0, 0, 26); c_reset.BackgroundColor3 = BUTTON_COLOR; c_reset.Text = "Reset Stats By Coin"; c_reset.TextColor3 = Color3.fromRGB(255, 255, 255); c_reset.TextSize = 9; c_reset.FontFace = font_bold; c_reset.Parent = c_inner
+    local c_reset = Instance.new("TextButton"); c_reset.Size = UDim2.new(1, 0, 0, 26); c_reset.BackgroundColor3 = BUTTON_COLOR; c_reset.Text = "Reset Stats By Coin"; c_reset.TextColor3 = Color3.fromRGB(255, 255, 255); c_reset.TextSize = 12; c_reset.FontFace = font_bold; c_reset.Parent = c_inner
     create_corner(c_reset, 5)
     c_reset.MouseButton1Click:Connect(function()
         cache.stats.coin = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
