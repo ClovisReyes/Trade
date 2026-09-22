@@ -831,9 +831,9 @@ local function start_trade_session(target_player, mode)
 
     if cache.last_failed_offer_time then
         local elapsed = tick() - cache.last_failed_offer_time
-        if elapsed < 10 then
-            set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 10 - elapsed) .. ")")
-            task_wait(10 - elapsed)
+        if elapsed < 3 then
+            set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 3 - elapsed) .. ")")
+            task_wait(3 - elapsed)
         end
         cache.last_failed_offer_time = nil
     end
