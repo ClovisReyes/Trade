@@ -1877,7 +1877,7 @@ local function create_ui()
     local coin_check_btn = Instance.new("TextButton")
     coin_check_btn.Size = UDim2.new(1, 0, 0, 26)
     coin_check_btn.BackgroundColor3 = BUTTON_COLOR
-    coin_check_btn.Text = "Check Bag Coin Worth"
+    coin_check_btn.Text = "Check Coin Worth"
     coin_check_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     coin_check_btn.TextSize = 10
     coin_check_btn.FontFace = font_bold
@@ -1905,7 +1905,7 @@ local function create_ui()
         set_status_msg("coin", string_format("Inventory Worth: %s Coins", worth_str))
         task_delay(4, function()
             if coin_check_btn and coin_check_btn.Parent then
-                coin_check_btn.Text = "Check Bag Coin Worth"
+                coin_check_btn.Text = "Check Coin Worth"
             end
         end)
     end)
@@ -1927,13 +1927,7 @@ local function create_ui()
     end)
     fav_toggles.coin = create_toggle(c_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
 
-    local c_reset = Instance.new("TextButton"); c_reset.Size = UDim2.new(1, 0, 0, 26); c_reset.BackgroundColor3 = BUTTON_COLOR; c_reset.Text = "Reset Stats By Coin"; c_reset.TextColor3 = Color3.fromRGB(255, 255, 255); c_reset.TextSize = 10; c_reset.FontFace = font_bold; c_reset.Parent = c_inner
-    create_corner(c_reset, 5)
-    c_reset.MouseButton1Click:Connect(function()
-        cache.stats.coin = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
-        update_status_ui("coin")
-        c_reset.Text = "Stats Reset!"; task_wait(1); c_reset.Text = "Reset Stats By Coin"
-    end)
+
 
     
     local aa_inner = create_accordion("Auto Accept Trade")
