@@ -1466,15 +1466,35 @@ local function create_ui()
     target_lbl.Parent = player_panel
     create_corner(target_lbl, 4); create_stroke(target_lbl, Color3.fromRGB(45, 45, 45))
 
+    local list_title = Instance.new("TextLabel")
+    list_title.Size = UDim2.new(1, -16, 0, 12)
+    list_title.Position = UDim2.new(0, 8, 0, 56)
+    list_title.BackgroundTransparency = 1
+    list_title.Text = "Player List:"
+    list_title.TextColor3 = MUTED_COLOR
+    list_title.TextSize = 9
+    list_title.FontFace = font_bold
+    list_title.TextXAlignment = Enum.TextXAlignment.Left
+    list_title.ZIndex = 10
+    list_title.Parent = player_panel
+
+    local p_scroll_bg = Instance.new("Frame")
+    p_scroll_bg.Size = UDim2.new(1, -12, 1, -78)
+    p_scroll_bg.Position = UDim2.new(0, 6, 0, 72)
+    p_scroll_bg.BackgroundColor3 = INPUT_BG_COLOR
+    p_scroll_bg.ZIndex = 9
+    p_scroll_bg.Parent = player_panel
+    create_corner(p_scroll_bg, 4); create_stroke(p_scroll_bg, Color3.fromRGB(45, 45, 45))
+
     local p_scroll = Instance.new("ScrollingFrame")
-    p_scroll.Size = UDim2.new(1, -12, 1, -58)
-    p_scroll.Position = UDim2.new(0, 6, 0, 54)
+    p_scroll.Size = UDim2.new(1, -4, 1, -4)
+    p_scroll.Position = UDim2.new(0, 2, 0, 2)
     p_scroll.BackgroundTransparency = 1
-    p_scroll.ScrollBarThickness = 3
-    p_scroll.ScrollBarImageColor3 = Color3.fromRGB(45, 45, 45)
+    p_scroll.ScrollBarThickness = 2
+    p_scroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
     p_scroll.ZIndex = 10
-    p_scroll.Parent = player_panel
-    local p_layout = Instance.new("UIListLayout"); p_layout.Padding = UDim.new(0, 2); p_layout.Parent = p_scroll
+    p_scroll.Parent = p_scroll_bg
+    local p_layout = Instance.new("UIListLayout"); p_layout.Padding = UDim.new(0, 0); p_layout.Parent = p_scroll
 
     local function populate_players()
         for _, c in ipairs(p_scroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
@@ -1720,13 +1740,6 @@ local function create_ui()
     table_insert(qty_inputs, f_qty)
     f_qty.FocusLost:Connect(function() sync_qty(tonumber(f_qty.Text) or config.quantity) end)
 
-    local f_ref = Instance.new("TextButton"); f_ref.Size = UDim2.new(1, 0, 0, 26); f_ref.BackgroundColor3 = BUTTON_COLOR; f_ref.Text = "Refresh Fish Items"; f_ref.TextColor3 = Color3.fromRGB(255, 255, 255); f_ref.TextSize = 10; f_ref.FontFace = font_bold; f_ref.Parent = byname_inner
-    create_corner(f_ref, 5)
-    f_ref.MouseButton1Click:Connect(function()
-        f_ref.Text = "Fish Items Refreshed!"
-        cache.loaded_fish = get_owned_options("Fish")
-        task_wait(1); f_ref.Text = "Refresh Fish Items"
-    end)
     toggle_ctrls.fish = create_toggle(byname_inner, "Start Trade ByName", config.enabled and config.trade_fish_enabled, function(active)
         if active then
             if f_qty and f_qty.Text ~= "" then
@@ -1774,13 +1787,6 @@ local function create_ui()
     table_insert(qty_inputs, e_qty)
     e_qty.FocusLost:Connect(function() sync_qty(tonumber(e_qty.Text) or config.quantity) end)
 
-    local e_ref = Instance.new("TextButton"); e_ref.Size = UDim2.new(1, 0, 0, 26); e_ref.BackgroundColor3 = BUTTON_COLOR; e_ref.Text = "Check Enchant Stones"; e_ref.TextColor3 = Color3.fromRGB(255, 255, 255); e_ref.TextSize = 10; e_ref.FontFace = font_bold; e_ref.Parent = en_inner
-    create_corner(e_ref, 5)
-    e_ref.MouseButton1Click:Connect(function()
-        e_ref.Text = "Enchant Stones Checked!"
-        cache.loaded_enchants = get_owned_options("Enchant")
-        task_wait(1); e_ref.Text = "Check Enchant Stones"
-    end)
     toggle_ctrls.enchant = create_toggle(en_inner, "Start Trade EnchantStone", config.enabled and config.trade_enchants_enabled, function(active)
         if active then
             if e_qty and e_qty.Text ~= "" then
@@ -1821,13 +1827,6 @@ local function create_ui()
     table_insert(qty_inputs, r_qty)
     r_qty.FocusLost:Connect(function() sync_qty(tonumber(r_qty.Text) or config.quantity) end)
 
-    local r_ref = Instance.new("TextButton"); r_ref.Size = UDim2.new(1, 0, 0, 26); r_ref.BackgroundColor3 = BUTTON_COLOR; r_ref.Text = "Refresh Fish Rarity"; r_ref.TextColor3 = Color3.fromRGB(255, 255, 255); r_ref.TextSize = 10; r_ref.FontFace = font_bold; r_ref.Parent = r_inner
-    create_corner(r_ref, 5)
-    r_ref.MouseButton1Click:Connect(function()
-        r_ref.Text = "Rarity Fish Refreshed!"
-        cache.loaded_fish = get_owned_options("Fish")
-        task_wait(1); r_ref.Text = "Refresh Fish Rarity"
-    end)
     toggle_ctrls.rarity = create_toggle(r_inner, "Start Trade ByRarity", config.enabled and config.trade_rarity_enabled, function(active)
         if active then
             if r_qty and r_qty.Text ~= "" then
