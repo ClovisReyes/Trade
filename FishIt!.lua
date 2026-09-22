@@ -17,6 +17,17 @@ local tween_service = cloneref(game:GetService("TweenService"))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
 local http_service = cloneref(game:GetService("HttpService"))
 
+-- Anti-AFK Setup (Method 3: Disable Idled connections)
+task_spawn(function()
+    pcall(function()
+        local get_conn = getconnections
+        if get_conn then
+            for _, conn in pairs(get_conn(local_player.Idled)) do
+                pcall(function() conn:Disable() end)
+            end
+        end
+    end)
+end)
 local variants_folder = replicated_storage:FindFirstChild("Variants")
 
 local variables = {
