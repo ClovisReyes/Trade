@@ -600,6 +600,7 @@ local function accept_trade_from(req)
 end
 
 local original_popup = _G.OriginalTradeOfferPopUp
+local receiver_accept_lock = 0
 pcall(function()
     local mod = replicated_storage:FindFirstChild("Controllers") and replicated_storage.Controllers:FindFirstChild("Trading") and replicated_storage.Controllers.Trading:FindFirstChild("TradeOfferController")
     if mod then
@@ -608,10 +609,14 @@ pcall(function()
             trade_offer_controller.PopUp = function(...)
                 local args = {...}
                 if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
+                    if local_player:GetAttribute("IsTrading") or (tick() - receiver_accept_lock) < 3 then 
+                        return 
+                    end 
+                    receiver_accept_lock = tick()
                     for _, arg in ipairs(args) do
                         accept_trade_from(arg)
                     end
-                    return -- Hentikan pembuatan popup UI di PlayerGui
+                    return 
                 end
                 return original_popup(...)
             end
@@ -631,7 +636,7 @@ _G.NoirHub_AutoTrade_Cleanup = function()
 end
 
 local function close_trading_gui()
-    -- Bypass GUI: We don't touch PlayerGui to avoid triggering BAC
+    
 end
 
 local receiver_loop_running = false
@@ -683,6 +688,10 @@ local function toggle_auto_accept(enable)
     if trade_remotes.TradeOfferReceived then
         auto_accept_trade_offer_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(sender_p, ...)
             if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
+                if local_player:GetAttribute("IsTrading") or (tick() - receiver_accept_lock) < 3 then 
+                    return 
+                end
+                receiver_accept_lock = tick()
                 accept_trade_from(sender_p)
             end
         end)
@@ -983,7 +992,7 @@ local function execute_trade(mode)
     for idx, item in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") or _G.NoirHub_AutoTrade_ScriptID ~= script_id then break end
         if (tick() - add_start_time) > 20 then
-            -- 20s watchdog limit on AddItem phase
+            
             break
         end
         if item and item.UUID then
@@ -1102,10 +1111,6 @@ local function create_ui()
 
     local font_face = Font.fromEnum(Enum.Font.SourceSans)
     local font_bold = Font.fromEnum(Enum.Font.SourceSansBold)
-    pcall(function()
-        font_face = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-        font_bold = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    end)
 
     local function create_corner(parent, radius)
         local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, radius); c.Parent = parent; return c
@@ -1202,7 +1207,7 @@ local function create_ui()
     create_corner(header, 10)
 
     local title_lbl = Instance.new("TextLabel")
-    title_lbl.Size = UDim2.new(1, -90, 1, 0)
+    title_lbl.Size = UDim2.new(1, -100, 1, 0)
     title_lbl.Position = UDim2.new(0, 10, 0, 0)
     title_lbl.BackgroundTransparency = 1
     title_lbl.Text = "NØIR Hub"
@@ -1216,7 +1221,7 @@ local function create_ui()
     local min_btn = Instance.new("TextButton")
     min_btn.Name = "MinimizeBtn"
     min_btn.Size = UDim2.new(0, 22, 0, 22)
-    min_btn.Position = UDim2.new(1, -74, 0.5, -11)
+    min_btn.Position = UDim2.new(1, -90, 0.5, -11)
     min_btn.BackgroundTransparency = 1
     min_btn.Text = "-"
     min_btn.TextColor3 = MUTED_COLOR
@@ -1235,7 +1240,7 @@ local function create_ui()
     local restore_btn = Instance.new("TextButton")
     restore_btn.Name = "RestoreBtn"
     restore_btn.Size = UDim2.new(0, 22, 0, 22)
-    restore_btn.Position = UDim2.new(1, -50, 0.5, -11)
+    restore_btn.Position = UDim2.new(1, -60, 0.5, -11)
     restore_btn.BackgroundTransparency = 1
     restore_btn.Text = "[]"
     restore_btn.TextColor3 = MUTED_COLOR
@@ -1251,8 +1256,8 @@ local function create_ui()
             saved_normal_size = main.Size
             saved_normal_pos = main.Position
             restore_btn.Text = "[-]"
-            local target_size = UDim2.new(1, -125, 1 - saved_normal_pos.Y.Scale, -saved_normal_pos.Y.Offset - 10)
-            local target_pos = UDim2.new(0, 10, saved_normal_pos.Y.Scale, saved_normal_pos.Y.Offset)
+            local target_size = UDim2.new(1 - saved_normal_pos.X.Scale, -saved_normal_pos.X.Offset - 115, 1 - saved_normal_pos.Y.Scale, -saved_normal_pos.Y.Offset - 10)
+            local target_pos = UDim2.new(saved_normal_pos.X.Scale, saved_normal_pos.X.Offset, saved_normal_pos.Y.Scale, saved_normal_pos.Y.Offset)
             tween_service:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 Size = target_size,
                 Position = target_pos
@@ -1269,7 +1274,7 @@ local function create_ui()
     local close_btn = Instance.new("TextButton")
     close_btn.Name = "CloseBtn"
     close_btn.Size = UDim2.new(0, 22, 0, 22)
-    close_btn.Position = UDim2.new(1, -26, 0.5, -11)
+    close_btn.Position = UDim2.new(1, -30, 0.5, -11)
     close_btn.BackgroundTransparency = 1
     close_btn.Text = "X"
     close_btn.TextColor3 = MUTED_COLOR
@@ -1367,11 +1372,11 @@ local function create_ui()
     local enchant_panel, enchant_search, enchant_scroll = create_drawer("EnchantSelectionPanel")
     local rarity_panel, _, rarity_scroll = create_drawer("RaritySelectionPanel")
 
-    local function populate_drawer(scroll, options, selected_list, is_multi, callback, query)
+    local function populate_drawer(scroll, options, selected_list, is_multi, callback, query, exclude_all)
         for _, c in ipairs(scroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
         local q = string_lower(query or "")
         local match_count = 0
-        local full_opts = { "All" }
+        local full_opts = exclude_all and {} or { "All" }
         for _, opt in ipairs(options) do table_insert(full_opts, opt) end
         for _, opt in ipairs(full_opts) do
             local clean = strip_quantity(opt)
@@ -1420,7 +1425,7 @@ local function create_ui()
                     end
                     callback(selected_list)
                     save_config()
-                    populate_drawer(scroll, options, selected_list, is_multi, callback, query)
+                    populate_drawer(scroll, options, selected_list, is_multi, callback, query, exclude_all)
                 end)
             end
         end
@@ -1685,7 +1690,7 @@ local function create_ui()
         end
     end
 
-    -- Tab 1: Trade By Name
+    
     local byname_inner = create_accordion("Trade By Name")
     create_stat_box(byname_inner, "fish")
     local f_row = Instance.new("Frame"); f_row.Size = UDim2.new(1, 0, 0, 22); f_row.BackgroundTransparency = 1; f_row.Parent = byname_inner
@@ -1739,12 +1744,12 @@ local function create_ui()
     end)
     fav_toggles.fish = create_toggle(byname_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
 
-    -- Tab 2: Trade Enchant Stone
+    
     local en_inner = create_accordion("Trade Enchant Stone")
     create_stat_box(en_inner, "enchant")
     local e_row = Instance.new("Frame"); e_row.Size = UDim2.new(1, 0, 0, 22); e_row.BackgroundTransparency = 1; e_row.Parent = en_inner
     local e_lbl = Instance.new("TextLabel"); e_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_lbl.BackgroundTransparency = 1; e_lbl.Text = "Stone Type"; e_lbl.TextColor3 = TEXT_COLOR; e_lbl.TextSize = 9; e_lbl.FontFace = font_bold; e_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_lbl.Parent = e_row
-    local e_drop = Instance.new("TextButton"); e_drop.Size = UDim2.new(0.55, 0, 1, 0); e_drop.Position = UDim2.new(0.45, 0, 0, 0); e_drop.BackgroundColor3 = INPUT_BG_COLOR; e_drop.Text = (#config.selected_items > 0 and table_concat(config.selected_items, "/") or "All"); e_drop.TextColor3 = TEXT_COLOR; e_drop.TextSize = 9; e_drop.FontFace = font_face; e_drop.Parent = e_row
+    local e_drop = Instance.new("TextButton"); e_drop.Size = UDim2.new(0.55, 0, 1, 0); e_drop.Position = UDim2.new(0.45, 0, 0, 0); e_drop.BackgroundColor3 = INPUT_BG_COLOR; e_drop.Text = (#config.selected_items > 0 and config.selected_items[1] ~= "All" and table_concat(config.selected_items, "/") or "Select"); e_drop.TextColor3 = TEXT_COLOR; e_drop.TextSize = 9; e_drop.FontFace = font_face; e_drop.Parent = e_row
     create_corner(e_drop, 4); create_stroke(e_drop, Color3.fromRGB(45, 45, 45))
     e_drop.MouseButton1Click:Connect(function()
         enchant_panel.Visible = not enchant_panel.Visible
@@ -1752,14 +1757,14 @@ local function create_ui()
         if enchant_panel.Visible then
             cache.loaded_enchants = get_owned_options("Enchant")
             populate_drawer(enchant_scroll, cache.loaded_enchants, config.selected_items, true, function(sel)
-                e_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
-            end, enchant_search.Text)
+                e_drop.Text = #sel > 0 and table_concat(sel, "/") or "Select"
+            end, enchant_search.Text, true)
         end
     end)
     enchant_search:GetPropertyChangedSignal("Text"):Connect(function()
         populate_drawer(enchant_scroll, cache.loaded_enchants, config.selected_items, true, function(sel)
-            e_drop.Text = #sel > 0 and table_concat(sel, "/") or "All"
-        end, enchant_search.Text)
+            e_drop.Text = #sel > 0 and table_concat(sel, "/") or "Select"
+        end, enchant_search.Text, true)
     end)
 
     local e_amt_row = Instance.new("Frame"); e_amt_row.Size = UDim2.new(1, 0, 0, 22); e_amt_row.BackgroundTransparency = 1; e_amt_row.Parent = en_inner
@@ -1792,7 +1797,7 @@ local function create_ui()
         end
     end)
 
-    -- Tab 3: Trade By Rarity
+    
     local r_inner = create_accordion("Trade By Rarity")
     create_stat_box(r_inner, "rarity")
     local r_row = Instance.new("Frame"); r_row.Size = UDim2.new(1, 0, 0, 22); r_row.BackgroundTransparency = 1; r_row.Parent = r_inner
@@ -1840,7 +1845,7 @@ local function create_ui()
     end)
     fav_toggles.rarity = create_toggle(r_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
 
-    -- Tab 4: Trade By Coin
+    
     local c_inner = create_accordion("Trade By Coin")
     create_stat_box(c_inner, "coin")
     local c_row = Instance.new("Frame"); c_row.Size = UDim2.new(1, 0, 0, 22); c_row.BackgroundTransparency = 1; c_row.Parent = c_inner
@@ -1931,7 +1936,7 @@ local function create_ui()
         c_reset.Text = "Stats Reset!"; task_wait(1); c_reset.Text = "Reset Stats By Coin"
     end)
 
-    -- Tab 5: Auto Accept
+    
     local aa_inner = create_accordion("Auto Accept Trade")
     toggle_ctrls.auto_accept = create_toggle(aa_inner, "Enable Auto Accept", config.auto_accept_enabled, function(state)
         toggle_auto_accept(state)
