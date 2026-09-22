@@ -693,17 +693,27 @@ local function toggle_auto_accept(enable)
     local function on_trade_end()
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id then return end
         receiver_loop_running = false
+        cache.receiver_is_accepting_trade = false
         close_trading_gui()
     end
 
     if trade_remotes.TradeOfferReceived then
         auto_accept_trade_offer_conn = trade_remotes.TradeOfferReceived.OnClientEvent:Connect(function(sender_p, ...)
             if config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id then
-                if local_player:GetAttribute("IsTrading") or (tick() - receiver_accept_lock) < 3 then 
+                if local_player:GetAttribute("IsTrading") or cache.receiver_is_accepting_trade then 
                     return 
                 end
-                receiver_accept_lock = tick()
-                accept_trade_from(sender_p)
+                cache.receiver_is_accepting_trade = true
+                task_spawn(function()
+                    pcall(function() accept_trade_from(sender_p) end)
+                    local wait_start = tick()
+                    while not local_player:GetAttribute("IsTrading") and (tick() - wait_start) < 15 do
+                        task_wait(0.2)
+                    end
+                    if not local_player:GetAttribute("IsTrading") then
+                        cache.receiver_is_accepting_trade = false
+                    end
+                end)
             end
         end)
     end
@@ -1063,21 +1073,26 @@ end
 local function run_auto_trade_loop()
     if cache.loop_running then return end
     cache.loop_running = true
-    for _, mode in ipairs({"fish", "rarity", "enchant", "coin"}) do
-        task_spawn(function()
-            local flag_name = mode_flag_map[mode]
-            while _G.NoirHub_AutoTrade_ScriptID == script_id do
-                if config.enabled and config[flag_name] then
-                    if not cache.is_trading_active and not local_player:GetAttribute("IsTrading") then
-                        cache.is_trading_active = true
+    task_spawn(function()
+        local modes = {"fish", "rarity", "enchant", "coin"}
+        local current_idx = 1
+        while _G.NoirHub_AutoTrade_ScriptID == script_id do
+            if config.enabled and not local_player:GetAttribute("IsTrading") then
+                local start_idx = current_idx
+                repeat
+                    local mode = modes[current_idx]
+                    local flag_name = mode_flag_map[mode]
+                    current_idx = (current_idx % 4) + 1
+                    
+                    if config.enabled and config[flag_name] and not local_player:GetAttribute("IsTrading") then
                         pcall(function() execute_trade(mode) end)
-                        cache.is_trading_active = false
+                        break -- Allow global loop to sleep and check state again
                     end
-                end
-                task_wait(3)
+                until current_idx == start_idx
             end
-        end)
-    end
+            task_wait(3)
+        end
+    end)
 end
 
 local function create_ui()
