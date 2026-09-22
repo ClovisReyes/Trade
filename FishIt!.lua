@@ -35,7 +35,7 @@ task_spawn(function()
         if hookmetamethod then
             local old_newindex
             old_newindex = hookmetamethod(game, "__newindex", function(t, k, v)
-                if k == "Text" and type(v) == "string" and string_find(string_upper(v), "TRADE OFFER EXPIRED") then
+                if k == "Text" and type(v) == "string" and string_find(string.upper(v), "TRADE OFFER EXPIRED") then
                     return old_newindex(t, k, "")
                 end
                 return old_newindex(t, k, v)
