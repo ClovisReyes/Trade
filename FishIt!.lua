@@ -622,7 +622,9 @@ local function accept_trade_from(req)
                 trade_remotes.AcceptTradeOffer:InvokeServer(p)
             end
         end)
+        return true
     end
+    return false
 end
 
 local original_popup = _G.OriginalTradeOfferPopUp
@@ -641,7 +643,11 @@ pcall(function()
                     cache.receiver_is_accepting_trade = true
                     task_spawn(function()
                         for _, arg in ipairs(args) do
-                            pcall(function() accept_trade_from(arg) end)
+                            local success = false
+                            pcall(function() 
+                                success = accept_trade_from(arg)
+                            end)
+                            if success then break end -- Only accept the first valid target to prevent double accepts
                         end
                         local wait_start = tick()
                         while not local_player:GetAttribute("IsTrading") and (tick() - wait_start) < 15 do
@@ -829,14 +835,6 @@ local function start_trade_session(target_player, mode)
         end
     end
 
-    if cache.last_failed_offer_time then
-        local elapsed = tick() - cache.last_failed_offer_time
-        if elapsed < 3 then
-            set_status_msg(mode, nil, "Cooldown (" .. string_format("%.1fs", 3 - elapsed) .. ")")
-            task_wait(3 - elapsed)
-        end
-        cache.last_failed_offer_time = nil
-    end
 
     set_status_msg(mode, "Waiting for target to accept offer...")
     
