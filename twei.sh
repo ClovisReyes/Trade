@@ -61,17 +61,17 @@ settings put global window_animation_scale 0.0 >/dev/null 2>&1
 settings put global transition_animation_scale 0.0 >/dev/null 2>&1
 settings put global animator_duration_scale 0.0 >/dev/null 2>&1
 
-USER_DPI=""
+USER_DP=""
 while true; do
-    printf "${CYAN}[?]${NC} Masukkan nilai DPI yang diinginkan (72 - 1000): "
+    printf "${CYAN}[?]${NC} Masukkan target Smallest Width / DP (contoh: 400, 600, 850): "
     if [ -e /dev/tty ]; then
-        if ! read -r USER_DPI < /dev/tty; then
+        if ! read -r USER_DP < /dev/tty; then
             echo ""
             log_error "Koneksi input terminal terputus. Keluar."
             exit 1
         fi
     else
-        if ! read -r USER_DPI; then
+        if ! read -r USER_DP; then
             echo ""
             log_error "Terminal tidak mendukung input interaktif (Bukan mode TTY). Script dihentikan!"
             exit 1
@@ -79,16 +79,29 @@ while true; do
     fi
     
     # Hilangkan spasi tersembunyi/carriage return jika ada
-    USER_DPI=$(echo "$USER_DPI" | tr -d '\r' | tr -d ' ')
+    USER_DP=$(echo "$USER_DP" | tr -d '\r' | tr -d ' ')
     
-    if [ -n "$USER_DPI" ] && echo "$USER_DPI" | grep -qE '^[0-9]+$'; then
-        if [ "$USER_DPI" -lt 72 ] || [ "$USER_DPI" -gt 1000 ]; then
-            log_error "DPI tidak aman! Harap masukkan angka antara 72 hingga 1000."
+    if [ -n "$USER_DP" ] && echo "$USER_DP" | grep -qE '^[0-9]+$'; then
+        if [ "$USER_DP" -lt 300 ] || [ "$USER_DP" -gt 1600 ]; then
+            log_error "DP tidak aman! Harap masukkan angka antara 300 hingga 1600."
             continue
         fi
         
-        log_status "Menggunakan DPI: $USER_DPI"
-        TARGET_DPI="$USER_DPI"
+        # Ambil lebar piksel layar untuk konversi DP ke DPI
+        RAW_SIZE=$(wm size 2>/dev/null | grep -oE '[0-9]+x[0-9]+' | tail -n 1)
+        if [ -n "$RAW_SIZE" ]; then
+            W=$(echo "$RAW_SIZE" | cut -d'x' -f1)
+            H=$(echo "$RAW_SIZE" | cut -d'x' -f2)
+            [ "$W" -lt "$H" ] && MIN_DIM=$W || MIN_DIM=$H
+        else
+            MIN_DIM=720
+        fi
+        
+        # Rumus: DPI = (Lebar Piksel * 160) / DP Target
+        TARGET_DPI=$(( (MIN_DIM * 160) / USER_DP ))
+        [ "$TARGET_DPI" -lt 72 ] && TARGET_DPI=72
+        
+        log_status "Menerapkan Smallest Width $USER_DP dp (DPI Sistem: $TARGET_DPI)"
         wm density "$TARGET_DPI" >/dev/null 2>&1
         settings put secure display_density_forced "$TARGET_DPI" >/dev/null 2>&1
         break
