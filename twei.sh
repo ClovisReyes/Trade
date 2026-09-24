@@ -63,7 +63,15 @@ settings put global animator_duration_scale 0.0 >/dev/null 2>&1
 USER_DPI=""
 while true; do
     printf "${CYAN}[?]${NC} Masukkan nilai DPI yang diinginkan (72 - 1000): "
-    read USER_DPI
+    if ! read USER_DPI; then
+        echo ""
+        log_error "Terminal tidak mendukung input interaktif (Bukan mode TTY). Script dihentikan!"
+        exit 1
+    fi
+    
+    # Hilangkan spasi tersembunyi/carriage return jika ada
+    USER_DPI=$(echo "$USER_DPI" | tr -d '\r' | tr -d ' ')
+    
     if [ -n "$USER_DPI" ] && echo "$USER_DPI" | grep -qE '^[0-9]+$'; then
         if [ "$USER_DPI" -lt 72 ] || [ "$USER_DPI" -gt 1000 ]; then
             log_error "DPI tidak aman! Harap masukkan angka antara 72 hingga 1000."
