@@ -1,5 +1,6 @@
 #!/system/bin/sh
 
+{
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -389,3 +390,5 @@ else
 fi
 
 printf "\n${GREEN}[+] Setup selesai.${NC}\n\n"
+
+}
