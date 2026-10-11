@@ -2000,6 +2000,8 @@ local function create_ui()
             task_wait(0.5)
         end
     end)
+
+    main.Visible = false; floating_btn.Visible = true
 end
 
 pcall(create_ui)
