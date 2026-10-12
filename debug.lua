@@ -1,23 +1,32 @@
 -- ==============================================================================
 -- 🔒 FISH IT: ITEM LOCK & TRADE COOLDOWN (15 MENIT) INSPECTOR & DEBUG DUMPER
--- Script untuk memeriksa status Lock & Cooldown Trade 15 Menit pada Inventory
+-- Berdasarkan acuan arsitektur msdm.lua (Ringan, Cepat, Bebas Freeze/Lag)
+-- Fitur: Filter Kategori (Fish / Enchant Stone / Semua) & Scan Manual
 -- ==============================================================================
 
-local ipairs, pairs, tostring, tonumber, pcall, tick, os_time = ipairs, pairs, tostring, tonumber, pcall, tick, os.time
-local math_floor, math_max, string_format, string_lower, string_find = math.floor, math.max, string.format, string.lower, string.find
+local ipairs, pairs, tostring, tonumber, pcall, tick, os_clock = ipairs, pairs, tostring, tonumber, pcall, tick, os.clock
+local table_insert, table_concat, table_sort = table.insert, table.concat, table.sort
+local string_format, string_lower, string_sub = string.format, string.lower, string.sub
+local math_floor, math_max = math.floor, math.max
+local task_wait, task_spawn = task.wait, task.spawn
 
 local cloneref = cloneref or function(ref) return ref end
 local players = cloneref(game:GetService("Players"))
 local local_player = players.LocalPlayer
+local user_input_service = cloneref(game:GetService("UserInputService"))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
 local http_service = cloneref(game:GetService("HttpService"))
-local user_input_service = cloneref(game:GetService("UserInputService"))
-local tween_service = cloneref(game:GetService("TweenService"))
 local workspace_service = cloneref(game:GetService("Workspace"))
 
-local core = gethui and pcall(gethui) and gethui() or game:GetService("CoreGui")
-local old_gui = core:FindFirstChild("FishItItemLockInspectorGui")
-if old_gui then pcall(function() old_gui:Destroy() end) end
+-- 1. Game Modules (Acuan Persis dari msdm.lua)
+local variables = {
+    replion      = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
+    item_utility = replicated_storage:WaitForChild("Shared"):WaitForChild("ItemUtility"),
+}
+
+local success_replion, replion_mod = pcall(require, variables.replion)
+local player_data = success_replion and replion_mod.Client:WaitReplion("Data") or nil
+local item_utility = require(variables.item_utility)
 
 -- Clipboard Helper
 local function copy_to_clipboard(text)
@@ -34,323 +43,278 @@ local function copy_to_clipboard(text)
     return false
 end
 
--- ==============================================================================
--- 1. LOAD GAME MODULES (Replion Data, ItemUtility, TradeData)
--- ==============================================================================
-local packages = replicated_storage:WaitForChild("Packages", 5)
-local replion_mod = nil
-pcall(function()
-    local replion_pkg = packages and packages:WaitForChild("Replion", 5)
-    if replion_pkg then replion_mod = require(replion_pkg) end
-end)
-
-local player_data = nil
-if replion_mod and replion_mod.Client then
-    pcall(function()
-        player_data = replion_mod.Client:WaitReplion("Data")
-    end)
-end
-
-local item_utility = nil
-pcall(function()
-    item_utility = require(replicated_storage:WaitForChild("Shared", 5):WaitForChild("ItemUtility", 5))
-end)
-
-local trade_data = nil
-pcall(function()
-    trade_data = require(replicated_storage:WaitForChild("Shared", 5):WaitForChild("Trading", 5):WaitForChild("TradeData", 5))
-end)
-
--- ==============================================================================
--- 2. SAFE TABLE SANITIZER & JSON SERIALIZER
--- ==============================================================================
-local function sanitize_table(tbl, depth, seen)
-    depth = depth or 0
-    if depth > 5 then return "[Depth Limit]" end
-    seen = seen or {}
-    if seen[tbl] then return "[Circular]" end
-    seen[tbl] = true
-
-    local clean = {}
-    for k, v in pairs(tbl) do
-        local key_str = tostring(k)
-        local val_type = type(v)
-        if val_type == "table" then
-            clean[key_str] = sanitize_table(v, depth + 1, seen)
-        elseif val_type == "number" or val_type == "string" or val_type == "boolean" then
-            clean[key_str] = v
+-- Safe JSON serializer (Mencegah circular ref / userdata error)
+local function safe_json_encode(data)
+    local function clean_copy(v, depth)
+        depth = depth or 0
+        if depth > 4 then return "[Depth Limit]" end
+        local tv = type(v)
+        if tv == "table" then
+            local t = {}
+            for k, val in pairs(v) do
+                t[tostring(k)] = clean_copy(val, depth + 1)
+            end
+            return t
+        elseif tv == "number" or tv == "string" or tv == "boolean" then
+            return v
         else
-            clean[key_str] = tostring(v)
+            return tostring(v)
         end
     end
-    return clean
-end
-
-local function to_json_pretty(tbl)
     local ok, res = pcall(function()
-        local sanitized = sanitize_table(tbl)
-        return http_service:JSONEncode(sanitized)
+        return http_service:JSONEncode(clean_copy(data))
     end)
     return ok and res or "{}"
 end
 
 -- ==============================================================================
--- 3. CORE LOCK & 15-MINUTE TRADE COOLDOWN DETECTOR ENGINE
+-- 2. DETEKSI ITEM LOCK & 15-MINUTE COOLDOWN
 -- ==============================================================================
-local COOLDOWN_DURATION = 15 * 60 -- 15 Menit = 900 Detik
+local COOLDOWN_15M = 15 * 60 -- 900 Detik
 
-local function get_current_server_time()
+local function get_server_time()
     local ok, t = pcall(function() return workspace_service:GetServerTimeNow() end)
     if ok and type(t) == "number" and t > 0 then return t end
-    return os_time()
+    return os.time()
 end
 
-local function inspect_item_lock(item)
-    local meta = (type(item) == "table" and type(item.Metadata) == "table" and item.Metadata)
-        or (type(item) == "table" and type(item.Data) == "table" and item.Data)
+local function evaluate_item_lock(item)
+    if not item or type(item) ~= "table" then return false, nil, 0, {} end
+
+    local meta = (type(item.Metadata) == "table" and item.Metadata)
+        or (type(item.Data) == "table" and item.Data)
         or {}
 
-    local now = get_current_server_time()
     local is_locked = false
     local lock_type = "Unlocked"
-    local remaining_seconds = 0
+    local remaining_sec = 0
     local reasons = {}
-    local details = {
-        item_keys = {},
-        metadata_keys = {},
-        timestamp_detected = nil,
-        evaluated_now = now,
-    }
+    local now = get_server_time()
 
-    if type(item) == "table" then
-        for k, v in pairs(item) do
-            if k ~= "Metadata" and k ~= "Data" then
-                details.item_keys[tostring(k)] = v
-            end
-        end
+    -- 1. Cek Boolean Flag Lock
+    if item.TradeLocked == true or meta.TradeLocked == true then
+        is_locked = true
+        table_insert(reasons, "TradeLocked = true")
     end
-    for k, v in pairs(meta) do
-        details.metadata_keys[tostring(k)] = v
+    if item.TradeLock == true or meta.TradeLock == true then
+        is_locked = true
+        table_insert(reasons, "TradeLock = true")
     end
-
-    -- 1. Evaluasi Direct Boolean Flags (Locked, TradeLocked, Untradable, dll.)
-    local flag_checks = {
-        {"TradeLocked", (item and item.TradeLocked == true) or (meta.TradeLocked == true)},
-        {"TradeLock",   (item and item.TradeLock == true) or (meta.TradeLock == true)},
-        {"Locked",      (item and item.Locked == true) or (meta.Locked == true)},
-        {"Untradable",  (item and item.Untradable == true) or (meta.Untradable == true)},
-        {"IsLocked",    (item and item.IsLocked == true) or (meta.IsLocked == true)},
-        {"Lock",        (item and item.Lock == true) or (meta.Lock == true)},
-    }
-    for _, check in ipairs(flag_checks) do
-        if check[2] then
-            is_locked = true
-            table.insert(reasons, check[1] .. " = true")
-        end
+    if item.Locked == true or meta.Locked == true then
+        is_locked = true
+        table_insert(reasons, "Locked = true")
+    end
+    if item.Untradable == true or meta.Untradable == true then
+        is_locked = true
+        table_insert(reasons, "Untradable = true")
     end
 
-    -- 2. Evaluasi Timestamp / Cooldown (Trade cooldown 15 menit)
-    local timestamp_candidates = {
-        {"TradeLockTime",     meta.TradeLockTime or (item and item.TradeLockTime)},
-        {"TradeLockExpires",  meta.TradeLockExpires or (item and item.TradeLockExpires)},
-        {"LockExpires",       meta.LockExpires or (item and item.LockExpires)},
-        {"LockTime",          meta.LockTime or (item and item.LockTime)},
-        {"TradeCooldown",     meta.TradeCooldown or (item and item.TradeCooldown)},
-        {"CooldownExpires",   meta.CooldownExpires or (item and item.CooldownExpires)},
-        {"TradedAt",          meta.TradedAt or (item and item.TradedAt)},
-        {"TradeTimestamp",    meta.TradeTimestamp or (item and item.TradeTimestamp)},
-        {"ReceivedAt",        meta.ReceivedAt or (item and item.ReceivedAt)},
-        {"TradedTime",        meta.TradedTime or (item and item.TradedTime)},
-        {"TradeLock",         (type(meta.TradeLock) == "number" and meta.TradeLock) or (item and type(item.TradeLock) == "number" and item.TradeLock)},
-        {"LockedUntil",       meta.LockedUntil or (item and item.LockedUntil)},
-        {"Timestamp",         meta.Timestamp or (item and item.Timestamp)},
+    -- 2. Cek Cooldown / Timestamp (15 Menit Cooldown dari Trade)
+    local ts_keys = {
+        "TradeLockTime", "TradeLockExpires", "LockExpires", "LockTime",
+        "TradeCooldown", "CooldownExpires", "TradedAt", "TradeTimestamp",
+        "ReceivedAt", "TradeTime", "LockedUntil", "TradeLock", "Timestamp"
     }
 
-    for _, cand in ipairs(timestamp_candidates) do
-        local raw_val = cand[2]
-        if type(raw_val) == "number" and raw_val > 0 then
-            -- Handle millisecond timestamps (13 digits)
-            local ts = raw_val > 10000000000 and (raw_val / 1000) or raw_val
-            details.timestamp_detected = { key = cand[1], value = ts, raw = raw_val }
-
-            -- Kasus A: Nilai adalah Expiration Timestamp (Kapan cooldown berakhir)
+    for _, k in ipairs(ts_keys) do
+        local val = meta[k] or item[k]
+        if type(val) == "number" and val > 0 then
+            local ts = val > 10000000000 and (val / 1000) or val
+            -- Kasus Expiration (waktu berakhir di masa depan)
             if ts > (now - 3600) and ts > now then
                 local rem = math_floor(ts - now)
                 if rem > 0 then
                     is_locked = true
-                    remaining_seconds = math_max(remaining_seconds, rem)
-                    table.insert(reasons, string_format("%s (Ends in %ds)", cand[1], rem))
+                    remaining_sec = math_max(remaining_sec, rem)
+                    table_insert(reasons, string_format("%s (Ends in %ds)", k, rem))
                 end
-            -- Kasus B: Nilai adalah Creation/Traded-At Timestamp (Waktu saat selesai trade)
-            elseif ts <= now and (now - ts) < COOLDOWN_DURATION then
-                local elapsed = now - ts
-                local rem = math_floor(COOLDOWN_DURATION - elapsed)
+            -- Kasus Traded-At (waktu trade dicatat, cooldown 15 menit)
+            elseif ts <= now and (now - ts) < COOLDOWN_15M then
+                local rem = math_floor(COOLDOWN_15M - (now - ts))
                 if rem > 0 then
                     is_locked = true
-                    remaining_seconds = math_max(remaining_seconds, rem)
-                    table.insert(reasons, string_format("%s + 15m Cooldown (%ds left)", cand[1], rem))
+                    remaining_sec = math_max(remaining_sec, rem)
+                    table_insert(reasons, string_format("%s (Cooldown: %ds left)", k, rem))
                 end
             end
         end
     end
 
-    -- 3. Evaluasi Resmi Game: TradeData.FollowTradeRules
-    local follow_rules_result = nil
-    if trade_data and trade_data.FollowTradeRules and item_utility then
-        local itemId = item and item.Id
-        local itemInfo = itemId and item_utility:GetItemData(itemId)
-        if itemInfo then
-            local callTarget = itemInfo
-            local testItem = {}
-            for k, v in pairs(item) do
-                -- Jangan exclude flags asli agar hasil FollowTradeRules akurat mendeteksi lock
-                testItem[k] = v
-            end
-            local ok, canTrade = pcall(trade_data.FollowTradeRules, callTarget, testItem)
-            if ok and canTrade ~= nil then
-                follow_rules_result = canTrade
-                if canTrade == false then
-                    is_locked = true
-                    table.insert(reasons, "TradeData.FollowTradeRules = false")
-                end
-            end
-        end
-    end
-    details.follow_trade_rules = follow_rules_result
-
-    -- Tentukan Tipe Lock
     if is_locked then
-        if remaining_seconds > 0 then
-            lock_type = "Cooldown"
-        else
-            lock_type = "LockedFlag"
-        end
-    else
-        lock_type = "Tradable"
+        lock_type = remaining_sec > 0 and "Cooldown" or "FlagLocked"
     end
 
-    details.reasons = reasons
-    details.is_locked = is_locked
-    details.lock_type = lock_type
-    details.remaining_seconds = remaining_seconds
-
-    return is_locked, lock_type, remaining_seconds, reasons, details
+    return is_locked, lock_type, remaining_sec, reasons
 end
 
--- Export global agar bisa dipanggil langsung oleh script lain (misal msdm.lua)
-_G.CheckFishItItemLock = inspect_item_lock
+-- Export fungsi global untuk digunakan script lain
+_G.IsItemTradeLocked = evaluate_item_lock
 
 -- ==============================================================================
--- 4. INVENTORY SCANNER
+-- 3. SCANNER INVENTORY DENGAN FILTER KATEGORI (Acuan dari msdm.lua)
 -- ==============================================================================
-local function scan_inventory()
+local function perform_inventory_scan(filter_mode)
     if not player_data then
-        return nil, "Player Data (Replion) belum siap. Pastikan script dieksekusi setelah game selesai loading."
+        return nil, "Player Data belum siap! Pastikan karakter sudah masuk ke game."
     end
 
     local inv = player_data:Get("Inventory")
     local items = inv and inv.Items or {}
-    local results = {}
 
-    for idx, item in ipairs(items) do
-        if item and item.Id then
-            local item_info = item_utility and item_utility:GetItemData(item.Id)
-            local item_data = (item_info and item_info.Data) or item_info or {}
+    local total_count = 0
+    local locked_count = 0
+    local locked_items = {}
+    local unlocked_count = 0
+    local all_item_keys = {}
+    local all_meta_keys = {}
 
-            local name = item_data.Name or item.Name or ("Item #" .. tostring(item.Id))
-            local category = item_data.Type or item_data.Category or "Item"
-            local meta = item.Metadata or {}
+    for idx, itm in ipairs(items) do
+        if itm and itm.Id then
+            local item_info = item_utility and item_utility:GetItemData(itm.Id)
+            local item_data = item_info and item_info.Data or {}
+            local item_type = item_data.Type or item_data.Category or "Item"
 
-            local variant_name = nil
-            if meta.VariantId and item_utility and item_utility.GetVariantData then
-                pcall(function()
-                    local v = item_utility.GetVariantData(tonumber(meta.VariantId))
-                    if v and v.Data and v.Data.Name then variant_name = v.Data.Name end
-                end)
+            -- Filter Kategori Persis seperti di msdm.lua
+            local is_match = false
+            if filter_mode == "Fish" then
+                is_match = (item_type == "Fish")
+            elseif filter_mode == "Enchant" then
+                is_match = (item_type == "Enchant Stones")
+            else
+                is_match = true -- Semua Kategori
             end
 
-            local is_locked, lock_type, rem_sec, reasons, details = inspect_item_lock(item)
+            if is_match then
+                total_count = total_count + 1
 
-            table.insert(results, {
-                index = idx,
-                uuid = item.UUID or "No-UUID",
-                id = item.Id,
-                name = name,
-                category = category,
-                variant = variant_name,
-                is_shiny = meta.Shiny == true,
-                is_fav = (item.Favorited == true or meta.Favorited == true),
-                is_locked = is_locked,
-                lock_type = lock_type,
-                remaining_seconds = rem_sec,
-                reasons = reasons,
-                raw_item = item,
-                details = details,
-            })
+                -- Catat semua key yang ditemukan untuk keperluan debug
+                for k in pairs(itm) do all_item_keys[tostring(k)] = true end
+                if type(itm.Metadata) == "table" then
+                    for k in pairs(itm.Metadata) do all_meta_keys[tostring(k)] = true end
+                end
+
+                local is_locked, l_type, rem_sec, reasons = evaluate_item_lock(itm)
+
+                local name = item_data.Name or itm.Name or ("Item #" .. tostring(itm.Id))
+                local meta = itm.Metadata or {}
+                local var_name = nil
+                if meta.VariantId and item_utility and item_utility.GetVariantData then
+                    pcall(function()
+                        local v = item_utility.GetVariantData(tonumber(meta.VariantId))
+                        if v and v.Data and v.Data.Name then var_name = v.Data.Name end
+                    end)
+                end
+
+                if is_locked then
+                    locked_count = locked_count + 1
+                    table_insert(locked_items, {
+                        name = name .. (var_name and (" [" .. var_name .. "]") or ""),
+                        id = itm.Id,
+                        uuid = itm.UUID or "No-UUID",
+                        category = item_type,
+                        lock_type = l_type,
+                        remaining_sec = rem_sec,
+                        reasons = reasons,
+                        metadata = itm.Metadata,
+                        raw = itm
+                    })
+                else
+                    unlocked_count = unlocked_count + 1
+                end
+            end
         end
     end
 
-    return results, nil
+    local item_key_list = {}
+    for k in pairs(all_item_keys) do table_insert(item_key_list, k) end
+    table_sort(item_key_list)
+
+    local meta_key_list = {}
+    for k in pairs(all_meta_keys) do table_insert(meta_key_list, k) end
+    table_sort(meta_key_list)
+
+    return {
+        target = filter_mode,
+        total = total_count,
+        locked_count = locked_count,
+        unlocked_count = unlocked_count,
+        locked_items = locked_items,
+        item_keys = item_key_list,
+        metadata_keys = meta_key_list,
+    }
 end
 
 -- ==============================================================================
--- 5. INSPECTOR UI
+-- 4. GUI TAMPILAN (Sleek Noir Theme Persis msdm.lua)
 -- ==============================================================================
+local parent_gui = (gethui and gethui()) or game:GetService("CoreGui")
+pcall(function()
+    local old = parent_gui:FindFirstChild("FishIt_LockInspector")
+    if old then old:Destroy() end
+end)
+
 local gui = Instance.new("ScreenGui")
-gui.Name = "FishItItemLockInspectorGui"
+gui.Name = "FishIt_LockInspector"
 gui.ResetOnSpawn = false
+gui.DisplayOrder = 2147483647
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = core
+gui.Parent = parent_gui
+
+local BG_COLOR       = Color3.fromRGB(15, 15, 15)
+local SIDEBAR_COLOR  = Color3.fromRGB(10, 10, 10)
+local ACCENT_COLOR   = Color3.fromRGB(255, 125, 0)
+local BUTTON_COLOR   = Color3.fromRGB(235, 95, 20)
+local TEXT_COLOR     = Color3.fromRGB(240, 240, 240)
+local MUTED_COLOR    = Color3.fromRGB(150, 150, 150)
+local CARD_COLOR     = Color3.fromRGB(22, 22, 22)
+local INPUT_BG_COLOR = Color3.fromRGB(28, 28, 28)
+
+local font_face = Font.fromEnum(Enum.Font.SourceSans)
+local font_bold = Font.fromEnum(Enum.Font.SourceSansBold)
+
+local function create_corner(parent, radius)
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, radius); c.Parent = parent; return c
+end
+local function create_stroke(parent, color, thickness)
+    local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = thickness or 1; s.Parent = parent; return s
+end
 
 local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 480, 0, 430)
-main.Position = UDim2.new(0.5, -240, 0.5, -215)
-main.BackgroundColor3 = Color3.fromRGB(16, 18, 24)
-main.BorderSizePixel = 0
+main.Name = "MainFrame"
+main.Size = UDim2.new(0, 310, 0, 260)
+main.Position = UDim2.new(0.5, -155, 0.4, -130)
+main.BackgroundColor3 = BG_COLOR
 main.Active = true
 main.Parent = gui
+create_corner(main, 8); create_stroke(main, Color3.fromRGB(45, 45, 45))
 
-local main_corner = Instance.new("UICorner")
-main_corner.CornerRadius = UDim.new(0, 10)
-main_corner.Parent = main
-
-local main_stroke = Instance.new("UIStroke")
-main_stroke.Color = Color3.fromRGB(45, 52, 70)
-main_stroke.Thickness = 1.2
-main_stroke.Parent = main
-
--- Header Dragging
+-- Header
 local header = Instance.new("Frame")
-header.Size = UDim2.new(1, 0, 0, 32)
-header.BackgroundColor3 = Color3.fromRGB(22, 26, 36)
-header.BorderSizePixel = 0
+header.Size = UDim2.new(1, 0, 0, 26)
+header.BackgroundColor3 = SIDEBAR_COLOR
 header.Parent = main
-
-local header_corner = Instance.new("UICorner")
-header_corner.CornerRadius = UDim.new(0, 10)
-header_corner.Parent = header
+create_corner(header, 8)
 
 local title_lbl = Instance.new("TextLabel")
-title_lbl.Size = UDim2.new(1, -70, 1, 0)
-title_lbl.Position = UDim2.new(0, 12, 0, 0)
+title_lbl.Size = UDim2.new(1, -90, 1, 0)
+title_lbl.Position = UDim2.new(0, 8, 0, 0)
 title_lbl.BackgroundTransparency = 1
-title_lbl.Text = "🔒 Fish It: Item Lock & Trade Cooldown Inspector"
+title_lbl.Text = "NØIR • Lock & Cooldown Inspector"
 title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-title_lbl.TextSize = 11.5
-title_lbl.Font = Enum.Font.GothamBold
+title_lbl.TextSize = 11
+title_lbl.FontFace = font_bold
 title_lbl.TextXAlignment = Enum.TextXAlignment.Left
 title_lbl.Parent = header
 
 local close_btn = Instance.new("TextButton")
-close_btn.Size = UDim2.new(0, 26, 0, 22)
-close_btn.Position = UDim2.new(1, -32, 0.5, -11)
-close_btn.BackgroundColor3 = Color3.fromRGB(40, 45, 60)
+close_btn.Size = UDim2.new(0, 20, 0, 20)
+close_btn.Position = UDim2.new(1, -24, 0.5, -10)
+close_btn.BackgroundTransparency = 1
 close_btn.Text = "X"
-close_btn.TextColor3 = Color3.fromRGB(255, 90, 90)
+close_btn.TextColor3 = MUTED_COLOR
 close_btn.TextSize = 11
-close_btn.Font = Enum.Font.GothamBold
+close_btn.Font = Enum.Font.SourceSansBold
 close_btn.Parent = header
-local c_corner = Instance.new("UICorner"); c_corner.CornerRadius = UDim.new(0, 4); c_corner.Parent = close_btn
 close_btn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
 -- Drag Logic
@@ -374,412 +338,186 @@ user_input_service.InputChanged:Connect(function(input)
     end
 end)
 
--- Stats Summary Cards
-local stats_row = Instance.new("Frame")
-stats_row.Size = UDim2.new(1, -20, 0, 36)
-stats_row.Position = UDim2.new(0, 10, 0, 40)
-stats_row.BackgroundTransparency = 1
-stats_row.Parent = main
+-- Pilihan Kategori Scan (Filter: Fish / Enchant Stone / Semua)
+local filter_row = Instance.new("Frame")
+filter_row.Size = UDim2.new(1, -16, 0, 22)
+filter_row.Position = UDim2.new(0, 8, 0, 30)
+filter_row.BackgroundTransparency = 1
+filter_row.Parent = main
 
-local function create_stat_card(parent, pos, size, label, val_color)
-    local card = Instance.new("Frame")
-    card.Position = pos
-    card.Size = size
-    card.BackgroundColor3 = Color3.fromRGB(22, 26, 36)
-    card.BorderSizePixel = 0
-    card.Parent = parent
-    local cd_corner = Instance.new("UICorner"); cd_corner.CornerRadius = UDim.new(0, 6); cd_corner.Parent = card
-    local cd_stroke = Instance.new("UIStroke"); cd_stroke.Color = Color3.fromRGB(38, 45, 60); cd_stroke.Parent = card
+local current_filter = "Fish" -- Default: Fish (Ikan)
+local filter_buttons = {}
 
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -10, 0, 12)
-    lbl.Position = UDim2.new(0, 6, 0, 4)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = label
-    lbl.TextColor3 = Color3.fromRGB(140, 150, 170)
-    lbl.TextSize = 8.5
-    lbl.Font = Enum.Font.GothamMedium
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = card
-
-    local val = Instance.new("TextLabel")
-    val.Size = UDim2.new(1, -10, 0, 16)
-    val.Position = UDim2.new(0, 6, 0, 16)
-    val.BackgroundTransparency = 1
-    val.Text = "0"
-    val.TextColor3 = val_color
-    val.TextSize = 12
-    val.Font = Enum.Font.GothamBold
-    val.TextXAlignment = Enum.TextXAlignment.Left
-    val.Parent = card
-
-    return val
-end
-
-local stat_total = create_stat_card(stats_row, UDim2.new(0, 0, 0, 0), UDim2.new(0.31, 0, 1, 0), "TOTAL ITEMS", Color3.fromRGB(240, 240, 240))
-local stat_locked = create_stat_card(stats_row, UDim2.new(0.34, 0, 0, 0), UDim2.new(0.32, 0, 1, 0), "LOCKED / COOLDOWN", Color3.fromRGB(255, 85, 85))
-local stat_tradable = create_stat_card(stats_row, UDim2.new(0.68, 0, 0, 0), UDim2.new(0.32, 0, 1, 0), "TRADABLE (READY)", Color3.fromRGB(75, 225, 135))
-
--- Filter Tabs & Search
-local ctrl_row = Instance.new("Frame")
-ctrl_row.Size = UDim2.new(1, -20, 0, 26)
-ctrl_row.Position = UDim2.new(0, 10, 0, 82)
-ctrl_row.BackgroundTransparency = 1
-ctrl_row.Parent = main
-
-local search_box = Instance.new("TextBox")
-search_box.Size = UDim2.new(0.4, 0, 1, 0)
-search_box.BackgroundColor3 = Color3.fromRGB(22, 26, 36)
-search_box.Text = ""
-search_box.PlaceholderText = "Search item name/id..."
-search_box.PlaceholderColor3 = Color3.fromRGB(110, 120, 140)
-search_box.TextColor3 = Color3.fromRGB(240, 240, 240)
-search_box.TextSize = 10
-search_box.Font = Enum.Font.GothamMedium
-search_box.ClearTextOnFocus = false
-search_box.Parent = ctrl_row
-local sb_corner = Instance.new("UICorner"); sb_corner.CornerRadius = UDim.new(0, 5); sb_corner.Parent = search_box
-local sb_stroke = Instance.new("UIStroke"); sb_stroke.Color = Color3.fromRGB(38, 45, 60); sb_stroke.Parent = search_box
-
-local tab_container = Instance.new("Frame")
-tab_container.Size = UDim2.new(0.58, 0, 1, 0)
-tab_container.Position = UDim2.new(0.42, 0, 0, 0)
-tab_container.BackgroundTransparency = 1
-tab_container.Parent = ctrl_row
-local tc_layout = Instance.new("UIListLayout"); tc_layout.FillDirection = Enum.FillDirection.Horizontal; tc_layout.Padding = UDim.new(0, 4); tc_layout.Parent = tab_container
-
-local active_filter = "All" -- "All", "Locked", "Tradable"
-local tab_btns = {}
-
-local function create_tab(name, filter_key)
+local function create_filter_btn(name, target_key, x_scale, width_scale)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.32, 0, 1, 0)
-    btn.BackgroundColor3 = (active_filter == filter_key) and Color3.fromRGB(45, 100, 200) or Color3.fromRGB(24, 28, 38)
+    btn.Size = UDim2.new(width_scale, -3, 1, 0)
+    btn.Position = UDim2.new(x_scale, 0, 0, 0)
+    btn.BackgroundColor3 = (current_filter == target_key) and BUTTON_COLOR or CARD_COLOR
     btn.Text = name
-    btn.TextColor3 = Color3.fromRGB(240, 240, 240)
+    btn.TextColor3 = (current_filter == target_key) and Color3.fromRGB(255, 255, 255) or MUTED_COLOR
     btn.TextSize = 9.5
-    btn.Font = Enum.Font.GothamBold
-    btn.Parent = tab_container
-    local b_corner = Instance.new("UICorner"); b_corner.CornerRadius = UDim.new(0, 5); b_corner.Parent = btn
-    tab_btns[filter_key] = btn
+    btn.FontFace = font_bold
+    btn.Parent = filter_row
+    create_corner(btn, 4); create_stroke(btn, Color3.fromRGB(45, 45, 45))
+    filter_buttons[target_key] = btn
     return btn
 end
 
--- Scroll Item List
+local btn_fish    = create_filter_btn("🐟 Fish (Ikan)", "Fish", 0, 0.35)
+local btn_enchant = create_filter_btn("💎 Enchant Stone", "Enchant", 0.36, 0.38)
+local btn_all     = create_filter_btn("📦 Semua", "All", 0.75, 0.25)
+
+local function update_filter_ui(target_key)
+    current_filter = target_key
+    for k, btn in pairs(filter_buttons) do
+        local is_active = (k == current_filter)
+        btn.BackgroundColor3 = is_active and BUTTON_COLOR or CARD_COLOR
+        btn.TextColor3 = is_active and Color3.fromRGB(255, 255, 255) or MUTED_COLOR
+    end
+end
+
+btn_fish.MouseButton1Click:Connect(function() update_filter_ui("Fish") end)
+btn_enchant.MouseButton1Click:Connect(function() update_filter_ui("Enchant") end)
+btn_all.MouseButton1Click:Connect(function() update_filter_ui("All") end)
+
+-- Stats Row
+local stats_row = Instance.new("Frame")
+stats_row.Size = UDim2.new(1, -16, 0, 24)
+stats_row.Position = UDim2.new(0, 8, 0, 56)
+stats_row.BackgroundColor3 = CARD_COLOR
+stats_row.Parent = main
+create_corner(stats_row, 4); create_stroke(stats_row, Color3.fromRGB(35, 35, 35))
+
+local stat_lbl = Instance.new("TextLabel")
+stat_lbl.Size = UDim2.new(1, -12, 1, 0)
+stat_lbl.Position = UDim2.new(0, 6, 0, 0)
+stat_lbl.BackgroundTransparency = 1
+stat_lbl.Text = "Status: Siap scan. Silakan klik [Mulai Scan]."
+stat_lbl.TextColor3 = TEXT_COLOR
+stat_lbl.TextSize = 9.5
+stat_lbl.FontFace = font_bold
+stat_lbl.TextXAlignment = Enum.TextXAlignment.Left
+stat_lbl.Parent = stats_row
+
+-- Scrolling Report Box
 local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -20, 1, -175)
-scroll.Position = UDim2.new(0, 10, 0, 114)
-scroll.BackgroundColor3 = Color3.fromRGB(12, 14, 20)
-scroll.BorderSizePixel = 0
-scroll.ScrollBarThickness = 4
-scroll.ScrollBarImageColor3 = Color3.fromRGB(60, 70, 90)
+scroll.Size = UDim2.new(1, -16, 1, -118)
+scroll.Position = UDim2.new(0, 8, 0, 84)
+scroll.BackgroundColor3 = INPUT_BG_COLOR
+scroll.ScrollBarThickness = 3
+scroll.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 60)
 scroll.Parent = main
-local sc_corner = Instance.new("UICorner"); sc_corner.CornerRadius = UDim.new(0, 6); sc_corner.Parent = scroll
-local sc_stroke = Instance.new("UIStroke"); sc_stroke.Color = Color3.fromRGB(30, 36, 48); sc_stroke.Parent = scroll
+create_corner(scroll, 5); create_stroke(scroll, Color3.fromRGB(35, 35, 35))
 
-local list_layout = Instance.new("UIListLayout")
-list_layout.Padding = UDim.new(0, 3)
-list_layout.Parent = scroll
+local content_lbl = Instance.new("TextLabel")
+content_lbl.Size = UDim2.new(1, -8, 1, 0)
+content_lbl.Position = UDim2.new(0, 4, 0, 4)
+content_lbl.BackgroundTransparency = 1
+content_lbl.Text = "Pilih target scan di atas (Fish / Enchant / Semua),\nlalu tekan tombol [Mulai Scan] di bawah untuk memeriksa status Lock & Cooldown 15 Menit."
+content_lbl.TextColor3 = MUTED_COLOR
+content_lbl.TextSize = 9.5
+content_lbl.FontFace = font_face
+content_lbl.TextXAlignment = Enum.TextXAlignment.Left
+content_lbl.TextYAlignment = Enum.TextYAlignment.Top
+content_lbl.TextWrapped = true
+content_lbl.Parent = scroll
 
--- Bottom Action Buttons & Status
-local bottom_row = Instance.new("Frame")
-bottom_row.Size = UDim2.new(1, -20, 0, 48)
-bottom_row.Position = UDim2.new(0, 10, 1, -54)
-bottom_row.BackgroundTransparency = 1
-bottom_row.Parent = main
+-- Bottom Buttons
+local scan_btn = Instance.new("TextButton")
+scan_btn.Size = UDim2.new(0.48, -4, 0, 24)
+scan_btn.Position = UDim2.new(0, 8, 1, -28)
+scan_btn.BackgroundColor3 = BUTTON_COLOR
+scan_btn.Text = "▶ Mulai Scan"
+scan_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+scan_btn.TextSize = 10
+scan_btn.FontFace = font_bold
+scan_btn.Parent = main
+create_corner(scan_btn, 4)
 
-local status_lbl = Instance.new("TextLabel")
-status_lbl.Size = UDim2.new(1, 0, 0, 16)
-status_lbl.Position = UDim2.new(0, 0, 0, 0)
-status_lbl.BackgroundTransparency = 1
-status_lbl.Text = "Ready to inspect inventory."
-status_lbl.TextColor3 = Color3.fromRGB(150, 165, 190)
-status_lbl.TextSize = 9.5
-status_lbl.Font = Enum.Font.GothamMedium
-status_lbl.TextXAlignment = Enum.TextXAlignment.Left
-status_lbl.TextTruncate = Enum.TextTruncate.AtEnd
-status_lbl.Parent = bottom_row
+local copy_btn = Instance.new("TextButton")
+copy_btn.Size = UDim2.new(0.48, -4, 0, 24)
+copy_btn.Position = UDim2.new(0.52, 0, 1, -28)
+copy_btn.BackgroundColor3 = CARD_COLOR
+copy_btn.Text = "📋 Copy Dump JSON"
+copy_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+copy_btn.TextSize = 10
+copy_btn.FontFace = font_bold
+copy_btn.Parent = main
+create_corner(copy_btn, 4); create_stroke(copy_btn, Color3.fromRGB(45, 45, 45))
 
-local btn_row = Instance.new("Frame")
-btn_row.Size = UDim2.new(1, 0, 0, 26)
-btn_row.Position = UDim2.new(0, 0, 0, 20)
-btn_row.BackgroundTransparency = 1
-btn_row.Parent = bottom_row
-local br_layout = Instance.new("UIListLayout"); br_layout.FillDirection = Enum.FillDirection.Horizontal; br_layout.Padding = UDim.new(0, 6); br_layout.Parent = btn_row
+-- Scanner Controller (Hanya Jalan Saat Tombol Diklik)
+local last_scan_data = nil
 
-local function create_action_btn(text, color, width_scale)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(width_scale, -4, 1, 0)
-    btn.BackgroundColor3 = color
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.TextSize = 9.5
-    btn.Font = Enum.Font.GothamBold
-    btn.Parent = btn_row
-    local b_corner = Instance.new("UICorner"); b_corner.CornerRadius = UDim.new(0, 5); b_corner.Parent = btn
-    return btn
-end
+local function render_report()
+    task_spawn(function()
+        local target_name = (current_filter == "Fish" and "Ikan") or (current_filter == "Enchant" and "Enchant Stones") or "Semua Item"
+        stat_lbl.Text = string_format("Sedang memindai %s...", target_name)
+        content_lbl.TextColor3 = TEXT_COLOR
+        content_lbl.Text = "Memproses inventory..."
+        task_wait(0.05)
 
-local refresh_btn   = create_action_btn("🔄 Refresh Scan", Color3.fromRGB(35, 42, 60), 0.32)
-local copy_lock_btn = create_action_btn("📋 Copy Locked (JSON)", Color3.fromRGB(180, 50, 50), 0.35)
-local copy_all_btn  = create_action_btn("📋 Copy All (JSON)", Color3.fromRGB(35, 110, 180), 0.33)
+        local data, err = perform_inventory_scan(current_filter)
+        if not data then
+            stat_lbl.Text = "❌ " .. tostring(err)
+            content_lbl.Text = "Gagal memindai inventory:\n" .. tostring(err)
+            return
+        end
 
--- ==============================================================================
--- 6. RENDER LOGIC
--- ==============================================================================
-local cached_results = {}
+        last_scan_data = data
+        stat_lbl.Text = string_format("[%s] Total: %d | 🔒 Kunci: %d | 🔓 Siap: %d", current_filter, data.total, data.locked_count, data.unlocked_count)
 
-local function format_cooldown(sec)
-    local m = math_floor(sec / 60)
-    local s = sec % 60
-    return string_format("%02dm %02ds", m, s)
-end
+        local lines = {}
+        table_insert(lines, string_format("=== HASIL SCAN: %s ===", target_name:upper()))
+        table_insert(lines, string_format("Total: %d item  |  🔒 Terkunci: %d  |  🔓 Tradable: %d", data.total, data.locked_count, data.unlocked_count))
+        table_insert(lines, "")
 
-local function render_items()
-    for _, child in ipairs(scroll:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
-    end
-
-    local search_query = string_lower(search_box.Text or "")
-    local total_count = #cached_results
-    local locked_count = 0
-    local tradable_count = 0
-    local rendered_count = 0
-
-    for _, res in ipairs(cached_results) do
-        if res.is_locked then
-            locked_count = locked_count + 1
+        if data.total == 0 then
+            table_insert(lines, "⚠️ Tidak ditemukan item untuk kategori ini di inventory.")
+        elseif data.locked_count == 0 then
+            table_insert(lines, "✅ Tidak ada item yang terkena Lock / Cooldown 15 Menit.")
+            table_insert(lines, string_format("Seluruh %s (%d item) siap untuk di-trade!", target_name, data.unlocked_count))
         else
-            tradable_count = tradable_count + 1
-        end
-
-        local matches_filter = (active_filter == "All")
-            or (active_filter == "Locked" and res.is_locked)
-            or (active_filter == "Tradable" and not res.is_locked)
-
-        local display_name = res.name .. (res.variant and (" [" .. res.variant .. "]") or "")
-        local matches_search = (search_query == "")
-            or string_find(string_lower(display_name), search_query)
-            or string_find(string_lower(tostring(res.id)), search_query)
-            or string_find(string_lower(res.uuid), search_query)
-
-        if matches_filter and matches_search then
-            rendered_count = rendered_count + 1
-
-            local item_card = Instance.new("Frame")
-            item_card.Size = UDim2.new(1, -6, 0, 32)
-            item_card.BackgroundColor3 = res.is_locked and Color3.fromRGB(28, 20, 24) or Color3.fromRGB(18, 22, 30)
-            item_card.BorderSizePixel = 0
-            item_card.Parent = scroll
-            local ic_corner = Instance.new("UICorner"); ic_corner.CornerRadius = UDim.new(0, 5); ic_corner.Parent = item_card
-            local ic_stroke = Instance.new("UIStroke")
-            ic_stroke.Color = res.is_locked and Color3.fromRGB(80, 35, 45) or Color3.fromRGB(35, 45, 60)
-            ic_stroke.Parent = item_card
-
-            -- Title & Type
-            local name_lbl = Instance.new("TextLabel")
-            name_lbl.Size = UDim2.new(0.52, 0, 0, 16)
-            name_lbl.Position = UDim2.new(0, 8, 0, 2)
-            name_lbl.BackgroundTransparency = 1
-            name_lbl.Text = display_name
-            name_lbl.TextColor3 = res.is_locked and Color3.fromRGB(255, 170, 170) or Color3.fromRGB(240, 240, 240)
-            name_lbl.TextSize = 10
-            name_lbl.Font = Enum.Font.GothamBold
-            name_lbl.TextXAlignment = Enum.TextXAlignment.Left
-            name_lbl.TextTruncate = Enum.TextTruncate.AtEnd
-            name_lbl.Parent = item_card
-
-            local sub_lbl = Instance.new("TextLabel")
-            sub_lbl.Size = UDim2.new(0.52, 0, 0, 12)
-            sub_lbl.Position = UDim2.new(0, 8, 0, 17)
-            sub_lbl.BackgroundTransparency = 1
-            sub_lbl.Text = string_format("ID: %s • UUID: %s", tostring(res.id), string.sub(res.uuid, 1, 8) .. "...")
-            sub_lbl.TextColor3 = Color3.fromRGB(120, 130, 150)
-            sub_lbl.TextSize = 8
-            sub_lbl.Font = Enum.Font.Code
-            sub_lbl.TextXAlignment = Enum.TextXAlignment.Left
-            sub_lbl.Parent = item_card
-
-            -- Status Tag / Badge
-            local tag_badge = Instance.new("Frame")
-            tag_badge.Size = UDim2.new(0.32, 0, 0, 20)
-            tag_badge.Position = UDim2.new(0.54, 0, 0.5, -10)
-            tag_badge.BackgroundColor3 = res.is_locked and Color3.fromRGB(60, 20, 25) or Color3.fromRGB(20, 50, 35)
-            tag_badge.BorderSizePixel = 0
-            tag_badge.Parent = item_card
-            local tb_corner = Instance.new("UICorner"); tb_corner.CornerRadius = UDim.new(0, 4); tb_corner.Parent = tag_badge
-
-            local tag_lbl = Instance.new("TextLabel")
-            tag_lbl.Size = UDim2.new(1, -4, 1, 0)
-            tag_lbl.Position = UDim2.new(0, 2, 0, 0)
-            tag_lbl.BackgroundTransparency = 1
-            if res.is_locked then
-                if res.remaining_seconds > 0 then
-                    tag_lbl.Text = "⏳ " .. format_cooldown(res.remaining_seconds)
-                else
-                    tag_lbl.Text = "🔒 " .. (res.reasons[1] or "LOCKED")
-                end
-                tag_lbl.TextColor3 = Color3.fromRGB(255, 100, 100)
-            else
-                tag_lbl.Text = "🔓 TRADABLE"
-                tag_lbl.TextColor3 = Color3.fromRGB(75, 225, 135)
+            table_insert(lines, "--- DAFTAR ITEM TERKUNCI ---")
+            for i, itm in ipairs(data.locked_items) do
+                local rem_str = itm.remaining_sec > 0 and (math_floor(itm.remaining_sec / 60) .. "m " .. (itm.remaining_sec % 60) .. "s") or "Aktif"
+                table_insert(lines, string_format("[%d] 🔒 %s", i, itm.name))
+                table_insert(lines, "    • Sisa Cooldown: " .. rem_str)
+                table_insert(lines, "    • Alasan Lock: " .. table_concat(itm.reasons, ", "))
+                table_insert(lines, "    • UUID: " .. string_sub(tostring(itm.uuid), 1, 12) .. "...")
             end
-            tag_lbl.TextSize = 8.5
-            tag_lbl.Font = Enum.Font.GothamBold
-            tag_lbl.TextTruncate = Enum.TextTruncate.AtEnd
-            tag_lbl.Parent = tag_badge
-
-            -- Dump Button for Individual Item
-            local dump_btn = Instance.new("TextButton")
-            dump_btn.Size = UDim2.new(0, 42, 0, 20)
-            dump_btn.Position = UDim2.new(1, -48, 0.5, -10)
-            dump_btn.BackgroundColor3 = Color3.fromRGB(35, 42, 60)
-            dump_btn.Text = "Dump"
-            dump_btn.TextColor3 = Color3.fromRGB(200, 210, 230)
-            dump_btn.TextSize = 8.5
-            dump_btn.Font = Enum.Font.GothamBold
-            dump_btn.Parent = item_card
-            local d_corner = Instance.new("UICorner"); d_corner.CornerRadius = UDim.new(0, 4); d_corner.Parent = dump_btn
-
-            dump_btn.MouseButton1Click:Connect(function()
-                local dump_payload = {
-                    item_info = {
-                        name = res.name,
-                        id = res.id,
-                        uuid = res.uuid,
-                        is_locked = res.is_locked,
-                        lock_type = res.lock_type,
-                        remaining_seconds = res.remaining_seconds,
-                        reasons = res.reasons,
-                    },
-                    raw_item = res.raw_item,
-                    details = res.details,
-                }
-                local json_str = to_json_pretty(dump_payload)
-                if copy_to_clipboard(json_str) then
-                    status_lbl.Text = string_format("Dump '%s' disalin ke Clipboard!", res.name)
-                    status_lbl.TextColor3 = Color3.fromRGB(75, 225, 135)
-                else
-                    status_lbl.Text = "Gagal menyalin (Executor tidak mendukung clipboard)."
-                    status_lbl.TextColor3 = Color3.fromRGB(255, 100, 100)
-                end
-            end)
         end
-    end
 
-    stat_total.Text = tostring(total_count)
-    stat_locked.Text = tostring(locked_count)
-    stat_tradable.Text = tostring(tradable_count)
+        table_insert(lines, "")
+        table_insert(lines, "--- METADATA KEYS YANG DITEMUKAN ---")
+        table_insert(lines, "Keys di Metadata: " .. (#data.metadata_keys > 0 and table_concat(data.metadata_keys, ", ") or "-"))
+        table_insert(lines, "Keys di Item: " .. (#data.item_keys > 0 and table_concat(data.item_keys, ", ") or "-"))
 
-    scroll.CanvasSize = UDim2.new(0, 0, 0, rendered_count * 35 + 10)
-end
+        local full_text = table_concat(lines, "\n")
+        content_lbl.Text = full_text
 
-local function execute_scan()
-    status_lbl.Text = "Scanning inventory..."
-    status_lbl.TextColor3 = Color3.fromRGB(255, 200, 80)
-    task.wait(0.05)
-
-    local res, err = scan_inventory()
-    if err then
-        status_lbl.Text = "❌ " .. err
-        status_lbl.TextColor3 = Color3.fromRGB(255, 90, 90)
-        return
-    end
-
-    cached_results = res or {}
-    render_items()
-
-    local locked_num = 0
-    for _, r in ipairs(cached_results) do if r.is_locked then locked_num = locked_num + 1 end end
-    status_lbl.Text = string_format("Scan selesai: %d item total, %d terkunci (cooldown/lock).", #cached_results, locked_num)
-    status_lbl.TextColor3 = Color3.fromRGB(75, 225, 135)
-end
-
--- ==============================================================================
--- 7. EVENT CONNECTIONS
--- ==============================================================================
-create_tab("Semua", "All")
-create_tab("🔒 Terkunci", "Locked")
-create_tab("🔓 Tradable", "Tradable")
-
-for key, btn in pairs(tab_btns) do
-    btn.MouseButton1Click:Connect(function()
-        active_filter = key
-        for k, b in pairs(tab_btns) do
-            b.BackgroundColor3 = (k == active_filter) and Color3.fromRGB(45, 100, 200) or Color3.fromRGB(24, 28, 38)
-        end
-        render_items()
+        content_lbl.Size = UDim2.new(1, -8, 0, #lines * 14 + 20)
+        scroll.CanvasSize = UDim2.new(0, 0, 0, content_lbl.Size.Y.Offset)
     end)
 end
 
-search_box:GetPropertyChangedSignal("Text"):Connect(function()
-    render_items()
-end)
+scan_btn.MouseButton1Click:Connect(render_report)
 
-refresh_btn.MouseButton1Click:Connect(function()
-    execute_scan()
-end)
-
-copy_lock_btn.MouseButton1Click:Connect(function()
-    local locked_list = {}
-    for _, r in ipairs(cached_results) do
-        if r.is_locked then
-            table.insert(locked_list, {
-                name = r.name,
-                id = r.id,
-                uuid = r.uuid,
-                reasons = r.reasons,
-                remaining_seconds = r.remaining_seconds,
-                raw = r.raw_item,
-                details = r.details,
-            })
-        end
+copy_btn.MouseButton1Click:Connect(function()
+    if not last_scan_data then
+        copy_btn.Text = "Scan Dulu!"
+        task_wait(1)
+        copy_btn.Text = "📋 Copy Dump JSON"
+        return
     end
-    local json_str = to_json_pretty({
-        scan_timestamp = get_current_server_time(),
-        total_locked = #locked_list,
-        items = locked_list
-    })
-    if copy_to_clipboard(json_str) then
-        status_lbl.Text = string_format("Berhasil salin data %d item terkunci ke Clipboard!", #locked_list)
-        status_lbl.TextColor3 = Color3.fromRGB(75, 225, 135)
+
+    local json = safe_json_encode(last_scan_data)
+    if copy_to_clipboard(json) then
+        copy_btn.Text = "Disalin ke Clipboard! ✅"
     else
-        status_lbl.Text = "Gagal menyalin ke Clipboard."
-        status_lbl.TextColor3 = Color3.fromRGB(255, 100, 100)
+        copy_btn.Text = "Gagal Salin :("
     end
+    task_wait(1.5)
+    copy_btn.Text = "📋 Copy Dump JSON"
 end)
 
-copy_all_btn.MouseButton1Click:Connect(function()
-    local all_list = {}
-    for _, r in ipairs(cached_results) do
-        table.insert(all_list, {
-            name = r.name,
-            id = r.id,
-            uuid = r.uuid,
-            is_locked = r.is_locked,
-            remaining_seconds = r.remaining_seconds,
-            reasons = r.reasons,
-            raw = r.raw_item,
-        })
-    end
-    local json_str = to_json_pretty({
-        scan_timestamp = get_current_server_time(),
-        total_items = #all_list,
-        items = all_list
-    })
-    if copy_to_clipboard(json_str) then
-        status_lbl.Text = string_format("Berhasil salin data seluruh %d item ke Clipboard!", #all_list)
-        status_lbl.TextColor3 = Color3.fromRGB(75, 225, 135)
-    else
-        status_lbl.Text = "Gagal menyalin ke Clipboard."
-        status_lbl.TextColor3 = Color3.fromRGB(255, 100, 100)
-    end
-end)
-
--- Initial Auto-Scan
-task.spawn(function()
-    task.wait(0.5)
-    execute_scan()
-end)
-
-print("[FishItLockInspector] Loaded successfully!")
+print("[FishItLockInspector] Loaded successfully. Silakan klik tombol 'Mulai Scan'.")
