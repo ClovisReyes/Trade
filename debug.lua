@@ -8,6 +8,8 @@ local players = cloneref(game:GetService("Players"))
 local local_player = players.LocalPlayer
 local user_input_service = cloneref(game:GetService("UserInputService"))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
+local http_service = cloneref(game:GetService("HttpService"))
+local teleport_service = cloneref(game:GetService("TeleportService"))
 
 local variables = {
     replion      = replicated_storage:WaitForChild("Packages"):WaitForChild("Replion"),
@@ -456,7 +458,7 @@ empty_placeholder.TextYAlignment = Enum.TextYAlignment.Center
 empty_placeholder.Parent = scroll
 
 local scan_btn = Instance.new("TextButton")
-scan_btn.Size = UDim2.new(1, -20, 0, 28)
+scan_btn.Size = UDim2.new(0.5, -13, 0, 28)
 scan_btn.Position = UDim2.new(0, 10, 1, -34)
 scan_btn.BackgroundColor3 = BUTTON_COLOR
 scan_btn.Text = "Start Scan"
@@ -465,6 +467,17 @@ scan_btn.TextSize = 11.5
 scan_btn.FontFace = font_bold
 scan_btn.Parent = main
 create_corner(scan_btn, 4)
+
+local unlock_btn = Instance.new("TextButton")
+unlock_btn.Size = UDim2.new(0.5, -13, 0, 28)
+unlock_btn.Position = UDim2.new(0.5, 3, 1, -34)
+unlock_btn.BackgroundColor3 = Color3.fromRGB(35, 150, 75)
+unlock_btn.Text = "Unlock"
+unlock_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+unlock_btn.TextSize = 11.5
+unlock_btn.FontFace = font_bold
+unlock_btn.Parent = main
+create_corner(unlock_btn, 4)
 
 local last_scan_data = nil
 
@@ -596,3 +609,87 @@ local function execute_scan()
 end
 
 scan_btn.MouseButton1Click:Connect(execute_scan)
+
+local hopping = false
+local hop_blacklist = {}
+
+local function fetch_servers(place_id, cursor)
+    local cur = (cursor and cursor ~= "") and ("&cursor=" .. cursor) or ""
+    local url = "https://games.roblox.com/v1/games/" .. place_id .. "/servers/Public?sortOrder=Asc&excludeFullGames=true&limit=100" .. cur
+
+    local req = (syn and syn.request) or (http and http.request) or http_request or request
+    local body = nil
+
+    if req then
+        local s, res = pcall(function() return req({ Url = url, Method = "GET" }) end)
+        if s and res and (res.StatusCode == 200 or res.Status == 200) and res.Body then body = res.Body end
+    elseif game.HttpGet then
+        local s, res = pcall(function() return game:HttpGet(url) end)
+        if s and res then body = res end
+    end
+
+    if body and body ~= "" then
+        local s, json = pcall(function() return http_service:JSONDecode(body) end)
+        if s and json and json.data and #json.data > 0 then return json.data end
+    end
+    return nil
+end
+
+local function execute_server_hop(btn_ref)
+    if hopping then return end
+    hopping = true
+
+    local orig_text = btn_ref and btn_ref.Text or "Unlock"
+    if btn_ref then
+        btn_ref.Text = "Searching..."
+        btn_ref.BackgroundColor3 = Color3.fromRGB(20, 100, 50)
+    end
+
+    local place_id = game.PlaceId
+    local current_job_id = game.JobId
+
+    task_spawn(function()
+        local valid = {}
+        local list = fetch_servers(place_id)
+        if list and #list > 0 then
+            for _, s in ipairs(list) do
+                local pl = tonumber(s.playing) or 0
+                local max_p = tonumber(s.maxPlayers) or 20
+                if s.id and s.id ~= current_job_id and not table.find(hop_blacklist, s.id) and pl < max_p and pl >= 1 then
+                    table_insert(valid, { id = s.id, playing = pl, maxPlayers = max_p })
+                end
+            end
+        end
+
+        if #valid == 0 then
+            hop_blacklist = {}
+            if current_job_id and current_job_id ~= "" then
+                table_insert(hop_blacklist, current_job_id)
+            end
+            if btn_ref then btn_ref.Text = "Retrying..." end
+            task_wait(1)
+            hopping = false
+            return execute_server_hop(btn_ref)
+        end
+
+        table_sort(valid, function(a, b) return a.playing < b.playing end)
+
+        local target = valid[1]
+        if target and target.id then
+            if btn_ref then btn_ref.Text = string_format("Hop (%dp)...", target.playing) end
+            table_insert(hop_blacklist, target.id)
+            teleport_service:TeleportToPlaceInstance(place_id, target.id, local_player)
+        end
+        task.delay(5, function()
+            hopping = false
+            if btn_ref then
+                btn_ref.Text = orig_text
+                btn_ref.BackgroundColor3 = Color3.fromRGB(35, 150, 75)
+            end
+        end)
+    end)
+end
+
+unlock_btn.MouseButton1Click:Connect(function()
+    execute_server_hop(unlock_btn)
+end)
