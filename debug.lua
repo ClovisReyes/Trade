@@ -35,7 +35,7 @@ local function evaluate_item_lock(item)
     local is_locked = false
     local reasons = {}
 
-    -- Cek Properti Lock & Favorited Resmi Game (Sesuai Acuan Game & msdm.lua)
+    -- 1. Cek Properti Lock & Favorited Resmi Game
     if item.Locked == true or meta.Locked == true then
         is_locked = true
         table_insert(reasons, "Locked")
@@ -44,6 +44,38 @@ local function evaluate_item_lock(item)
         is_locked = true
         table_insert(reasons, "Favorited")
     end
+
+    -- 2. Cek Dinamis Semua Key Cooldown / Trade / Lock / Time pada Metadata & Item
+    local now = os.time()
+    local function scan_properties(tbl, prefix)
+        if type(tbl) ~= "table" then return end
+        for k, v in pairs(tbl) do
+            local lk = string.lower(tostring(k))
+            if lk ~= "metadata" and (string.find(lk, "lock") or string.find(lk, "trade") or string.find(lk, "cooldown") or string.find(lk, "time")) then
+                if type(v) == "boolean" and v == true then
+                    is_locked = true
+                    table_insert(reasons, tostring(k))
+                elseif type(v) == "number" then
+                    local t_sec = v > 1000000000000 and math.floor(v / 1000) or v
+                    if t_sec > now then
+                        local rem = math.floor(t_sec - now)
+                        is_locked = true
+                        table_insert(reasons, string.format("%s (%dm %ds)", tostring(k), math.floor(rem / 60), rem % 60))
+                    elseif t_sec > 1000000000 and (now - t_sec) < 900 then
+                        local rem = 900 - math.floor(now - t_sec)
+                        is_locked = true
+                        table_insert(reasons, string.format("%s (%dm %ds)", tostring(k), math.floor(rem / 60), rem % 60))
+                    elseif t_sec <= now or v == 0 then
+                        is_locked = true
+                        table_insert(reasons, string.format("%s (0:0)", tostring(k)))
+                    end
+                end
+            end
+        end
+    end
+
+    scan_properties(meta, "meta")
+    scan_properties(item, "item")
 
     local lock_type = is_locked and "Locked" or "Tradable"
     return is_locked, lock_type, reasons
@@ -128,6 +160,7 @@ local function perform_inventory_scan(filter_mode)
                         lock_type = l_type,
                         reasons = reasons,
                         quantity = 0,
+                        sample_meta = itm.Metadata,
                     }
                     table_insert(group_order, group_key)
                 end
@@ -349,39 +382,10 @@ local stat_total_val    = create_stat_card(stats_row, UDim2.new(0, 0, 0, 0), UDi
 local stat_locked_val   = create_stat_card(stats_row, UDim2.new(0.34, 0, 0, 0), UDim2.new(0.32, 0, 1, 0), "TERKUNCI", RED_COLOR)
 local stat_tradable_val = create_stat_card(stats_row, UDim2.new(0.68, 0, 0, 0), UDim2.new(0.32, 0, 1, 0), "SIAP TRADE", GREEN_COLOR)
 
--- 3. Sub-Filter Tab (Semua / Terkunci / Tradable)
-local sub_filter_row = Instance.new("Frame")
-sub_filter_row.Size = UDim2.new(1, -20, 0, 20)
-sub_filter_row.Position = UDim2.new(0, 10, 0, 108)
-sub_filter_row.BackgroundTransparency = 1
-sub_filter_row.Parent = main
-
-local active_sub_filter = "All"
-local sub_filter_btns = {}
-
-local function create_sub_tab(name, key, x_scale, width_scale)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(width_scale, -4, 1, 0)
-    btn.Position = UDim2.new(x_scale, 0, 0, 0)
-    btn.BackgroundColor3 = (active_sub_filter == key) and Color3.fromRGB(35, 35, 35) or Color3.fromRGB(18, 18, 18)
-    btn.Text = name
-    btn.TextColor3 = (active_sub_filter == key) and Color3.fromRGB(255, 255, 255) or MUTED_COLOR
-    btn.TextSize = 9.5
-    btn.FontFace = font_bold
-    btn.Parent = sub_filter_row
-    create_corner(btn, 4)
-    sub_filter_btns[key] = btn
-    return btn
-end
-
-local sub_tab_all      = create_sub_tab("Semua Kartu", "All", 0, 0.33)
-local sub_tab_locked   = create_sub_tab("Terkunci Saja", "Locked", 0.34, 0.33)
-local sub_tab_tradable = create_sub_tab("Siap Trade", "Tradable", 0.68, 0.32)
-
--- 4. Scrolling Item Cards Container (Bukan Teks Terminal)
+-- 3. Scrolling Item Cards Container (Langsung Menampilkan Semua Item)
 local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -20, 1, -196)
-scroll.Position = UDim2.new(0, 10, 0, 134)
+scroll.Size = UDim2.new(1, -20, 1, -170)
+scroll.Position = UDim2.new(0, 10, 0, 108)
 scroll.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 scroll.ScrollBarThickness = 4
 scroll.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 70)
@@ -411,7 +415,7 @@ empty_placeholder.FontFace = font_face
 empty_placeholder.TextYAlignment = Enum.TextYAlignment.Center
 empty_placeholder.Parent = scroll
 
--- 5. Metadata Keys Info Banner (Sleek Banner di Bawah Scroll)
+-- 4. Metadata Keys Info Banner (Sleek Banner di Bawah Scroll)
 local meta_banner = Instance.new("Frame")
 meta_banner.Size = UDim2.new(1, -20, 0, 20)
 meta_banner.Position = UDim2.new(0, 10, 1, -56)
@@ -431,7 +435,7 @@ meta_banner_lbl.TextXAlignment = Enum.TextXAlignment.Left
 meta_banner_lbl.TextTruncate = Enum.TextTruncate.AtEnd
 meta_banner_lbl.Parent = meta_banner
 
--- 6. Bottom Action Button (Full Width, Tanpa Tombol Dump)
+-- 5. Bottom Action Button (Full Width, Tanpa Tombol Dump)
 local scan_btn = Instance.new("TextButton")
 scan_btn.Size = UDim2.new(1, -20, 0, 28)
 scan_btn.Position = UDim2.new(0, 10, 1, -33)
@@ -471,21 +475,16 @@ local function render_item_cards()
     local rendered_count = 0
 
     for idx, card_info in ipairs(last_scan_data.cards) do
-        local matches_filter = (active_sub_filter == "All")
-            or (active_sub_filter == "Locked" and card_info.is_locked)
-            or (active_sub_filter == "Tradable" and not card_info.is_locked)
+        rendered_count = rendered_count + 1
 
-        if matches_filter then
-            rendered_count = rendered_count + 1
-
-            local card_frame = Instance.new("Frame")
-            card_frame.Size = UDim2.new(1, 0, 0, 36)
+        local card_frame = Instance.new("Frame")
+            card_frame.Size = UDim2.new(1, 0, 0, 48)
             card_frame.BackgroundColor3 = card_info.is_locked and Color3.fromRGB(28, 18, 20) or CARD_COLOR
             card_frame.Parent = scroll
             create_corner(card_frame, 5)
             create_stroke(card_frame, card_info.is_locked and Color3.fromRGB(110, 35, 40) or Color3.fromRGB(38, 38, 38))
 
-            -- Nama Item & Variant (Lebar Maksimal Tanpa Tombol Dump)
+            -- Nama Item & Variant
             local display_title = card_info.name .. (card_info.variant and (" [" .. card_info.variant .. "]") or "")
             local name_lbl = Instance.new("TextLabel")
             name_lbl.Size = UDim2.new(1, -125, 0, 16)
@@ -499,19 +498,38 @@ local function render_item_cards()
             name_lbl.TextTruncate = Enum.TextTruncate.AtEnd
             name_lbl.Parent = card_frame
 
-            -- Sub Info (ID, Kategori, Quantity)
+            -- Sub Info (ID, Kategori, Quantity, Reasons)
             local sub_lbl = Instance.new("TextLabel")
             sub_lbl.Size = UDim2.new(1, -125, 0, 14)
-            sub_lbl.Position = UDim2.new(0, 8, 0, 19)
+            sub_lbl.Position = UDim2.new(0, 8, 0, 18)
             sub_lbl.BackgroundTransparency = 1
             local reason_desc = #card_info.reasons > 0 and (" (" .. table_concat(card_info.reasons, ", ") .. ")") or ""
             sub_lbl.Text = string_format("ID: %s • %s • Qty: x%d%s", tostring(card_info.id), card_info.category, card_info.quantity, reason_desc)
-            sub_lbl.TextColor3 = MUTED_COLOR
+            sub_lbl.TextColor3 = card_info.is_locked and RED_COLOR or MUTED_COLOR
             sub_lbl.TextSize = 9
             sub_lbl.FontFace = font_face
             sub_lbl.TextXAlignment = Enum.TextXAlignment.Left
             sub_lbl.TextTruncate = Enum.TextTruncate.AtEnd
             sub_lbl.Parent = card_frame
+
+            -- Metadata Preview (Transparan & Rinci)
+            local meta_lbl = Instance.new("TextLabel")
+            meta_lbl.Size = UDim2.new(1, -125, 0, 12)
+            meta_lbl.Position = UDim2.new(0, 8, 0, 32)
+            meta_lbl.BackgroundTransparency = 1
+            local meta_parts = {}
+            if type(card_info.sample_meta) == "table" then
+                for k, v in pairs(card_info.sample_meta) do
+                    table_insert(meta_parts, tostring(k) .. ": " .. tostring(v))
+                end
+            end
+            meta_lbl.Text = #meta_parts > 0 and ("Meta: " .. table_concat(meta_parts, ", ")) or "Meta: (Kosong)"
+            meta_lbl.TextColor3 = Color3.fromRGB(130, 130, 130)
+            meta_lbl.TextSize = 8.5
+            meta_lbl.FontFace = font_face
+            meta_lbl.TextXAlignment = Enum.TextXAlignment.Left
+            meta_lbl.TextTruncate = Enum.TextTruncate.AtEnd
+            meta_lbl.Parent = card_frame
 
             -- Status Badge Pill (Ditempatkan di sisi kanan kartu)
             local badge_pill = Instance.new("Frame")
@@ -537,26 +555,10 @@ local function render_item_cards()
             badge_lbl.FontFace = font_bold
             badge_lbl.TextTruncate = Enum.TextTruncate.AtEnd
             badge_lbl.Parent = badge_pill
-        end
     end
 
-    scroll.CanvasSize = UDim2.new(0, 0, 0, rendered_count * 40 + 10)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, rendered_count * 52 + 10)
 end
-
--- Sub-Filter Click Events
-local function set_sub_filter(key)
-    active_sub_filter = key
-    for k, btn in pairs(sub_filter_btns) do
-        local is_active = (k == active_sub_filter)
-        btn.BackgroundColor3 = is_active and Color3.fromRGB(35, 35, 35) or Color3.fromRGB(18, 18, 18)
-        btn.TextColor3 = is_active and Color3.fromRGB(255, 255, 255) or MUTED_COLOR
-    end
-    render_item_cards()
-end
-
-sub_tab_all.MouseButton1Click:Connect(function() set_sub_filter("All") end)
-sub_tab_locked.MouseButton1Click:Connect(function() set_sub_filter("Locked") end)
-sub_tab_tradable.MouseButton1Click:Connect(function() set_sub_filter("Tradable") end)
 
 -- Scan Handler
 local function execute_scan()
@@ -582,11 +584,6 @@ local function execute_scan()
         stat_locked_val.TextColor3 = data.locked_count > 0 and RED_COLOR or MUTED_COLOR
         stat_tradable_val.Text = tostring(data.unlocked_count)
 
-        -- Update Sub-Tab Badges
-        sub_tab_all.Text = string_format("Semua (%d)", #data.cards)
-        sub_tab_locked.Text = string_format("Terkunci (%d)", data.locked_count)
-        sub_tab_tradable.Text = string_format("Siap (%d)", data.unlocked_count)
-
         -- Update Metadata Banner
         local meta_str = #data.metadata_keys > 0 and table_concat(data.metadata_keys, ", ") or "(Kosong)"
         local item_str = #data.item_keys > 0 and table_concat(data.item_keys, ", ") or "(Kosong)"
@@ -594,6 +591,26 @@ local function execute_scan()
 
         -- Render Item Cards
         render_item_cards()
+
+        -- Console Diagnostics (Cetak Dump ke F9 Console untuk verifikasi data)
+        pcall(function()
+            local inv = player_data:Get("Inventory")
+            local raw_items = inv and inv.Items or {}
+            print("--- [FISH IT INSPECTOR SCAN DIAGNOSTICS] ---")
+            for _, itm in ipairs(raw_items) do
+                if itm and (itm.Id == 10 or itm.Id == 263 or itm.Id == 283) then
+                    local m_parts = {}
+                    if type(itm.Metadata) == "table" then
+                        for k, v in pairs(itm.Metadata) do table_insert(m_parts, tostring(k) .. "=" .. tostring(v)) end
+                    end
+                    local i_parts = {}
+                    for k, v in pairs(itm) do
+                        if k ~= "Metadata" then table_insert(i_parts, tostring(k) .. "=" .. tostring(v)) end
+                    end
+                    print(string.format("[DUMP ID:%s UUID:%s] itm={%s} meta={%s}", tostring(itm.Id), tostring(itm.UUID), table_concat(i_parts, ", "), table_concat(m_parts, ", ")))
+                end
+            end
+        end)
 
         scan_btn.Text = "Mulai Scan"
         scan_btn.BackgroundColor3 = BUTTON_COLOR
