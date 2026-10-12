@@ -494,7 +494,7 @@ local function render_item_cards()
         rendered_count = rendered_count + 1
 
         local card_frame = Instance.new("Frame")
-            card_frame.Size = UDim2.new(1, 0, 0, 48)
+            card_frame.Size = UDim2.new(1, 0, 0, 52)
             card_frame.BackgroundColor3 = card_info.is_locked and Color3.fromRGB(28, 18, 20) or CARD_COLOR
             card_frame.Parent = scroll
             create_corner(card_frame, 5)
@@ -502,51 +502,41 @@ local function render_item_cards()
 
             local display_title = card_info.name .. (card_info.variant and (" [" .. card_info.variant .. "]") or "")
             local name_lbl = Instance.new("TextLabel")
-            name_lbl.Size = UDim2.new(1, -125, 0, 16)
-            name_lbl.Position = UDim2.new(0, 8, 0, 3)
+            name_lbl.Size = UDim2.new(1, -125, 0, 15)
+            name_lbl.Position = UDim2.new(0, 8, 0, 4)
             name_lbl.BackgroundTransparency = 1
             name_lbl.Text = display_title
             name_lbl.TextColor3 = card_info.is_locked and Color3.fromRGB(255, 180, 180) or TEXT_COLOR
-            name_lbl.TextSize = 10.5
+            name_lbl.TextSize = 11
             name_lbl.FontFace = font_bold
             name_lbl.TextXAlignment = Enum.TextXAlignment.Left
             name_lbl.TextTruncate = Enum.TextTruncate.AtEnd
             name_lbl.Parent = card_frame
 
-            local sub_lbl = Instance.new("TextLabel")
-            sub_lbl.Size = UDim2.new(1, -125, 0, 14)
-            sub_lbl.Position = UDim2.new(0, 8, 0, 18)
-            sub_lbl.BackgroundTransparency = 1
             local reason_desc = #card_info.reasons > 0 and (" (" .. table_concat(card_info.reasons, ", ") .. ")") or ""
-            sub_lbl.Text = string_format("ID: %s • %s • Qty: x%d%s", tostring(card_info.id), card_info.category, card_info.quantity, reason_desc)
-            sub_lbl.TextColor3 = card_info.is_locked and RED_COLOR or MUTED_COLOR
-            sub_lbl.TextSize = 9
-            sub_lbl.FontFace = font_face
-            sub_lbl.TextXAlignment = Enum.TextXAlignment.Left
-            sub_lbl.TextTruncate = Enum.TextTruncate.AtEnd
-            sub_lbl.Parent = card_frame
+            local id_lbl = Instance.new("TextLabel")
+            id_lbl.Size = UDim2.new(1, -125, 0, 14)
+            id_lbl.Position = UDim2.new(0, 8, 0, 19)
+            id_lbl.BackgroundTransparency = 1
+            id_lbl.Text = string_format("ID : %s%s", tostring(card_info.id), reason_desc)
+            id_lbl.TextColor3 = card_info.is_locked and RED_COLOR or MUTED_COLOR
+            id_lbl.TextSize = 9.5
+            id_lbl.FontFace = font_face
+            id_lbl.TextXAlignment = Enum.TextXAlignment.Left
+            id_lbl.TextTruncate = Enum.TextTruncate.AtEnd
+            id_lbl.Parent = card_frame
 
-            local meta_lbl = Instance.new("TextLabel")
-            meta_lbl.Size = UDim2.new(1, -125, 0, 12)
-            meta_lbl.Position = UDim2.new(0, 8, 0, 32)
-            meta_lbl.BackgroundTransparency = 1
-            local meta_parts = {}
-            if type(card_info.sample_meta) == "table" then
-                for k, v in pairs(card_info.sample_meta) do
-                    local str_val = tostring(v)
-                    if k == "TradeLock" and type(v) == "table" and v.Time then
-                        str_val = string_format("{Time=%s}", tostring(v.Time))
-                    end
-                    table_insert(meta_parts, tostring(k) .. ": " .. str_val)
-                end
-            end
-            meta_lbl.Text = #meta_parts > 0 and ("Meta: " .. table_concat(meta_parts, ", ")) or "Meta: (None)"
-            meta_lbl.TextColor3 = Color3.fromRGB(130, 130, 130)
-            meta_lbl.TextSize = 8.5
-            meta_lbl.FontFace = font_face
-            meta_lbl.TextXAlignment = Enum.TextXAlignment.Left
-            meta_lbl.TextTruncate = Enum.TextTruncate.AtEnd
-            meta_lbl.Parent = card_frame
+            local qty_lbl = Instance.new("TextLabel")
+            qty_lbl.Size = UDim2.new(1, -125, 0, 15)
+            qty_lbl.Position = UDim2.new(0, 8, 0, 33)
+            qty_lbl.BackgroundTransparency = 1
+            qty_lbl.Text = string_format("Quantity : x%s", tostring(card_info.quantity))
+            qty_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+            qty_lbl.TextSize = 10.5
+            qty_lbl.FontFace = font_bold
+            qty_lbl.TextXAlignment = Enum.TextXAlignment.Left
+            qty_lbl.TextTruncate = Enum.TextTruncate.AtEnd
+            qty_lbl.Parent = card_frame
 
             local badge_pill = Instance.new("Frame")
             badge_pill.Size = UDim2.new(0, 105, 0, 22)
@@ -573,7 +563,7 @@ local function render_item_cards()
             badge_lbl.Parent = badge_pill
     end
 
-    scroll.CanvasSize = UDim2.new(0, 0, 0, rendered_count * 52 + 10)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, rendered_count * 56 + 10)
 end
 
 local function execute_scan()
