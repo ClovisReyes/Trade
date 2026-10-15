@@ -1,6 +1,6 @@
 local ipairs, pairs, tostring, tonumber, pcall, tick, os_clock = ipairs, pairs, tostring, tonumber, pcall, tick, os.clock
 local table_find, table_insert, table_remove, table_sort, table_concat = table.find, table.insert, table.remove, table.sort, table.concat
-local string_lower, string_find, string_gsub, string_format, string_match, string_sub = string.lower, string.find, string.gsub, string.format, string.match, string.sub
+local string_lower, string_upper, string_find, string_gsub, string_format, string_match, string_sub = string.lower, string.upper, string.find, string.gsub, string.format, string.match, string.sub
 local math_max, math_min, math_floor, math_huge = math.max, math.min, math.floor, math.huge
 local task_wait, task_spawn, task_delay = task.wait, task.spawn, task.delay
 
@@ -29,18 +29,47 @@ task_spawn(function()
     end)
 end)
 
--- Clean AdBlock (Metamethod Hook) for TRADE OFFER EXPIRED
+-- Targeted AdBlock: Hides "TRADE OFFER EXPIRED" notification cleanly from PlayerGui["Text Notifications"]
+local notif_conns = {}
+local function setup_notif_filter(notif_gui)
+    if not notif_gui or notif_gui.Name ~= "Text Notifications" then return end
+    local frame = notif_gui:WaitForChild("Frame", 5)
+    if not frame then return end
+
+    local function filter_tile(tile)
+        if not tile then return end
+        local function check()
+            local header = tile:FindFirstChild("Header") or (tile:IsA("TextLabel") and tile)
+            if header and header:IsA("TextLabel") then
+                local txt = header.Text
+                if type(txt) == "string" and string_find(string_upper(txt), "TRADE OFFER EXPIRED", 1, true) then
+                    tile.Visible = false
+                end
+            end
+        end
+        check()
+        table_insert(notif_conns, tile.DescendantAdded:Connect(check))
+        local header = tile:FindFirstChild("Header")
+        if header and header:IsA("TextLabel") then
+            table_insert(notif_conns, header:GetPropertyChangedSignal("Text"):Connect(check))
+        end
+    end
+
+    for _, c in ipairs(frame:GetChildren()) do
+        filter_tile(c)
+    end
+    table_insert(notif_conns, frame.ChildAdded:Connect(filter_tile))
+end
+
 task_spawn(function()
     pcall(function()
-        if hookmetamethod then
-            local old_newindex
-            old_newindex = hookmetamethod(game, "__newindex", function(t, k, v)
-                if k == "Text" and type(v) == "string" and string_find(string.upper(v), "TRADE OFFER EXPIRED") then
-                    return old_newindex(t, k, "")
-                end
-                return old_newindex(t, k, v)
-            end)
-        end
+        local existing = player_gui:FindFirstChild("Text Notifications")
+        if existing then setup_notif_filter(existing) end
+        table_insert(notif_conns, player_gui.ChildAdded:Connect(function(c)
+            if c.Name == "Text Notifications" then
+                setup_notif_filter(c)
+            end
+        end))
     end)
 end)
 local variants_folder = replicated_storage:FindFirstChild("Variants")
@@ -519,11 +548,11 @@ local function collect_round_robin(items, key_extractor, selected_keys, limit)
         local k = key_extractor(item)
         if k and buckets[k] then table_insert(buckets[k], item) end
     end
-    for pass = 1, 20 do
-        if #items_to_trade >= limit then break end
+    for pass = 1, #items do
+        if limit and #items_to_trade >= limit then break end
         local added_any = false
         for _, k in ipairs(bucket_keys) do
-            if #items_to_trade >= limit then break end
+            if limit and #items_to_trade >= limit then break end
             for _, item in ipairs(buckets[k] or {}) do
                 if not added[item.UUID] then
                     added[item.UUID] = true
@@ -884,8 +913,6 @@ end
 local function collect_trade_items(mode)
     local inventory = player_data and player_data:Get("Inventory")
     local items = inventory and inventory.Items or {}
-    local total_sent = cache.stats[mode].total_items
-    local limit = math.min(20, config.quantity > 0 and (config.quantity - total_sent) or 20)
     local items_to_trade = {}
     local added_uuids = {}
 
@@ -895,10 +922,9 @@ local function collect_trade_items(mode)
             items_to_trade = collect_round_robin(items, function(it)
                 local d = item_utility:GetItemData(it.Id)
                 return (d and d.Data and d.Data.Type == "Fish" and should_trade_fish(d, it)) and string_lower(d.Data.Name) or nil
-            end, config.selected_fish, limit)
+            end, config.selected_fish)
         else
             for _, item in ipairs(items) do
-                if #items_to_trade >= limit then break end
                 local d = item and item.Id and item_utility:GetItemData(item.Id)
                 if d and d.Data and d.Data.Type == "Fish" and should_trade_fish(d, item) then
                     if not added_uuids[item.UUID] then
@@ -918,10 +944,9 @@ local function collect_trade_items(mode)
                     return type(raw_tier) == "number" and (tier_mapping[raw_tier] or "") or string_lower(tostring(raw_tier))
                 end
                 return nil
-            end, config.selected_tiers, limit)
+            end, config.selected_tiers)
         else
             for _, item in ipairs(items) do
-                if #items_to_trade >= limit then break end
                 local d = item and item.Id and item_utility:GetItemData(item.Id)
                 if d and d.Data and d.Data.Type == "Fish" and should_trade_fish_by_rarity(d, item) then
                     if not added_uuids[item.UUID] then
@@ -933,7 +958,6 @@ local function collect_trade_items(mode)
         end
     elseif mode == "enchant" then
         for _, item in ipairs(items) do
-            if #items_to_trade >= limit then break end
             if item and item.Id then
                 local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
                 if not (is_fav and not config.trade_favorited) then
@@ -945,6 +969,8 @@ local function collect_trade_items(mode)
                             for _, sel in ipairs(config.selected_items) do
                                 if string_lower(name) == string_lower(strip_quantity(sel)) then match = true; break end
                             end
+                        else
+                            match = true
                         end
                         if match then
                             if not added_uuids[item.UUID] then
@@ -1031,25 +1057,61 @@ local function execute_trade(mode)
     end
     local chat_listener = listen_for_trade_completion(mark_success)
 
-    local add_start_time = tick()
-    for idx, item in ipairs(items_to_trade) do
-        if not config.enabled or not local_player:GetAttribute("IsTrading") or _G.NoirHub_AutoTrade_ScriptID ~= script_id then break end
-        if (tick() - add_start_time) > 20 then
-            
+    local target_count = 20
+    if mode ~= "coin" and config.quantity > 0 then
+        target_count = math.min(20, config.quantity - s.total_items)
+    elseif mode == "coin" then
+        target_count = math.min(20, #items_to_trade)
+    end
+
+    for _, item in ipairs(items_to_trade) do
+        if not config.enabled or not local_player:GetAttribute("IsTrading") or _G.NoirHub_AutoTrade_ScriptID ~= script_id then
             break
         end
+
+        if #added_items >= target_count then
+            break
+        end
+
         if item and item.UUID then
-            set_status_msg(mode, string_format("Adding %s... (%d/%d)", get_mode_display_name(mode), idx, #items_to_trade))
-            local ok, res = pcall(function() return trade_remotes.AddItem:InvokeServer(category, item.UUID) end)
+            set_status_msg(mode, string_format("Adding %s... (%d/%d)", get_mode_display_name(mode), #added_items + 1, target_count))
+
+            local ok, res = pcall(function()
+                return trade_remotes.AddItem:InvokeServer(category, item.UUID)
+            end)
+
             if ok and res ~= false then
                 table_insert(added_items, item)
-                if mode == "coin" then added_coins = added_coins + calculate_fish_coin_value(item) end
+                if mode == "coin" then
+                    added_coins = added_coins + calculate_fish_coin_value(item)
+                    if config.target_coin_amount > 0 and (s.total_coins or 0) + added_coins >= config.target_coin_amount then
+                        break
+                    end
+                end
             end
         end
-        task_wait(0.08)
+
+        task_wait(0.1)
     end
 
     if local_player:GetAttribute("IsTrading") then
+        if #added_items == 0 then
+            pcall(function()
+                if trade_remotes.CancelTrade then
+                    trade_remotes.CancelTrade:InvokeServer()
+                end
+            end)
+            set_status_msg(mode, "Tidak ada item yang berhasil di-add. Trade dibatalkan.")
+            cache.last_failed_offer_time = tick()
+            close_trading_gui()
+            s.failed = s.failed + 1
+            update_status_ui(mode)
+            chat_listener.disconnect()
+            return
+        end
+
+        set_status_msg(mode, string_format("Ready (%d item). Confirming trade...", #added_items))
+        task_wait(0.35)
         pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
         wait_for_trade_end(mode, chat_listener)
     end
@@ -1176,6 +1238,7 @@ local function create_ui()
     main.BackgroundTransparency = 0
     main.BorderSizePixel = 0
     main.Active = true
+    main.Visible = false
     main.ZIndex = 1
     main.Parent = gui
     create_corner(main, 10); create_stroke(main, Color3.fromRGB(45, 45, 45))
@@ -1190,7 +1253,7 @@ local function create_ui()
     floating_btn.TextColor3 = ACCENT_COLOR
     floating_btn.TextSize = 22
     floating_btn.FontFace = font_bold
-    floating_btn.Visible = false
+    floating_btn.Visible = true
     floating_btn.ZIndex = 20
     floating_btn.Parent = gui
     create_corner(floating_btn, 9); create_stroke(floating_btn, ACCENT_COLOR, 1.5)
@@ -2000,8 +2063,6 @@ local function create_ui()
             task_wait(0.5)
         end
     end)
-
-    main.Visible = false; floating_btn.Visible = true
 end
 
 pcall(create_ui)
@@ -2022,6 +2083,7 @@ _G.NoirHub_AutoTrade_Cleanup = function()
     if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
     if auto_accept_trade_completed_conn then pcall(function() auto_accept_trade_completed_conn:Disconnect() end); auto_accept_trade_completed_conn = nil end
     if auto_accept_attr_conn then pcall(function() auto_accept_attr_conn:Disconnect() end); auto_accept_attr_conn = nil end
+    for _, conn in ipairs(notif_conns) do pcall(function() conn:Disconnect() end) end; notif_conns = {}
     pcall(function()
         local core = gethui and pcall(gethui) and gethui() or game:GetService("CoreGui")
         local old = core:FindFirstChild("NoirHub_AutoTrade") or core:FindFirstChild("AutoTrade")
