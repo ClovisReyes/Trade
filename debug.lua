@@ -1,33 +1,75 @@
 --[[
     KEENAN - Trade System Deep Inspector (v2 - Bulletproof Auto Scanner)
-    Mendeteksi SEMUA sistem trade di game secara agresif:
-    1. Scan seluruh ReplicatedStorage untuk RemoteEvent & RemoteFunction bertema "Trade"
-    2. Hook otomatis ke .OnClientEvent SEMUA remote trade yang ditemukan
-    3. Require TradeData & TradeOfferController dengan pcall aman + print error jika gagal
-    4. Pantau perubahan PlayerGui & Player Attributes secara real-time
-    5. Setiap log muncul di UI dan Console (F9) + Auto Copy saat event selesai
+    Mendeteksi SEMUA sistem trade di game secara agresif & anti-crash:
+    1. UI 100% selalu muncul di semua executor mobile/CloudPhone (gethui -> CoreGui -> PlayerGui safe ladder)
+    2. Scan ReplicatedStorage untuk RemoteEvent & RemoteFunction bertema "Trade"
+    3. Hook otomatis ke .OnClientEvent SEMUA remote trade yang ditemukan
+    4. Require TradeData & TradeOfferController dengan pcall aman
+    5. Pantau perubahan PlayerGui & Player Attributes secara real-time
+    6. Tombol Copy Report, Minimize, Floating Icon, Rescan, & Clear
 ]]
 
 local cloneref = cloneref or function(ref) return ref end
 local players = cloneref(game:GetService("Players"))
-local local_player = players.LocalPlayer
-local player_gui = cloneref(local_player:WaitForChild("PlayerGui"))
+local local_player = players.LocalPlayer or players.PlayerAdded:Wait()
+local player_gui = cloneref(local_player:WaitForChild("PlayerGui", 10)) or (local_player:FindFirstChild("PlayerGui") and cloneref(local_player.PlayerGui))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
 local user_input_service = cloneref(game:GetService("UserInputService"))
 local http_service = cloneref(game:GetService("HttpService"))
 
-local parent_gui = (gethui and gethui()) or game:GetService("CoreGui")
-pcall(function()
-    local old = parent_gui:FindFirstChild("KEENAN_TradeInspector")
-    if old then old:Destroy() end
-end)
+local task_spawn = task.spawn
+local task_wait = task.wait
+local task_delay = task.delay
+local task_defer = task.defer
+
+-- Safe Cleanup
+local function cleanup_existing(name)
+    local targets = {}
+    if gethui then pcall(function() table.insert(targets, gethui()) end) end
+    pcall(function() table.insert(targets, cloneref(game:GetService("CoreGui"))) end)
+    if player_gui then table.insert(targets, player_gui) end
+
+    for _, target in ipairs(targets) do
+        if target then
+            pcall(function()
+                local old = target:FindFirstChild(name)
+                if old then old:Destroy() end
+            end)
+        end
+    end
+end
+cleanup_existing("KEENAN_TradeInspector")
+
+-- Safe Parenting
+local function safe_parent(screen_gui)
+    local targets = {}
+    if gethui then pcall(function() table.insert(targets, gethui()) end) end
+    pcall(function() table.insert(targets, cloneref(game:GetService("CoreGui"))) end)
+    if player_gui then table.insert(targets, player_gui) end
+
+    for _, target in ipairs(targets) do
+        if target then
+            local ok = pcall(function()
+                screen_gui.Parent = target
+            end)
+            if ok and screen_gui.Parent == target then
+                return target
+            end
+        end
+    end
+    return nil
+end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "KEENAN_TradeInspector"
 gui.ResetOnSpawn = false
 gui.DisplayOrder = 2147483647
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = parent_gui
+
+local target_parent = safe_parent(gui)
+if not target_parent then
+    warn("[INSPECTOR] Gagal menemukan parent GUI yang valid!")
+end
 
 local BG_COLOR       = Color3.fromRGB(15, 15, 15)
 local SIDEBAR_COLOR  = Color3.fromRGB(10, 10, 10)
@@ -39,8 +81,18 @@ local MUTED_COLOR    = Color3.fromRGB(150, 150, 150)
 local CARD_COLOR     = Color3.fromRGB(22, 22, 22)
 local INPUT_BG_COLOR = Color3.fromRGB(25, 25, 25)
 
-local font_face = Font.fromEnum(Enum.Font.SourceSans)
-local font_bold = Font.fromEnum(Enum.Font.SourceSansBold)
+local font_face, font_bold = nil, nil
+pcall(function() font_face = Font.fromEnum(Enum.Font.SourceSans) end)
+pcall(function() font_bold = Font.fromEnum(Enum.Font.SourceSansBold) end)
+
+local function apply_font(obj, is_bold)
+    obj.Font = is_bold and Enum.Font.SourceSansBold or Enum.Font.SourceSans
+    if is_bold and font_bold then
+        pcall(function() obj.FontFace = font_bold end)
+    elseif not is_bold and font_face then
+        pcall(function() obj.FontFace = font_face end)
+    end
+end
 
 local function create_corner(parent, radius)
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, radius); c.Parent = parent; return c
@@ -49,11 +101,11 @@ local function create_stroke(parent, color, thickness)
     local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = thickness or 1; s.Parent = parent; return s
 end
 
--- Main Frame
+-- Main Window (Compact 360x270 for Mobile / CloudPhone)
 local main = Instance.new("Frame")
 main.Name = "MainFrame"
-main.Size = UDim2.new(0, 440, 0, 310)
-main.Position = UDim2.new(0.5, -220, 0.45, -155)
+main.Size = UDim2.new(0, 360, 0, 270)
+main.Position = UDim2.new(0.5, -180, 0.45, -135)
 main.BackgroundColor3 = BG_COLOR
 main.Active = true
 main.Parent = gui
@@ -68,39 +120,54 @@ floating_btn.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
 floating_btn.Text = "T"
 floating_btn.TextColor3 = ACCENT_COLOR
 floating_btn.TextSize = 20
-floating_btn.FontFace = font_bold
+apply_font(floating_btn, true)
 floating_btn.Visible = false
 floating_btn.ZIndex = 100
 floating_btn.Parent = gui
 create_corner(floating_btn, 9); create_stroke(floating_btn, ACCENT_COLOR, 1.4)
 
-local float_dragging, float_drag_start, float_start_pos, has_float_dragged = false, nil, nil, false
-floating_btn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        float_dragging = true
-        has_float_dragged = false
-        float_drag_start = input.Position
-        float_start_pos = floating_btn.Position
-        local end_conn
-        end_conn = input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                float_dragging = false
-                if end_conn then end_conn:Disconnect(); end_conn = nil end
-            end
-        end)
-    end
-end)
+-- Dragging Helper
+local function attach_drag(drag_handle, move_target)
+    local dragging, drag_start, start_pos = false, nil, nil
+    local moved = false
 
-user_input_service.InputChanged:Connect(function(input)
-    if float_dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - float_drag_start
-        if delta.Magnitude > 4 then has_float_dragged = true end
-        floating_btn.Position = UDim2.new(float_start_pos.X.Scale, float_start_pos.X.Offset + delta.X, float_start_pos.Y.Scale, float_start_pos.Y.Offset + delta.Y)
-    end
-end)
+    drag_handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            moved = false
+            drag_start = input.Position
+            start_pos = move_target.Position
+
+            local conn
+            conn = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    if conn then conn:Disconnect(); conn = nil end
+                end
+            end)
+        end
+    end)
+
+    user_input_service.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - drag_start
+            if delta.Magnitude > 4 then moved = true end
+            move_target.Position = UDim2.new(
+                start_pos.X.Scale,
+                start_pos.X.Offset + delta.X,
+                start_pos.Y.Scale,
+                start_pos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    return function() return moved end
+end
+
+local float_was_dragged = attach_drag(floating_btn, floating_btn)
 
 floating_btn.MouseButton1Click:Connect(function()
-    if not has_float_dragged then
+    if not float_was_dragged() then
         main.Visible = true
         floating_btn.Visible = false
     end
@@ -113,25 +180,27 @@ header.BackgroundColor3 = SIDEBAR_COLOR
 header.Parent = main
 create_corner(header, 9)
 
+attach_drag(header, main)
+
 local title_lbl = Instance.new("TextLabel")
-title_lbl.Size = UDim2.new(1, -70, 1, 0)
+title_lbl.Size = UDim2.new(1, -65, 1, 0)
 title_lbl.Position = UDim2.new(0, 10, 0, 0)
 title_lbl.BackgroundTransparency = 1
-title_lbl.Text = "KEENAN - Trade System Deep Inspector"
+title_lbl.Text = "KEENAN - Trade Deep Inspector"
 title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-title_lbl.TextSize = 12
-title_lbl.FontFace = font_bold
+title_lbl.TextSize = 11
+apply_font(title_lbl, true)
 title_lbl.TextXAlignment = Enum.TextXAlignment.Left
 title_lbl.Parent = header
 
 local min_btn = Instance.new("TextButton")
 min_btn.Size = UDim2.new(0, 22, 0, 22)
-min_btn.Position = UDim2.new(1, -50, 0.5, -11)
+min_btn.Position = UDim2.new(1, -48, 0.5, -11)
 min_btn.BackgroundTransparency = 1
 min_btn.Text = "-"
 min_btn.TextColor3 = MUTED_COLOR
 min_btn.TextSize = 15
-min_btn.Font = Enum.Font.SourceSansBold
+apply_font(min_btn, true)
 min_btn.Parent = header
 min_btn.MouseButton1Click:Connect(function()
     main.Visible = false
@@ -140,43 +209,19 @@ end)
 
 local close_btn = Instance.new("TextButton")
 close_btn.Size = UDim2.new(0, 22, 0, 22)
-close_btn.Position = UDim2.new(1, -26, 0.5, -11)
+close_btn.Position = UDim2.new(1, -24, 0.5, -11)
 close_btn.BackgroundTransparency = 1
 close_btn.Text = "X"
 close_btn.TextColor3 = MUTED_COLOR
 close_btn.TextSize = 12
-close_btn.Font = Enum.Font.SourceSansBold
+apply_font(close_btn, true)
 close_btn.Parent = header
 close_btn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
--- Header Drag
-local main_dragging, main_drag_start, main_start_pos = false, nil, nil
-header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        main_dragging = true
-        main_drag_start = input.Position
-        main_start_pos = main.Position
-        local end_conn
-        end_conn = input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                main_dragging = false
-                if end_conn then end_conn:Disconnect(); end_conn = nil end
-            end
-        end)
-    end
-end)
-
-user_input_service.InputChanged:Connect(function(input)
-    if main_dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - main_drag_start
-        main.Position = UDim2.new(main_start_pos.X.Scale, main_start_pos.X.Offset + delta.X, main_start_pos.Y.Scale, main_start_pos.Y.Offset + delta.Y)
-    end
-end)
-
 -- Action Buttons Row
 local btn_row = Instance.new("Frame")
-btn_row.Size = UDim2.new(1, -16, 0, 26)
-btn_row.Position = UDim2.new(0, 8, 0, 34)
+btn_row.Size = UDim2.new(1, -16, 0, 24)
+btn_row.Position = UDim2.new(0, 8, 0, 32)
 btn_row.BackgroundTransparency = 1
 btn_row.Parent = main
 local btn_layout = Instance.new("UIListLayout"); btn_layout.FillDirection = Enum.FillDirection.Horizontal; btn_layout.Padding = UDim.new(0, 6); btn_layout.Parent = btn_row
@@ -188,20 +233,20 @@ local function make_action_btn(text, width, color)
     b.Text = text
     b.TextColor3 = Color3.fromRGB(255, 255, 255)
     b.TextSize = 10
-    b.FontFace = font_bold
+    apply_font(b, true)
     b.Parent = btn_row
     create_corner(b, 4)
     return b
 end
 
-local rescan_btn   = make_action_btn("Scan Ulang", 85, BUTTON_COLOR)
-local copy_all_btn = make_action_btn("Copy Report", 110, GREEN_COLOR)
-local clear_btn    = make_action_btn("Clear", 65, Color3.fromRGB(45, 45, 45))
+local rescan_btn   = make_action_btn("Scan Ulang", 75, BUTTON_COLOR)
+local copy_all_btn = make_action_btn("Copy Report", 95, GREEN_COLOR)
+local clear_btn    = make_action_btn("Clear", 55, Color3.fromRGB(45, 45, 45))
 
 -- Scrolling Log Container
 local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -16, 1, -70)
-scroll.Position = UDim2.new(0, 8, 0, 64)
+scroll.Size = UDim2.new(1, -16, 1, -66)
+scroll.Position = UDim2.new(0, 8, 0, 60)
 scroll.BackgroundColor3 = INPUT_BG_COLOR
 scroll.ScrollBarThickness = 3
 scroll.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 60)
@@ -214,13 +259,11 @@ log_layout.Padding = UDim.new(0, 2)
 log_layout.Parent = scroll
 
 local all_raw_logs = {}
-local total_lines = 0
 
 local function append_log(txt, is_highlight)
     table.insert(all_raw_logs, txt)
-    print("[INSPECTOR] " .. txt)
+    pcall(function() print("[INSPECTOR] " .. txt) end)
 
-    total_lines = total_lines + 1
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, -10, 0, 16)
     lbl.Position = UDim2.new(0, 5, 0, 0)
@@ -228,15 +271,19 @@ local function append_log(txt, is_highlight)
     lbl.Text = txt
     lbl.TextColor3 = is_highlight and ACCENT_COLOR or TEXT_COLOR
     lbl.TextSize = 10
-    lbl.FontFace = font_face
+    apply_font(lbl, is_highlight)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.TextTruncate = Enum.TextTruncate.None
     lbl.TextWrapped = true
     lbl.AutomaticSize = Enum.AutomaticSize.Y
     lbl.Parent = scroll
 
-    scroll.CanvasSize = UDim2.new(0, 0, 0, log_layout.AbsoluteContentSize.Y + 30)
-    scroll.CanvasPosition = Vector2.new(0, math.max(0, scroll.CanvasSize.Y.Offset))
+    task_defer(function()
+        pcall(function()
+            scroll.CanvasSize = UDim2.new(0, 0, 0, log_layout.AbsoluteContentSize.Y + 25)
+            scroll.CanvasPosition = Vector2.new(0, math.max(0, scroll.CanvasSize.Y.Offset))
+        end)
+    end)
 end
 
 clear_btn.MouseButton1Click:Connect(function()
@@ -244,22 +291,26 @@ clear_btn.MouseButton1Click:Connect(function()
         if c:IsA("TextLabel") then c:Destroy() end
     end
     all_raw_logs = {}
-    total_lines = 0
     scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 end)
 
 local function copy_to_clipboard()
     local text = table.concat(all_raw_logs, "\n")
-    if setclipboard and text ~= "" then
-        pcall(function() setclipboard(text) end)
-        copy_all_btn.Text = "REPORT COPIED!"
+    local copy_fn = setclipboard or toclipboard or set_clipboard
+    if copy_fn and text ~= "" then
+        pcall(function() copy_fn(text) end)
+        copy_all_btn.Text = "COPIED!"
         copy_all_btn.BackgroundColor3 = Color3.fromRGB(40, 180, 90)
         title_lbl.TextColor3 = GREEN_COLOR
-        title_lbl.Text = "KEENAN - Report Copied to Clipboard!"
-        task.delay(2, function()
+        title_lbl.Text = "KEENAN - Report Copied!"
+        task_delay(2, function()
             if copy_all_btn and copy_all_btn.Parent then
                 copy_all_btn.Text = "Copy Report"
                 copy_all_btn.BackgroundColor3 = GREEN_COLOR
+            end
+            if title_lbl and title_lbl.Parent then
+                title_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+                title_lbl.Text = "KEENAN - Trade Deep Inspector"
             end
         end)
     end
@@ -273,12 +324,14 @@ local connected_remotes = {}
 local function scan_remotes()
     append_log("--- [MEMINDAI REPLICATEDSTORAGE UNTUK TRADE REMOTES] ---", true)
     local found_count = 0
-    for _, desc in ipairs(replicated_storage:GetDescendants()) do
+    local all_desc = replicated_storage:GetDescendants()
+    for idx, desc in ipairs(all_desc) do
+        if idx % 150 == 0 then task_wait() end
         if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then
             local lower_n = string.lower(desc.Name)
             if string.find(lower_n, "trade") or string.find(lower_n, "offer") then
                 found_count = found_count + 1
-                append_log(string.format("[%s] %s (%s)", desc.ClassName, desc.Name, desc:GetFullName()))
+                append_log(string.format("[%s] %s (%s)", desc.ClassName, desc.Name, desc:GetFullName()), true)
 
                 -- Hook ke RemoteEvent jika belum terhubung
                 if desc:IsA("RemoteEvent") and not connected_remotes[desc] then
@@ -347,17 +400,19 @@ end
 local function scan_trade_gui()
     append_log("--- [MEMINDAI PLAYERGUI UNTUK TRADING SCREEN] ---", true)
     local found_gui = false
-    for _, screen in ipairs(player_gui:GetChildren()) do
-        if screen:IsA("ScreenGui") then
-            local lower_n = string.lower(screen.Name)
-            if string.find(lower_n, "trade") or string.find(lower_n, "offer") then
-                found_gui = true
-                append_log(string.format("ScreenGui Ditemukan: '%s' [Enabled: %s]", screen.Name, tostring(screen.Enabled)), true)
-                for _, desc in ipairs(screen:GetDescendants()) do
-                    if desc:IsA("TextButton") or desc:IsA("ImageButton") then
-                        local b_name = string.lower(desc.Name)
-                        if string.find(b_name, "close") or string.find(b_name, "cancel") or string.find(b_name, "exit") or string.find(b_name, "x") then
-                            append_log(string.format("  [Tombol Tutup] %s (%s)", desc:GetFullName(), desc.ClassName))
+    if player_gui then
+        for _, screen in ipairs(player_gui:GetChildren()) do
+            if screen:IsA("ScreenGui") then
+                local lower_n = string.lower(screen.Name)
+                if string.find(lower_n, "trade") or string.find(lower_n, "offer") then
+                    found_gui = true
+                    append_log(string.format("ScreenGui Ditemukan: '%s' [Enabled: %s]", screen.Name, tostring(screen.Enabled)), true)
+                    for _, desc in ipairs(screen:GetDescendants()) do
+                        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+                            local b_name = string.lower(desc.Name)
+                            if string.find(b_name, "close") or string.find(b_name, "cancel") or string.find(b_name, "exit") or string.find(b_name, "x") then
+                                append_log(string.format("  [Tombol Tutup] %s (%s)", desc:GetFullName(), desc.ClassName))
+                            end
                         end
                     end
                 end
@@ -370,43 +425,60 @@ local function scan_trade_gui()
     append_log("")
 end
 
+local is_scanning = false
 local function run_full_scan()
+    if is_scanning then return end
+    is_scanning = true
     append_log("=== MEMULAI PEMINDAIAN SISTEM TRADE ===", true)
     scan_remotes()
     scan_trade_data_module()
     scan_trade_gui()
-    append_log("Scanner siap! Silakan buka sesi trade.")
+    append_log("Scanner siap! Silakan lakukan sesi trade sekarang.")
     append_log("--------------------------------------------------")
+    is_scanning = false
 end
 
-rescan_btn.MouseButton1Click:Connect(run_full_scan)
+rescan_btn.MouseButton1Click:Connect(function()
+    task_spawn(run_full_scan)
+end)
 
 -- Pantau Attributes Player
 local last_is_trading = nil
 task_spawn(function()
-    while gui.Parent do
-        local is_t = local_player:GetAttribute("IsTrading")
+    while gui and gui.Parent do
+        local is_t = nil
+        pcall(function() is_t = local_player:GetAttribute("IsTrading") end)
         if is_t ~= last_is_trading then
             last_is_trading = is_t
             append_log(string.format("[ATTRIBUTE] Player IsTrading = %s", tostring(is_t)), true)
             if is_t == true then
-                task.delay(0.5, scan_trade_gui)
+                task_delay(0.5, scan_trade_gui)
             end
         end
-        task.wait(0.3)
+        task_wait(0.5)
     end
 end)
 
 -- Pantau GUI baru di PlayerGui saat trade terbuka
-player_gui.ChildAdded:Connect(function(child)
-    if child:IsA("ScreenGui") then
-        local lower_n = string.lower(child.Name)
-        if string.find(lower_n, "trade") or string.find(lower_n, "offer") then
-            append_log(string.format("[GUI BARU] '%s' muncul di PlayerGui!", child.Name), true)
-            task.delay(0.3, scan_trade_gui)
+if player_gui then
+    player_gui.ChildAdded:Connect(function(child)
+        if child:IsA("ScreenGui") then
+            local lower_n = string.lower(child.Name)
+            if string.find(lower_n, "trade") or string.find(lower_n, "offer") then
+                append_log(string.format("[GUI BARU] '%s' muncul di PlayerGui!", child.Name), true)
+                task_delay(0.3, scan_trade_gui)
+            end
         end
-    end
-end)
+    end)
+end
 
--- AUTO RUN AWAL
-task.spawn(run_full_scan)
+-- Tampilkan log penyambutan awal di UI langsung
+append_log("=== KEENAN TRADE INSPECTOR AKTIF ===", true)
+append_log("Target Parent: " .. (target_parent and target_parent:GetFullName() or "Unknown"))
+append_log("Status: Standby & memindai...", false)
+
+-- Jalankan scan latar belakang tanpa memblokir rendering UI
+task_spawn(function()
+    task_wait(0.2)
+    run_full_scan()
+end)
