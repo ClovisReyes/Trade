@@ -16,6 +16,7 @@ local user_input_service = cloneref(game:GetService("UserInputService"))
 local tween_service = cloneref(game:GetService("TweenService"))
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
 local http_service = cloneref(game:GetService("HttpService"))
+local text_service = cloneref(game:GetService("TextService"))
 
 -- Anti-AFK Setup (Method 3: Disable Idled connections)
 task_spawn(function()
@@ -154,7 +155,6 @@ local config = {
     trade_rarity_enabled   = false,
     selected_fish          = { "All" },
     selected_tiers         = { "All" },
-    selected_mutations     = { "All" },
     selected_items         = { "All" },
 }
 
@@ -175,7 +175,6 @@ local function save_config()
             auto_accept_enabled    = config.auto_accept_enabled,
             selected_fish          = config.selected_fish,
             selected_tiers         = config.selected_tiers,
-            selected_mutations     = config.selected_mutations,
             selected_items         = config.selected_items,
         }
         writefile(CONFIG_FILE, http_service:JSONEncode(data))
@@ -198,29 +197,24 @@ local function load_config()
         if type(data.auto_accept_enabled) == "boolean" then config.auto_accept_enabled = data.auto_accept_enabled end
         if type(data.selected_fish) == "table" and #data.selected_fish > 0 then config.selected_fish = data.selected_fish end
         if type(data.selected_tiers) == "table" and #data.selected_tiers > 0 then config.selected_tiers = data.selected_tiers end
-        if type(data.selected_mutations) == "table" and #data.selected_mutations > 0 then config.selected_mutations = data.selected_mutations end
         if type(data.selected_items) == "table" and #data.selected_items > 0 then config.selected_items = data.selected_items end
     end)
 end
 pcall(load_config)
 
 cache = {
-    is_trading_active   = false,
     loop_running        = false,
-    processed_trades    = {},
     loaded_fish         = {},
     loaded_enchants     = {},
-    loaded_mutations    = {},
     loaded_tiers        = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" },
     loaded_variant_multipliers = {},
-    last_failed_offer_time     = nil,
     status_text         = { fish = "Idle", enchant = "Idle", coin = "Idle", rarity = "Idle" },
     status_details      = { fish = "", enchant = "", coin = "", rarity = "" },
     stats = {
-        fish    = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
-        rarity  = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
-        enchant = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 },
-        coin    = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0, total_coins = 0 }
+        fish    = { attempts = 0, failed = 0, total_items = 0 },
+        rarity  = { attempts = 0, failed = 0, total_items = 0 },
+        enchant = { attempts = 0, failed = 0, total_items = 0 },
+        coin    = { attempts = 0, failed = 0, total_items = 0, total_coins = 0 }
     },
 }
 
@@ -243,7 +237,6 @@ local tier_mapping = {
 local function load_game_data()
     cache.loaded_tiers = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "Forgotten" }
     cache.loaded_variant_multipliers = {}
-    cache.loaded_mutations = {}
 
     local tiers_mod = replicated_storage:FindFirstChild("Tiers")
     if tiers_mod and tiers_mod:IsA("ModuleScript") then
@@ -265,7 +258,6 @@ local function load_game_data()
                     local mult = tonumber(data.SellMultiplier or (data.Data and data.Data.SellMultiplier)) or 1
                     local name = (data.Data and data.Data.Name) or variant.Name
                     if name then
-                        table_insert(cache.loaded_mutations, name)
                         cache.loaded_variant_multipliers[string_lower(name)] = mult
                         cache.loaded_variant_multipliers[name] = mult
                     end
@@ -276,13 +268,9 @@ local function load_game_data()
             end
         end
     end
-    if not table_find(cache.loaded_mutations, "Shiny") then
-        table_insert(cache.loaded_mutations, "Shiny")
-    end
     if not cache.loaded_variant_multipliers["shiny"] then
         cache.loaded_variant_multipliers["shiny"] = 1.5
     end
-    table_sort(cache.loaded_mutations)
 end
 pcall(load_game_data)
 
@@ -316,12 +304,7 @@ local function parse_coin_input(str)
     return math_floor(val)
 end
 
-local function get_item_mutation(item)
-    if not item or not item.Metadata then return "None" end
-    local v = item.Metadata.VariantId
-    if v and v ~= "" and v ~= "None" then return tostring(v) end
-    return "None"
-end
+
 
 local function is_item_shiny(item)
     if not item then return false end
@@ -500,42 +483,24 @@ end
 local function should_trade_fish(item_data, inventory_item)
     local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
     if not config.enabled or (is_fav and not config.trade_favorited) then return false end
-    local name_match = #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil
-    if not name_match then
-        local fish_name = string_lower(item_data.Data.Name)
-        for _, sel in ipairs(config.selected_fish) do
-            if fish_name == string_lower(strip_quantity(sel)) then name_match = true; break end
-        end
+    if #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil then return true end
+    local fish_name = string_lower(item_data.Data.Name)
+    for _, sel in ipairs(config.selected_fish) do
+        if fish_name == string_lower(strip_quantity(sel)) then return true end
     end
-    local mut_match = #config.selected_mutations == 0 or table_find(config.selected_mutations, "All") ~= nil
-    if not mut_match then
-        local mut_name = string_lower(get_item_mutation(inventory_item))
-        for _, sel in ipairs(config.selected_mutations) do
-            if mut_name == string_lower(strip_quantity(sel)) then mut_match = true; break end
-        end
-    end
-    return name_match and mut_match
+    return false
 end
 
 local function should_trade_fish_by_rarity(item_data, inventory_item)
     local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
     if not config.enabled or (is_fav and not config.trade_favorited) then return false end
-    local rarity_match = #config.selected_tiers == 0 or table_find(config.selected_tiers, "All") ~= nil
-    if not rarity_match then
-        local raw_tier = item_data.Data.Tier
-        local tier_name = type(raw_tier) == "number" and (tier_mapping[raw_tier] or "") or string_lower(tostring(raw_tier))
-        for _, sel in ipairs(config.selected_tiers) do
-            if tier_name == string_lower(strip_quantity(sel)) then rarity_match = true; break end
-        end
+    if #config.selected_tiers == 0 or table_find(config.selected_tiers, "All") ~= nil then return true end
+    local raw_tier = item_data.Data.Tier
+    local tier_name = type(raw_tier) == "number" and (tier_mapping[raw_tier] or "") or string_lower(tostring(raw_tier))
+    for _, sel in ipairs(config.selected_tiers) do
+        if tier_name == string_lower(strip_quantity(sel)) then return true end
     end
-    local mut_match = #config.selected_mutations == 0 or table_find(config.selected_mutations, "All") ~= nil
-    if not mut_match then
-        local mut_name = string_lower(get_item_mutation(inventory_item))
-        for _, sel in ipairs(config.selected_mutations) do
-            if mut_name == string_lower(strip_quantity(sel)) then mut_match = true; break end
-        end
-    end
-    return rarity_match and mut_match
+    return false
 end
 
 local function collect_round_robin(items, key_extractor, selected_keys, limit)
@@ -657,7 +622,6 @@ local function accept_trade_from(req)
 end
 
 local original_popup = _G.OriginalTradeOfferPopUp
-local receiver_accept_lock = 0
 pcall(function()
     local mod = replicated_storage:FindFirstChild("Controllers") and replicated_storage.Controllers:FindFirstChild("Trading") and replicated_storage.Controllers.Trading:FindFirstChild("TradeOfferController")
     if mod then
@@ -694,19 +658,11 @@ pcall(function()
     end
 end)
 
-_G.NoirHub_AutoTrade_Cleanup = function()
-    if _G.OriginalTradeOfferPopUp and trade_offer_controller then
-        trade_offer_controller.PopUp = _G.OriginalTradeOfferPopUp
-    end
-    if auto_accept_trade_offer_conn then pcall(function() auto_accept_trade_offer_conn:Disconnect() end); auto_accept_trade_offer_conn = nil end
-    if auto_accept_trade_started_conn then pcall(function() auto_accept_trade_started_conn:Disconnect() end); auto_accept_trade_started_conn = nil end
-    if auto_accept_trade_ended_conn then pcall(function() auto_accept_trade_ended_conn:Disconnect() end); auto_accept_trade_ended_conn = nil end
-    if auto_accept_trade_completed_conn then pcall(function() auto_accept_trade_completed_conn:Disconnect() end); auto_accept_trade_completed_conn = nil end
-    if auto_accept_attr_conn then pcall(function() auto_accept_attr_conn:Disconnect() end); auto_accept_attr_conn = nil end
-end
-
 local function close_trading_gui()
-    
+    local trading_gui = player_gui:FindFirstChild("Trading")
+    if trading_gui then
+        trading_gui.Enabled = false
+    end
 end
 
 local receiver_loop_running = false
@@ -718,7 +674,7 @@ local function start_receiver_trade_loop()
     task_spawn(function()
         local start_t = tick()
         while config.auto_accept_enabled and _G.NoirHub_AutoTrade_ScriptID == script_id and local_player:GetAttribute("IsTrading") do
-            if (tick() - start_t) > 90 then
+            if (tick() - start_t) > 60 then
                 pcall(function()
                     if trade_remotes.CancelTrade then trade_remotes.CancelTrade:InvokeServer() end
                 end)
@@ -869,7 +825,6 @@ local function start_trade_session(target_player, mode)
     
     local success, err = trade_remotes.SendTradeOffer:InvokeServer(target_player)
     if success == false then
-        cache.last_failed_offer_time = tick()
         set_status_msg(mode, "Failed: " .. (err or "Declined"))
         return false, err
     end
@@ -880,7 +835,6 @@ local function start_trade_session(target_player, mode)
         task_wait(0.1)
     end
     if not local_player:GetAttribute("IsTrading") then
-        cache.last_failed_offer_time = tick()
         set_status_msg(mode, "Trade request timed out")
         return false, "Timeout"
     end
@@ -893,11 +847,11 @@ local function wait_for_trade_end(mode_name, chat_listener)
     while local_player:GetAttribute("IsTrading") do
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.enabled then break end
         if chat_listener and chat_listener.is_completed() then break end
-        if (tick() - start_t) > 90 then
+        if (tick() - start_t) > 60 then
             pcall(function()
                 if trade_remotes.CancelTrade then trade_remotes.CancelTrade:InvokeServer() end
             end)
-            set_status_msg(mode_name, "Trade timeout (90s)")
+            set_status_msg(mode_name, "Trade timeout (60s)")
             break
         end
         pcall(function()
@@ -905,7 +859,7 @@ local function wait_for_trade_end(mode_name, chat_listener)
             if trade_remotes.ConfirmTrade then trade_remotes.ConfirmTrade:InvokeServer() end
         end)
         local elapsed = math_floor(tick() - start_t)
-        set_status_msg(mode_name, string_format("Accepting & Confirming trade... (%ds/90s)", elapsed))
+        set_status_msg(mode_name, string_format("Accepting & Confirming trade... (%ds/60s)", elapsed))
         task_wait(0.25)
     end
 end
@@ -1042,8 +996,6 @@ local function execute_trade(mode)
     local function mark_success()
         if not trade_success then
             trade_success = true
-            s.success_trades = s.success_trades + 1
-            s.last_items = #added_items
             s.total_items = s.total_items + #added_items
             if mode == "coin" then
                 local sent_subtotal = 0
@@ -1102,7 +1054,6 @@ local function execute_trade(mode)
                 end
             end)
             set_status_msg(mode, "Tidak ada item yang berhasil di-add. Trade dibatalkan.")
-            cache.last_failed_offer_time = tick()
             close_trading_gui()
             s.failed = s.failed + 1
             update_status_ui(mode)
@@ -1123,11 +1074,9 @@ local function execute_trade(mode)
 
     if not trade_success then
         s.failed = s.failed + 1
-        cache.last_failed_offer_time = tick()
         close_trading_gui()
         update_status_ui(mode)
     else
-        cache.last_failed_offer_time = nil
         set_status_msg(mode, "Trade done! Syncing inventory...")
         local clear_start = tick()
         while local_player:GetAttribute("IsTrading") and (tick() - clear_start) < 4 do
@@ -1489,6 +1438,23 @@ local function create_ui()
         local match_count = 0
         local full_opts = exclude_all and {} or { "All" }
         for _, opt in ipairs(options) do table_insert(full_opts, opt) end
+
+        local max_text_w = 0
+        for _, opt in ipairs(full_opts) do
+            local clean = strip_quantity(opt)
+            if q == "" or string_find(string_lower(clean), q) then
+                local text_w = text_service:GetTextSize(opt, 10, Enum.Font.SourceSans, Vector2.new(2000, 24)).X
+                if text_w > max_text_w then max_text_w = text_w end
+            end
+        end
+
+        local panel = scroll.Parent
+        if panel and panel:IsA("Frame") then
+            local target_w = math.max(150, math.ceil(max_text_w + 46))
+            panel.Size = UDim2.new(0, target_w, 1, -34)
+            panel.Position = UDim2.new(1, -(target_w + 10), 0, 28)
+        end
+
         for _, opt in ipairs(full_opts) do
             local clean = strip_quantity(opt)
             if q == "" or string_find(string_lower(clean), q) then
@@ -1504,8 +1470,8 @@ local function create_ui()
                 create_corner(btn, 4)
 
                 local lbl = Instance.new("TextLabel")
-                lbl.Size = UDim2.new(1, -20, 1, 0)
-                lbl.Position = UDim2.new(0, 15, 0, 0)
+                lbl.Size = UDim2.new(1, -18, 1, 0)
+                lbl.Position = UDim2.new(0, 14, 0, 0)
                 lbl.BackgroundTransparency = 1
                 lbl.Text = opt
                 lbl.TextColor3 = is_selected and ACCENT_COLOR or TEXT_COLOR
@@ -1821,13 +1787,40 @@ local function create_ui()
         end
     end
 
+    local function create_form_row(parent, label_text, widget_type, default_val)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 22)
+        row.BackgroundTransparency = 1
+        row.Parent = parent
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.45, 0, 1, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = label_text
+        lbl.TextColor3 = TEXT_COLOR
+        lbl.TextSize = 10
+        lbl.FontFace = font_bold
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = row
+
+        local ctrl = Instance.new(widget_type)
+        ctrl.Size = UDim2.new(0.55, 0, 1, 0)
+        ctrl.Position = UDim2.new(0.45, 0, 0, 0)
+        ctrl.BackgroundColor3 = INPUT_BG_COLOR
+        ctrl.Text = default_val or ""
+        ctrl.TextColor3 = TEXT_COLOR
+        ctrl.TextSize = 10
+        ctrl.FontFace = font_face
+        ctrl.Parent = row
+        create_corner(ctrl, 4)
+        create_stroke(ctrl, Color3.fromRGB(45, 45, 45))
+        return ctrl
+    end
+
     
     local byname_inner = create_accordion("Trade By Name")
     create_stat_box(byname_inner, "fish")
-    local f_row = Instance.new("Frame"); f_row.Size = UDim2.new(1, 0, 0, 22); f_row.BackgroundTransparency = 1; f_row.Parent = byname_inner
-    local f_lbl = Instance.new("TextLabel"); f_lbl.Size = UDim2.new(0.45, 0, 1, 0); f_lbl.BackgroundTransparency = 1; f_lbl.Text = "Select Item"; f_lbl.TextColor3 = TEXT_COLOR; f_lbl.TextSize = 10; f_lbl.FontFace = font_bold; f_lbl.TextXAlignment = Enum.TextXAlignment.Left; f_lbl.Parent = f_row
-    local f_drop = Instance.new("TextButton"); f_drop.Size = UDim2.new(0.55, 0, 1, 0); f_drop.Position = UDim2.new(0.45, 0, 0, 0); f_drop.BackgroundColor3 = INPUT_BG_COLOR; f_drop.Text = (#config.selected_fish > 0 and table_concat(config.selected_fish, "/") or "All"); f_drop.TextColor3 = TEXT_COLOR; f_drop.TextSize = 10; f_drop.FontFace = font_face; f_drop.Parent = f_row
-    create_corner(f_drop, 4); create_stroke(f_drop, Color3.fromRGB(45, 45, 45))
+    local f_drop = create_form_row(byname_inner, "Select Item", "TextButton", (#config.selected_fish > 0 and table_concat(config.selected_fish, "/") or "All"))
     f_drop.MouseButton1Click:Connect(function()
         item_panel.Visible = not item_panel.Visible
         close_detector.Visible = item_panel.Visible
@@ -1844,10 +1837,7 @@ local function create_ui()
         end, item_search.Text)
     end)
 
-    local f_amt_row = Instance.new("Frame"); f_amt_row.Size = UDim2.new(1, 0, 0, 22); f_amt_row.BackgroundTransparency = 1; f_amt_row.Parent = byname_inner
-    local f_amt_lbl = Instance.new("TextLabel"); f_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); f_amt_lbl.BackgroundTransparency = 1; f_amt_lbl.Text = "Amount Fish Name"; f_amt_lbl.TextColor3 = TEXT_COLOR; f_amt_lbl.TextSize = 10; f_amt_lbl.FontFace = font_bold; f_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; f_amt_lbl.Parent = f_amt_row
-    local f_qty = Instance.new("TextBox"); f_qty.Size = UDim2.new(0.55, 0, 1, 0); f_qty.Position = UDim2.new(0.45, 0, 0, 0); f_qty.BackgroundColor3 = INPUT_BG_COLOR; f_qty.Text = tostring(config.quantity); f_qty.TextColor3 = TEXT_COLOR; f_qty.TextSize = 10; f_qty.FontFace = font_face; f_qty.Parent = f_amt_row
-    create_corner(f_qty, 4); create_stroke(f_qty, Color3.fromRGB(45, 45, 45))
+    local f_qty = create_form_row(byname_inner, "Amount Fish Name", "TextBox", tostring(config.quantity))
     table_insert(qty_inputs, f_qty)
     f_qty.FocusLost:Connect(function() sync_qty(tonumber(f_qty.Text) or config.quantity) end)
 
@@ -1859,7 +1849,7 @@ local function create_ui()
                     sync_qty(math_floor(num))
                 end
             end
-            cache.stats.fish = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 }
+            cache.stats.fish = { attempts = 0, failed = 0, total_items = 0 }
             config.trade_fish_enabled = true; config.enabled = true
             sync_modes("fish"); run_auto_trade_loop()
         else
@@ -1871,10 +1861,7 @@ local function create_ui()
     
     local en_inner = create_accordion("Trade Enchant Stone")
     create_stat_box(en_inner, "enchant")
-    local e_row = Instance.new("Frame"); e_row.Size = UDim2.new(1, 0, 0, 22); e_row.BackgroundTransparency = 1; e_row.Parent = en_inner
-    local e_lbl = Instance.new("TextLabel"); e_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_lbl.BackgroundTransparency = 1; e_lbl.Text = "Stone Type"; e_lbl.TextColor3 = TEXT_COLOR; e_lbl.TextSize = 10; e_lbl.FontFace = font_bold; e_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_lbl.Parent = e_row
-    local e_drop = Instance.new("TextButton"); e_drop.Size = UDim2.new(0.55, 0, 1, 0); e_drop.Position = UDim2.new(0.45, 0, 0, 0); e_drop.BackgroundColor3 = INPUT_BG_COLOR; e_drop.Text = (#config.selected_items > 0 and config.selected_items[1] ~= "All" and table_concat(config.selected_items, "/") or "Select"); e_drop.TextColor3 = TEXT_COLOR; e_drop.TextSize = 10; e_drop.FontFace = font_face; e_drop.Parent = e_row
-    create_corner(e_drop, 4); create_stroke(e_drop, Color3.fromRGB(45, 45, 45))
+    local e_drop = create_form_row(en_inner, "Stone Type", "TextButton", (#config.selected_items > 0 and config.selected_items[1] ~= "All" and table_concat(config.selected_items, "/") or "Select"))
     e_drop.MouseButton1Click:Connect(function()
         enchant_panel.Visible = not enchant_panel.Visible
         close_detector.Visible = enchant_panel.Visible
@@ -1891,10 +1878,7 @@ local function create_ui()
         end, enchant_search.Text, true)
     end)
 
-    local e_amt_row = Instance.new("Frame"); e_amt_row.Size = UDim2.new(1, 0, 0, 22); e_amt_row.BackgroundTransparency = 1; e_amt_row.Parent = en_inner
-    local e_amt_lbl = Instance.new("TextLabel"); e_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); e_amt_lbl.BackgroundTransparency = 1; e_amt_lbl.Text = "Amount Enchant Stone"; e_amt_lbl.TextColor3 = TEXT_COLOR; e_amt_lbl.TextSize = 10; e_amt_lbl.FontFace = font_bold; e_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; e_amt_lbl.Parent = e_amt_row
-    local e_qty = Instance.new("TextBox"); e_qty.Size = UDim2.new(0.55, 0, 1, 0); e_qty.Position = UDim2.new(0.45, 0, 0, 0); e_qty.BackgroundColor3 = INPUT_BG_COLOR; e_qty.Text = tostring(config.quantity); e_qty.TextColor3 = TEXT_COLOR; e_qty.TextSize = 10; e_qty.FontFace = font_face; e_qty.Parent = e_amt_row
-    create_corner(e_qty, 4); create_stroke(e_qty, Color3.fromRGB(45, 45, 45))
+    local e_qty = create_form_row(en_inner, "Amount Enchant Stone", "TextBox", tostring(config.quantity))
     table_insert(qty_inputs, e_qty)
     e_qty.FocusLost:Connect(function() sync_qty(tonumber(e_qty.Text) or config.quantity) end)
 
@@ -1906,7 +1890,7 @@ local function create_ui()
                     sync_qty(math_floor(num))
                 end
             end
-            cache.stats.enchant = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 }
+            cache.stats.enchant = { attempts = 0, failed = 0, total_items = 0 }
             config.trade_enchants_enabled = true; config.enabled = true
             sync_modes("enchant"); run_auto_trade_loop()
         else
@@ -1917,10 +1901,7 @@ local function create_ui()
     
     local r_inner = create_accordion("Trade By Rarity")
     create_stat_box(r_inner, "rarity")
-    local r_row = Instance.new("Frame"); r_row.Size = UDim2.new(1, 0, 0, 22); r_row.BackgroundTransparency = 1; r_row.Parent = r_inner
-    local r_lbl = Instance.new("TextLabel"); r_lbl.Size = UDim2.new(0.45, 0, 1, 0); r_lbl.BackgroundTransparency = 1; r_lbl.Text = "Select Rarity"; r_lbl.TextColor3 = TEXT_COLOR; r_lbl.TextSize = 10; r_lbl.FontFace = font_bold; r_lbl.TextXAlignment = Enum.TextXAlignment.Left; r_lbl.Parent = r_row
-    local r_drop = Instance.new("TextButton"); r_drop.Size = UDim2.new(0.55, 0, 1, 0); r_drop.Position = UDim2.new(0.45, 0, 0, 0); r_drop.BackgroundColor3 = INPUT_BG_COLOR; r_drop.Text = (#config.selected_tiers > 0 and table_concat(config.selected_tiers, "/") or "All"); r_drop.TextColor3 = TEXT_COLOR; r_drop.TextSize = 10; r_drop.FontFace = font_face; r_drop.Parent = r_row
-    create_corner(r_drop, 4); create_stroke(r_drop, Color3.fromRGB(45, 45, 45))
+    local r_drop = create_form_row(r_inner, "Select Rarity", "TextButton", (#config.selected_tiers > 0 and table_concat(config.selected_tiers, "/") or "All"))
     r_drop.MouseButton1Click:Connect(function()
         rarity_panel.Visible = not rarity_panel.Visible
         close_detector.Visible = rarity_panel.Visible
@@ -1931,10 +1912,7 @@ local function create_ui()
         end
     end)
 
-    local r_amt_row = Instance.new("Frame"); r_amt_row.Size = UDim2.new(1, 0, 0, 22); r_amt_row.BackgroundTransparency = 1; r_amt_row.Parent = r_inner
-    local r_amt_lbl = Instance.new("TextLabel"); r_amt_lbl.Size = UDim2.new(0.45, 0, 1, 0); r_amt_lbl.BackgroundTransparency = 1; r_amt_lbl.Text = "Amount Fish Rarity"; r_amt_lbl.TextColor3 = TEXT_COLOR; r_amt_lbl.TextSize = 10; r_amt_lbl.FontFace = font_bold; r_amt_lbl.TextXAlignment = Enum.TextXAlignment.Left; r_amt_lbl.Parent = r_amt_row
-    local r_qty = Instance.new("TextBox"); r_qty.Size = UDim2.new(0.55, 0, 1, 0); r_qty.Position = UDim2.new(0.45, 0, 0, 0); r_qty.BackgroundColor3 = INPUT_BG_COLOR; r_qty.Text = tostring(config.quantity); r_qty.TextColor3 = TEXT_COLOR; r_qty.TextSize = 10; r_qty.FontFace = font_face; r_qty.Parent = r_amt_row
-    create_corner(r_qty, 4); create_stroke(r_qty, Color3.fromRGB(45, 45, 45))
+    local r_qty = create_form_row(r_inner, "Amount Fish Rarity", "TextBox", tostring(config.quantity))
     table_insert(qty_inputs, r_qty)
     r_qty.FocusLost:Connect(function() sync_qty(tonumber(r_qty.Text) or config.quantity) end)
 
@@ -1946,7 +1924,7 @@ local function create_ui()
                     sync_qty(math_floor(num))
                 end
             end
-            cache.stats.rarity = { success_trades = 0, attempts = 0, failed = 0, last_items = 0, total_items = 0 }
+            cache.stats.rarity = { attempts = 0, failed = 0, total_items = 0 }
             config.trade_rarity_enabled = true; config.enabled = true
             sync_modes("rarity"); run_auto_trade_loop()
         else
@@ -1958,10 +1936,8 @@ local function create_ui()
     
     local c_inner = create_accordion("Trade By Coin")
     create_stat_box(c_inner, "coin")
-    local c_row = Instance.new("Frame"); c_row.Size = UDim2.new(1, 0, 0, 22); c_row.BackgroundTransparency = 1; c_row.Parent = c_inner
-    local c_lbl = Instance.new("TextLabel"); c_lbl.Size = UDim2.new(0.45, 0, 1, 0); c_lbl.BackgroundTransparency = 1; c_lbl.Text = "Target Coins"; c_lbl.TextColor3 = TEXT_COLOR; c_lbl.TextSize = 10; c_lbl.FontFace = font_bold; c_lbl.TextXAlignment = Enum.TextXAlignment.Left; c_lbl.Parent = c_row
-    local c_box = Instance.new("TextBox"); c_box.Size = UDim2.new(0.55, 0, 1, 0); c_box.Position = UDim2.new(0.45, 0, 0, 0); c_box.BackgroundColor3 = INPUT_BG_COLOR; c_box.Text = format_number(config.target_coin_amount); c_box.TextColor3 = TEXT_COLOR; c_box.TextSize = 10; c_box.FontFace = font_face; c_box.ClearTextOnFocus = false; c_box.Parent = c_row
-    create_corner(c_box, 4); create_stroke(c_box, Color3.fromRGB(45, 45, 45))
+    local c_box = create_form_row(c_inner, "Target Coins", "TextBox", format_number(config.target_coin_amount))
+    c_box.ClearTextOnFocus = false
     c_box:GetPropertyChangedSignal("Text"):Connect(function()
         local text = c_box.Text
         local parsed = parse_coin_input(text)
