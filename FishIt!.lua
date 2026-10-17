@@ -306,6 +306,17 @@ end
 
 
 
+local function is_item_tradable(item)
+    if not item or type(item) ~= "table" then return false end
+    if item.Locked == true then return false end
+    local meta = type(item.Metadata) == "table" and item.Metadata or nil
+    if meta then
+        if meta.Locked == true then return false end
+        if meta.TradeLock ~= nil and meta.TradeLock ~= false then return false end
+    end
+    return true
+end
+
 local function is_item_shiny(item)
     if not item then return false end
     if item.Metadata and item.Metadata.Shiny == true then return true end
@@ -351,7 +362,7 @@ local function select_fish_for_coin_trade(target_coins, already_sent_coins)
 
     local candidate_pool = {}
     for _, itm in ipairs(items) do
-        if itm and itm.Id then
+        if itm and itm.Id and is_item_tradable(itm) then
             local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
             if not is_fav or config.trade_favorited then
                 local val = calculate_fish_coin_value(itm)
@@ -429,7 +440,7 @@ local function get_inventory_items(type_filter, bypass_favorited)
         if not player_data then return end
         local inv = player_data:Get("Inventory")
         for _, item in ipairs(inv and inv.Items or {}) do
-            if item and item.Id then
+            if item and item.Id and is_item_tradable(item) then
                 local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
                 if bypass_favorited or not is_fav or config.trade_favorited then
                     local data = item_utility:GetItemData(item.Id)
@@ -481,6 +492,7 @@ local function find_target_player()
 end
 
 local function should_trade_fish(item_data, inventory_item)
+    if not is_item_tradable(inventory_item) then return false end
     local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
     if not config.enabled or (is_fav and not config.trade_favorited) then return false end
     if #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil then return true end
@@ -492,6 +504,7 @@ local function should_trade_fish(item_data, inventory_item)
 end
 
 local function should_trade_fish_by_rarity(item_data, inventory_item)
+    if not is_item_tradable(inventory_item) then return false end
     local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
     if not config.enabled or (is_fav and not config.trade_favorited) then return false end
     if #config.selected_tiers == 0 or table_find(config.selected_tiers, "All") ~= nil then return true end
@@ -761,7 +774,7 @@ local function toggle_auto_accept(enable)
 end
 
 local function listen_for_trade_completion(on_completed)
-    local completed, connections = false, {}
+    local completed, conn = false, nil
     local function trigger_done()
         if completed then return end
         completed = true
@@ -769,33 +782,19 @@ local function listen_for_trade_completion(on_completed)
     end
 
     pcall(function()
-        local TextChatService = game:GetService("TextChatService")
-        if TextChatService then
-            table_insert(connections, TextChatService.MessageReceived:Connect(function(msg)
-                if not msg or completed then return end
-                local lower_t = string_lower(tostring(msg.Text))
-                if string_find(lower_t, "completed", 1, true) and (string_find(lower_t, "trade", 1, true) or string_find(lower_t, "with", 1, true)) then
-                    trigger_done()
-                end
-            end))
-        end
-    end)
-
-    pcall(function()
         if trade_remotes and trade_remotes.TradeCompleted then
-            table_insert(connections, trade_remotes.TradeCompleted.OnClientEvent:Connect(trigger_done))
-        end
-    end)
-
-    pcall(function()
-        if trade_remotes and trade_remotes.TradeEnded then
-            table_insert(connections, trade_remotes.TradeEnded.OnClientEvent:Connect(trigger_done))
+            conn = trade_remotes.TradeCompleted.OnClientEvent:Connect(trigger_done)
         end
     end)
 
     return {
         is_completed = function() return completed end,
-        disconnect = function() for _, conn in ipairs(connections) do pcall(function() conn:Disconnect() end) end end
+        disconnect = function()
+            if conn then
+                pcall(function() conn:Disconnect() end)
+                conn = nil
+            end
+        end
     }
 end
 
@@ -842,11 +841,11 @@ local function start_trade_session(target_player, mode)
     return true
 end
 
-local function wait_for_trade_end(mode_name, chat_listener)
+local function wait_for_trade_end(mode_name, trade_listener)
     local start_t = tick()
     while local_player:GetAttribute("IsTrading") do
         if _G.NoirHub_AutoTrade_ScriptID ~= script_id or not config.enabled then break end
-        if chat_listener and chat_listener.is_completed() then break end
+        if trade_listener and trade_listener.is_completed() then break end
         if (tick() - start_t) > 60 then
             pcall(function()
                 if trade_remotes.CancelTrade then trade_remotes.CancelTrade:InvokeServer() end
@@ -912,7 +911,7 @@ local function collect_trade_items(mode)
         end
     elseif mode == "enchant" then
         for _, item in ipairs(items) do
-            if item and item.Id then
+            if item and item.Id and is_item_tradable(item) then
                 local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
                 if not (is_fav and not config.trade_favorited) then
                     local d = item_utility:GetItemData(item.Id)
@@ -1007,7 +1006,7 @@ local function execute_trade(mode)
             update_status_ui(mode)
         end
     end
-    local chat_listener = listen_for_trade_completion(mark_success)
+    local trade_listener = listen_for_trade_completion(mark_success)
 
     local target_count = 20
     if mode ~= "coin" and config.quantity > 0 then
@@ -1015,6 +1014,7 @@ local function execute_trade(mode)
     elseif mode == "coin" then
         target_count = math.min(20, #items_to_trade)
     end
+    local expected_count = math.min(target_count, #items_to_trade)
 
     for _, item in ipairs(items_to_trade) do
         if not config.enabled or not local_player:GetAttribute("IsTrading") or _G.NoirHub_AutoTrade_ScriptID ~= script_id then
@@ -1046,6 +1046,8 @@ local function execute_trade(mode)
         task_wait(0.1)
     end
 
+    local is_coin_reached = (mode == "coin" and config.target_coin_amount > 0 and ((s.total_coins or 0) + added_coins >= config.target_coin_amount))
+
     if local_player:GetAttribute("IsTrading") then
         if #added_items == 0 then
             pcall(function()
@@ -1057,20 +1059,34 @@ local function execute_trade(mode)
             close_trading_gui()
             s.failed = s.failed + 1
             update_status_ui(mode)
-            chat_listener.disconnect()
+            trade_listener.disconnect()
+            return
+        end
+
+        if #added_items < expected_count and not is_coin_reached then
+            pcall(function()
+                if trade_remotes.CancelTrade then
+                    trade_remotes.CancelTrade:InvokeServer()
+                end
+            end)
+            set_status_msg(mode, string_format("Item tidak full (%d/%d). Trade dibatalkan & retrying...", #added_items, expected_count))
+            close_trading_gui()
+            s.failed = s.failed + 1
+            update_status_ui(mode)
+            trade_listener.disconnect()
             return
         end
 
         set_status_msg(mode, string_format("Ready (%d item). Confirming trade...", #added_items))
         task_wait(0.35)
         pcall(function() trade_remotes.SetReady:InvokeServer(true) end)
-        wait_for_trade_end(mode, chat_listener)
+        wait_for_trade_end(mode, trade_listener)
     end
 
-    if chat_listener.is_completed() then
+    if trade_listener.is_completed() then
         mark_success()
     end
-    chat_listener.disconnect()
+    trade_listener.disconnect()
 
     if not trade_success then
         s.failed = s.failed + 1
