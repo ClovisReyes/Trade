@@ -68,7 +68,7 @@ end
 
 _G.IsItemTradeLocked = evaluate_item_lock
 
-local function perform_inventory_scan(filter_mode)
+local function perform_inventory_scan()
     if not player_data then
         return nil, "Player Data not ready! Ensure character is loaded into the game."
     end
@@ -76,14 +76,37 @@ local function perform_inventory_scan(filter_mode)
     local inv = player_data:Get("Inventory")
     local items = inv and inv.Items or {}
 
-    local total_count = 0
-    local locked_count = 0
-    local unlocked_count = 0
-    local all_item_keys = {}
-    local all_meta_keys = {}
+    local categories = {
+        Fish = { total = 0, locked_count = 0, unlocked_count = 0, groups = {}, group_order = {} },
+        Enchant = { total = 0, locked_count = 0, unlocked_count = 0, groups = {}, group_order = {} },
+        All = { total = 0, locked_count = 0, unlocked_count = 0, groups = {}, group_order = {} },
+    }
 
-    local groups = {}
-    local group_order = {}
+    local function add_to_category(cat, itm, is_locked, l_type, reasons, name, var_name, qty, group_key, item_type)
+        cat.total = cat.total + 1
+        if is_locked then
+            cat.locked_count = cat.locked_count + 1
+        else
+            cat.unlocked_count = cat.unlocked_count + 1
+        end
+
+        if not cat.groups[group_key] then
+            cat.groups[group_key] = {
+                name = name,
+                variant = var_name,
+                category = item_type,
+                id = itm.Id,
+                uuid = itm.UUID or "No-UUID",
+                is_locked = is_locked,
+                lock_type = l_type,
+                reasons = reasons,
+                quantity = 0,
+                sample_meta = itm.Metadata,
+            }
+            table_insert(cat.group_order, group_key)
+        end
+        cat.groups[group_key].quantity = cat.groups[group_key].quantity + qty
+    end
 
     for _, itm in ipairs(items) do
         if itm and itm.Id then
@@ -91,93 +114,49 @@ local function perform_inventory_scan(filter_mode)
             local item_data = item_info and item_info.Data or {}
             local item_type = item_data.Type or "Item"
 
-            local is_match = false
-            if filter_mode == "Fish" then
-                is_match = (item_type == "Fish")
-            elseif filter_mode == "Enchant" then
-                is_match = (item_type == "Enchant Stones")
-            else
-                is_match = true
+            local is_locked, l_type, reasons = evaluate_item_lock(itm)
+
+            local name = item_data.Name or ("Item #" .. tostring(itm.Id))
+            local meta = itm.Metadata or {}
+            local var_name = nil
+            if meta.VariantId and item_utility and item_utility.GetVariantData then
+                pcall(function()
+                    local v = item_utility.GetVariantData(tonumber(meta.VariantId))
+                    if v and v.Data and v.Data.Name then var_name = v.Data.Name end
+                end)
             end
 
-            if is_match then
-                total_count = total_count + 1
+            local qty = itm.Quantity or itm.Amount or 1
+            local group_key = name .. "_" .. (var_name or "") .. "_" .. tostring(is_locked)
 
-                for k in pairs(itm) do all_item_keys[tostring(k)] = true end
-                if type(itm.Metadata) == "table" then
-                    for k in pairs(itm.Metadata) do all_meta_keys[tostring(k)] = true end
-                end
-
-                local is_locked, l_type, reasons = evaluate_item_lock(itm)
-
-                local name = item_data.Name or ("Item #" .. tostring(itm.Id))
-                local meta = itm.Metadata or {}
-                local var_name = nil
-                if meta.VariantId and item_utility and item_utility.GetVariantData then
-                    pcall(function()
-                        local v = item_utility.GetVariantData(tonumber(meta.VariantId))
-                        if v and v.Data and v.Data.Name then var_name = v.Data.Name end
-                    end)
-                end
-
-                if is_locked then
-                    locked_count = locked_count + 1
-                else
-                    unlocked_count = unlocked_count + 1
-                end
-
-                local qty = itm.Quantity or itm.Amount or 1
-                local group_key = name .. "_" .. (var_name or "") .. "_" .. tostring(is_locked)
-
-                if not groups[group_key] then
-                    groups[group_key] = {
-                        name = name,
-                        variant = var_name,
-                        category = item_type,
-                        id = itm.Id,
-                        uuid = itm.UUID or "No-UUID",
-                        is_locked = is_locked,
-                        lock_type = l_type,
-                        reasons = reasons,
-                        quantity = 0,
-                        sample_meta = itm.Metadata,
-                    }
-                    table_insert(group_order, group_key)
-                end
-                groups[group_key].quantity = groups[group_key].quantity + qty
+            add_to_category(categories.All, itm, is_locked, l_type, reasons, name, var_name, qty, group_key, item_type)
+            if item_type == "Fish" then
+                add_to_category(categories.Fish, itm, is_locked, l_type, reasons, name, var_name, qty, group_key, item_type)
+            elseif item_type == "Enchant Stones" then
+                add_to_category(categories.Enchant, itm, is_locked, l_type, reasons, name, var_name, qty, group_key, item_type)
             end
         end
     end
 
-    local item_key_list = {}
-    for k in pairs(all_item_keys) do table_insert(item_key_list, k) end
-    table_sort(item_key_list)
+    for _, cat in pairs(categories) do
+        local cards_data = {}
+        for _, g_key in ipairs(cat.group_order) do
+            table_insert(cards_data, cat.groups[g_key])
+        end
 
-    local meta_key_list = {}
-    for k in pairs(all_meta_keys) do table_insert(meta_key_list, k) end
-    table_sort(meta_key_list)
+        table_sort(cards_data, function(a, b)
+            if a.is_locked ~= b.is_locked then
+                return a.is_locked == true
+            end
+            return a.name < b.name
+        end)
 
-    local cards_data = {}
-    for _, g_key in ipairs(group_order) do
-        table_insert(cards_data, groups[g_key])
+        cat.cards = cards_data
+        cat.groups = nil
+        cat.group_order = nil
     end
 
-    table_sort(cards_data, function(a, b)
-        if a.is_locked ~= b.is_locked then
-            return a.is_locked == true
-        end
-        return a.name < b.name
-    end)
-
-    return {
-        target = filter_mode,
-        total = total_count,
-        locked_count = locked_count,
-        unlocked_count = unlocked_count,
-        cards = cards_data,
-        item_keys = item_key_list,
-        metadata_keys = meta_key_list,
-    }
+    return categories
 end
 
 local parent_gui = (gethui and gethui()) or game:GetService("CoreGui")
@@ -207,9 +186,6 @@ local font_bold = Font.fromEnum(Enum.Font.SourceSansBold)
 
 local function create_corner(parent, radius)
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, radius); c.Parent = parent; return c
-end
-local function create_stroke(parent, color, thickness)
-    local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = thickness or 1; s.Parent = parent; return s
 end
 
 local config = {
@@ -258,7 +234,7 @@ main.Position = UDim2.new(0.5, -210, 0.45, -197)
 main.BackgroundColor3 = BG_COLOR
 main.Active = true
 main.Parent = gui
-create_corner(main, 9); create_stroke(main, Color3.fromRGB(48, 48, 48), 1.2)
+create_corner(main, 9)
 
 local floating_btn = Instance.new("TextButton")
 floating_btn.Name = "FloatingRestore"
@@ -273,7 +249,7 @@ floating_btn.FontFace = font_bold
 floating_btn.Visible = false
 floating_btn.ZIndex = 100
 floating_btn.Parent = gui
-create_corner(floating_btn, 9); create_stroke(floating_btn, BUTTON_COLOR, 1.4)
+create_corner(floating_btn, 9)
 
 local float_dragging = false
 local float_drag_start = nil
@@ -403,7 +379,7 @@ local function create_filter_btn(name, target_key, x_scale, width_scale)
     btn.TextSize = 10.5
     btn.FontFace = font_bold
     btn.Parent = filter_row
-    create_corner(btn, 5); create_stroke(btn, Color3.fromRGB(45, 45, 45))
+    create_corner(btn, 5)
     filter_buttons[target_key] = btn
     return btn
 end
@@ -412,7 +388,7 @@ local btn_fish    = create_filter_btn("Fish", "Fish", 0, 0.32)
 local btn_enchant = create_filter_btn("Enchant Stones", "Enchant", 0.34, 0.32)
 local btn_all     = create_filter_btn("All", "All", 0.68, 0.32)
 
-local execute_scan = nil
+local render_current_tab = nil
 
 local function update_filter_ui(target_key)
     current_filter = target_key
@@ -421,7 +397,9 @@ local function update_filter_ui(target_key)
         btn.BackgroundColor3 = is_active and BUTTON_COLOR or CARD_COLOR
         btn.TextColor3 = is_active and Color3.fromRGB(255, 255, 255) or MUTED_COLOR
     end
-    if execute_scan then execute_scan() end
+    if render_current_tab then
+        render_current_tab()
+    end
 end
 
 btn_fish.MouseButton1Click:Connect(function() update_filter_ui("Fish") end)
@@ -440,7 +418,7 @@ local function create_stat_card(parent, pos, size, label, val_color)
     card.Size = size
     card.BackgroundColor3 = CARD_COLOR
     card.Parent = parent
-    create_corner(card, 5); create_stroke(card, Color3.fromRGB(38, 38, 38))
+    create_corner(card, 5)
 
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, -10, 0, 12)
@@ -478,7 +456,7 @@ scroll.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 scroll.ScrollBarThickness = 4
 scroll.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 70)
 scroll.Parent = main
-create_corner(scroll, 6); create_stroke(scroll, Color3.fromRGB(32, 32, 32))
+create_corner(scroll, 6)
 
 local scroll_layout = Instance.new("UIListLayout")
 scroll_layout.Padding = UDim.new(0, 4)
@@ -550,7 +528,6 @@ delay_container.Position = UDim2.new(0, 240, 0, 0)
 delay_container.BackgroundColor3 = CARD_COLOR
 delay_container.Parent = auto_hop_row
 create_corner(delay_container, 4)
-create_stroke(delay_container, Color3.fromRGB(45, 45, 45))
 
 local delay_lbl = Instance.new("TextLabel")
 delay_lbl.Size = UDim2.new(0, 60, 1, 0)
@@ -575,18 +552,17 @@ delay_input.FontFace = font_bold
 delay_input.ClearTextOnFocus = false
 delay_input.Parent = delay_container
 create_corner(delay_input, 3)
-create_stroke(delay_input, Color3.fromRGB(55, 55, 55))
 
-local last_scan_data = nil
+local all_scan_data = nil
 
-local function render_item_cards()
+local function render_item_cards(cards)
     for _, child in ipairs(scroll:GetChildren()) do
         if child:IsA("Frame") or child:IsA("TextLabel") then
             child:Destroy()
         end
     end
 
-    if not last_scan_data or not last_scan_data.cards or #last_scan_data.cards == 0 then
+    if not cards or #cards == 0 then
         local empty_lbl = Instance.new("TextLabel")
         empty_lbl.Size = UDim2.new(1, 0, 0, 60)
         empty_lbl.BackgroundTransparency = 1
@@ -601,89 +577,100 @@ local function render_item_cards()
 
     local rendered_count = 0
 
-    for idx, card_info in ipairs(last_scan_data.cards) do
+    for idx, card_info in ipairs(cards) do
         rendered_count = rendered_count + 1
 
         local card_frame = Instance.new("Frame")
-            card_frame.Size = UDim2.new(1, 0, 0, 52)
-            card_frame.BackgroundColor3 = card_info.is_locked and Color3.fromRGB(28, 18, 20) or CARD_COLOR
-            card_frame.Parent = scroll
-            create_corner(card_frame, 5)
-            create_stroke(card_frame, card_info.is_locked and Color3.fromRGB(110, 35, 40) or Color3.fromRGB(38, 38, 38))
+        card_frame.Size = UDim2.new(1, 0, 0, 52)
+        card_frame.BackgroundColor3 = card_info.is_locked and Color3.fromRGB(28, 18, 20) or CARD_COLOR
+        card_frame.Parent = scroll
+        create_corner(card_frame, 5)
 
-            local display_title = card_info.name .. (card_info.variant and (" [" .. card_info.variant .. "]") or "")
-            local name_lbl = Instance.new("TextLabel")
-            name_lbl.Size = UDim2.new(1, -125, 0, 15)
-            name_lbl.Position = UDim2.new(0, 8, 0, 4)
-            name_lbl.BackgroundTransparency = 1
-            name_lbl.Text = display_title
-            name_lbl.TextColor3 = card_info.is_locked and Color3.fromRGB(255, 180, 180) or TEXT_COLOR
-            name_lbl.TextSize = 11
-            name_lbl.FontFace = font_bold
-            name_lbl.TextXAlignment = Enum.TextXAlignment.Left
-            name_lbl.TextTruncate = Enum.TextTruncate.AtEnd
-            name_lbl.Parent = card_frame
+        local display_title = card_info.name .. (card_info.variant and (" [" .. card_info.variant .. "]") or "")
+        local name_lbl = Instance.new("TextLabel")
+        name_lbl.Size = UDim2.new(1, -125, 0, 15)
+        name_lbl.Position = UDim2.new(0, 8, 0, 4)
+        name_lbl.BackgroundTransparency = 1
+        name_lbl.Text = display_title
+        name_lbl.TextColor3 = card_info.is_locked and Color3.fromRGB(255, 180, 180) or TEXT_COLOR
+        name_lbl.TextSize = 11
+        name_lbl.FontFace = font_bold
+        name_lbl.TextXAlignment = Enum.TextXAlignment.Left
+        name_lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        name_lbl.Parent = card_frame
 
-            local reason_desc = #card_info.reasons > 0 and (" (" .. table_concat(card_info.reasons, ", ") .. ")") or ""
-            local id_lbl = Instance.new("TextLabel")
-            id_lbl.Size = UDim2.new(1, -125, 0, 14)
-            id_lbl.Position = UDim2.new(0, 8, 0, 19)
-            id_lbl.BackgroundTransparency = 1
-            id_lbl.Text = string_format("ID : %s%s", tostring(card_info.id), reason_desc)
-            id_lbl.TextColor3 = card_info.is_locked and RED_COLOR or MUTED_COLOR
-            id_lbl.TextSize = 9.5
-            id_lbl.FontFace = font_face
-            id_lbl.TextXAlignment = Enum.TextXAlignment.Left
-            id_lbl.TextTruncate = Enum.TextTruncate.AtEnd
-            id_lbl.Parent = card_frame
+        local reason_desc = #card_info.reasons > 0 and (" (" .. table_concat(card_info.reasons, ", ") .. ")") or ""
+        local id_lbl = Instance.new("TextLabel")
+        id_lbl.Size = UDim2.new(1, -125, 0, 14)
+        id_lbl.Position = UDim2.new(0, 8, 0, 19)
+        id_lbl.BackgroundTransparency = 1
+        id_lbl.Text = string_format("ID : %s%s", tostring(card_info.id), reason_desc)
+        id_lbl.TextColor3 = card_info.is_locked and RED_COLOR or MUTED_COLOR
+        id_lbl.TextSize = 9.5
+        id_lbl.FontFace = font_face
+        id_lbl.TextXAlignment = Enum.TextXAlignment.Left
+        id_lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        id_lbl.Parent = card_frame
 
-            local qty_lbl = Instance.new("TextLabel")
-            qty_lbl.Size = UDim2.new(1, -125, 0, 15)
-            qty_lbl.Position = UDim2.new(0, 8, 0, 33)
-            qty_lbl.BackgroundTransparency = 1
-            qty_lbl.Text = string_format("Quantity : x%s", tostring(card_info.quantity))
-            qty_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-            qty_lbl.TextSize = 10.5
-            qty_lbl.FontFace = font_bold
-            qty_lbl.TextXAlignment = Enum.TextXAlignment.Left
-            qty_lbl.TextTruncate = Enum.TextTruncate.AtEnd
-            qty_lbl.Parent = card_frame
+        local qty_lbl = Instance.new("TextLabel")
+        qty_lbl.Size = UDim2.new(1, -125, 0, 15)
+        qty_lbl.Position = UDim2.new(0, 8, 0, 33)
+        qty_lbl.BackgroundTransparency = 1
+        qty_lbl.Text = string_format("Quantity : x%s", tostring(card_info.quantity))
+        qty_lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        qty_lbl.TextSize = 10.5
+        qty_lbl.FontFace = font_bold
+        qty_lbl.TextXAlignment = Enum.TextXAlignment.Left
+        qty_lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        qty_lbl.Parent = card_frame
 
-            local badge_pill = Instance.new("Frame")
-            badge_pill.Size = UDim2.new(0, 105, 0, 22)
-            badge_pill.Position = UDim2.new(1, -112, 0.5, -11)
-            badge_pill.BackgroundColor3 = card_info.is_locked and Color3.fromRGB(60, 20, 25) or Color3.fromRGB(18, 48, 28)
-            badge_pill.Parent = card_frame
-            create_corner(badge_pill, 4)
-            create_stroke(badge_pill, card_info.is_locked and Color3.fromRGB(130, 35, 45) or Color3.fromRGB(30, 95, 50))
+        local badge_pill = Instance.new("Frame")
+        badge_pill.Size = UDim2.new(0, 105, 0, 22)
+        badge_pill.Position = UDim2.new(1, -112, 0.5, -11)
+        badge_pill.BackgroundColor3 = card_info.is_locked and Color3.fromRGB(60, 20, 25) or Color3.fromRGB(18, 48, 28)
+        badge_pill.Parent = card_frame
+        create_corner(badge_pill, 4)
 
-            local badge_lbl = Instance.new("TextLabel")
-            badge_lbl.Size = UDim2.new(1, -4, 1, 0)
-            badge_lbl.Position = UDim2.new(0, 2, 0, 0)
-            badge_lbl.BackgroundTransparency = 1
-            if card_info.is_locked then
-                badge_lbl.Text = "LOCKED"
-                badge_lbl.TextColor3 = RED_COLOR
-            else
-                badge_lbl.Text = "TRADABLE"
-                badge_lbl.TextColor3 = GREEN_COLOR
-            end
-            badge_lbl.TextSize = 9.5
-            badge_lbl.FontFace = font_bold
-            badge_lbl.TextTruncate = Enum.TextTruncate.AtEnd
-            badge_lbl.Parent = badge_pill
+        local badge_lbl = Instance.new("TextLabel")
+        badge_lbl.Size = UDim2.new(1, -4, 1, 0)
+        badge_lbl.Position = UDim2.new(0, 2, 0, 0)
+        badge_lbl.BackgroundTransparency = 1
+        if card_info.is_locked then
+            badge_lbl.Text = "LOCKED"
+            badge_lbl.TextColor3 = RED_COLOR
+        else
+            badge_lbl.Text = "TRADABLE"
+            badge_lbl.TextColor3 = GREEN_COLOR
+        end
+        badge_lbl.TextSize = 9.5
+        badge_lbl.FontFace = font_bold
+        badge_lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        badge_lbl.Parent = badge_pill
     end
 
     scroll.CanvasSize = UDim2.new(0, 0, 0, rendered_count * 56 + 10)
 end
 
-execute_scan = function()
+render_current_tab = function()
+    if not all_scan_data then return end
+    local cat_data = all_scan_data[current_filter]
+    if not cat_data then return end
+
+    stat_total_val.Text = tostring(cat_data.total)
+    stat_locked_val.Text = tostring(cat_data.locked_count)
+    stat_locked_val.TextColor3 = cat_data.locked_count > 0 and RED_COLOR or MUTED_COLOR
+    stat_tradable_val.Text = tostring(cat_data.unlocked_count)
+
+    render_item_cards(cat_data.cards)
+end
+
+local execute_scan = function()
     task_spawn(function()
         scan_btn.Text = "Scanning..."
         scan_btn.BackgroundColor3 = Color3.fromRGB(160, 60, 15)
         task_wait(0.05)
 
-        local data, err = perform_inventory_scan(current_filter)
+        local data, err = perform_inventory_scan()
         if not data then
             scan_btn.Text = "Failed: " .. tostring(err)
             task_wait(2)
@@ -692,14 +679,8 @@ execute_scan = function()
             return
         end
 
-        last_scan_data = data
-
-        stat_total_val.Text = tostring(data.total)
-        stat_locked_val.Text = tostring(data.locked_count)
-        stat_locked_val.TextColor3 = data.locked_count > 0 and RED_COLOR or MUTED_COLOR
-        stat_tradable_val.Text = tostring(data.unlocked_count)
-
-        render_item_cards()
+        all_scan_data = data
+        render_current_tab()
 
         scan_btn.Text = "Refresh"
         scan_btn.BackgroundColor3 = BUTTON_COLOR
