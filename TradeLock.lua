@@ -212,10 +212,49 @@ local function create_stroke(parent, color, thickness)
     local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = thickness or 1; s.Parent = parent; return s
 end
 
+local config = {
+    auto_hop_enabled = false,
+    auto_hop_delay   = 30,
+}
+
+local CONFIG_FOLDER = "Keenan"
+local CONFIG_FILE = "Keenan/TradeLockScan_config.json"
+
+local function save_config()
+    pcall(function()
+        if not writefile then return end
+        if makefolder and isfolder then
+            if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+        end
+        local data = {
+            auto_hop_enabled = config.auto_hop_enabled,
+            auto_hop_delay   = config.auto_hop_delay,
+        }
+        writefile(CONFIG_FILE, http_service:JSONEncode(data))
+    end)
+end
+
+local function load_config()
+    pcall(function()
+        if not isfile or not readfile then return end
+        if not isfile(CONFIG_FILE) then return end
+        local raw = readfile(CONFIG_FILE)
+        if not raw or raw == "" then return end
+        local data = http_service:JSONDecode(raw)
+        if type(data) ~= "table" then return end
+
+        if type(data.auto_hop_enabled) == "boolean" then config.auto_hop_enabled = data.auto_hop_enabled end
+        if type(data.auto_hop_delay) == "number" and data.auto_hop_delay > 0 then
+            config.auto_hop_delay = math.floor(data.auto_hop_delay)
+        end
+    end)
+end
+pcall(load_config)
+
 local main = Instance.new("Frame")
 main.Name = "MainFrame"
-main.Size = UDim2.new(0, 420, 0, 360)
-main.Position = UDim2.new(0.5, -210, 0.45, -180)
+main.Size = UDim2.new(0, 420, 0, 395)
+main.Position = UDim2.new(0.5, -210, 0.45, -197)
 main.BackgroundColor3 = BG_COLOR
 main.Active = true
 main.Parent = gui
@@ -319,8 +358,11 @@ close_btn.TextSize = 12
 close_btn.Font = Enum.Font.SourceSansBold
 close_btn.Parent = header
 close_btn.MouseEnter:Connect(function() close_btn.TextColor3 = RED_COLOR end)
-close_btn.MouseLeave:Connect(function() close_btn.TextColor3 = MUTED_COLOR end)
-close_btn.MouseButton1Click:Connect(function() gui:Destroy() end)
+close_btn.MouseButton1Click:Connect(function()
+    config.auto_hop_enabled = false
+    save_config()
+    gui:Destroy()
+end)
 
 local dragging, drag_start, start_pos
 header.InputBegan:Connect(function(input)
@@ -370,6 +412,8 @@ local btn_fish    = create_filter_btn("Fish", "Fish", 0, 0.32)
 local btn_enchant = create_filter_btn("Enchant Stones", "Enchant", 0.34, 0.32)
 local btn_all     = create_filter_btn("All", "All", 0.68, 0.32)
 
+local execute_scan = nil
+
 local function update_filter_ui(target_key)
     current_filter = target_key
     for k, btn in pairs(filter_buttons) do
@@ -377,6 +421,7 @@ local function update_filter_ui(target_key)
         btn.BackgroundColor3 = is_active and BUTTON_COLOR or CARD_COLOR
         btn.TextColor3 = is_active and Color3.fromRGB(255, 255, 255) or MUTED_COLOR
     end
+    if execute_scan then execute_scan() end
 end
 
 btn_fish.MouseButton1Click:Connect(function() update_filter_ui("Fish") end)
@@ -427,7 +472,7 @@ local stat_locked_val   = create_stat_card(stats_row, UDim2.new(0.34, 0, 0, 0), 
 local stat_tradable_val = create_stat_card(stats_row, UDim2.new(0.68, 0, 0, 0), UDim2.new(0.32, 0, 1, 0), "TRADABLE", GREEN_COLOR)
 
 local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -20, 1, -148)
+scroll.Size = UDim2.new(1, -20, 1, -182)
 scroll.Position = UDim2.new(0, 10, 0, 108)
 scroll.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 scroll.ScrollBarThickness = 4
@@ -450,7 +495,7 @@ local empty_placeholder = Instance.new("TextLabel")
 empty_placeholder.Size = UDim2.new(1, -10, 1, -10)
 empty_placeholder.Position = UDim2.new(0, 5, 0, 5)
 empty_placeholder.BackgroundTransparency = 1
-empty_placeholder.Text = "Select a category above (Fish / Enchant Stones / All),\nthen click [Start Scan] below to inspect trade lock status."
+empty_placeholder.Text = "Select a category above (Fish / Enchant Stones / All),\nthen click [Refresh] below to inspect trade lock status."
 empty_placeholder.TextColor3 = MUTED_COLOR
 empty_placeholder.TextSize = 10.5
 empty_placeholder.FontFace = font_face
@@ -461,7 +506,7 @@ local scan_btn = Instance.new("TextButton")
 scan_btn.Size = UDim2.new(0.5, -13, 0, 28)
 scan_btn.Position = UDim2.new(0, 10, 1, -34)
 scan_btn.BackgroundColor3 = BUTTON_COLOR
-scan_btn.Text = "Start Scan"
+scan_btn.Text = "Refresh"
 scan_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 scan_btn.TextSize = 11.5
 scan_btn.FontFace = font_bold
@@ -478,6 +523,59 @@ unlock_btn.TextSize = 11.5
 unlock_btn.FontFace = font_bold
 unlock_btn.Parent = main
 create_corner(unlock_btn, 4)
+
+local auto_hop_row = Instance.new("Frame")
+auto_hop_row.Name = "AutoHopRow"
+auto_hop_row.Size = UDim2.new(1, -20, 0, 26)
+auto_hop_row.Position = UDim2.new(0, 10, 1, -66)
+auto_hop_row.BackgroundTransparency = 1
+auto_hop_row.Parent = main
+
+local auto_hop_btn = Instance.new("TextButton")
+auto_hop_btn.Name = "AutoHopToggle"
+auto_hop_btn.Size = UDim2.new(0, 230, 1, 0)
+auto_hop_btn.Position = UDim2.new(0, 0, 0, 0)
+auto_hop_btn.BackgroundColor3 = CARD_COLOR
+auto_hop_btn.Text = "Auto Hop: OFF"
+auto_hop_btn.TextColor3 = MUTED_COLOR
+auto_hop_btn.TextSize = 11
+auto_hop_btn.FontFace = font_bold
+auto_hop_btn.Parent = auto_hop_row
+create_corner(auto_hop_btn, 4)
+
+local delay_container = Instance.new("Frame")
+delay_container.Name = "DelayContainer"
+delay_container.Size = UDim2.new(1, -240, 1, 0)
+delay_container.Position = UDim2.new(0, 240, 0, 0)
+delay_container.BackgroundColor3 = CARD_COLOR
+delay_container.Parent = auto_hop_row
+create_corner(delay_container, 4)
+create_stroke(delay_container, Color3.fromRGB(45, 45, 45))
+
+local delay_lbl = Instance.new("TextLabel")
+delay_lbl.Size = UDim2.new(0, 60, 1, 0)
+delay_lbl.Position = UDim2.new(0, 6, 0, 0)
+delay_lbl.BackgroundTransparency = 1
+delay_lbl.Text = "Delay (s):"
+delay_lbl.TextColor3 = MUTED_COLOR
+delay_lbl.TextSize = 10.5
+delay_lbl.FontFace = font_bold
+delay_lbl.TextXAlignment = Enum.TextXAlignment.Left
+delay_lbl.Parent = delay_container
+
+local delay_input = Instance.new("TextBox")
+delay_input.Name = "DelayInput"
+delay_input.Size = UDim2.new(1, -70, 1, -4)
+delay_input.Position = UDim2.new(0, 66, 0, 2)
+delay_input.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+delay_input.Text = tostring(config.auto_hop_delay)
+delay_input.TextColor3 = TEXT_COLOR
+delay_input.TextSize = 11
+delay_input.FontFace = font_bold
+delay_input.ClearTextOnFocus = false
+delay_input.Parent = delay_container
+create_corner(delay_input, 3)
+create_stroke(delay_input, Color3.fromRGB(55, 55, 55))
 
 local last_scan_data = nil
 
@@ -579,7 +677,7 @@ local function render_item_cards()
     scroll.CanvasSize = UDim2.new(0, 0, 0, rendered_count * 56 + 10)
 end
 
-local function execute_scan()
+execute_scan = function()
     task_spawn(function()
         scan_btn.Text = "Scanning..."
         scan_btn.BackgroundColor3 = Color3.fromRGB(160, 60, 15)
@@ -589,7 +687,7 @@ local function execute_scan()
         if not data then
             scan_btn.Text = "Failed: " .. tostring(err)
             task_wait(2)
-            scan_btn.Text = "Start Scan"
+            scan_btn.Text = "Refresh"
             scan_btn.BackgroundColor3 = BUTTON_COLOR
             return
         end
@@ -603,12 +701,13 @@ local function execute_scan()
 
         render_item_cards()
 
-        scan_btn.Text = "Start Scan"
+        scan_btn.Text = "Refresh"
         scan_btn.BackgroundColor3 = BUTTON_COLOR
     end)
 end
 
 scan_btn.MouseButton1Click:Connect(execute_scan)
+task_spawn(execute_scan)
 
 local hopping = false
 local hop_blacklist = {}
@@ -693,3 +792,79 @@ end
 unlock_btn.MouseButton1Click:Connect(function()
     execute_server_hop(unlock_btn)
 end)
+
+local auto_hop_running = false
+
+delay_input.FocusLost:Connect(function()
+    local val = tonumber(delay_input.Text)
+    if val and val > 0 then
+        config.auto_hop_delay = math.floor(val)
+        delay_input.Text = tostring(config.auto_hop_delay)
+    else
+        delay_input.Text = tostring(config.auto_hop_delay)
+    end
+    save_config()
+end)
+
+local function set_auto_hop_ui(enabled, status_text)
+    if enabled then
+        auto_hop_btn.BackgroundColor3 = Color3.fromRGB(35, 150, 75)
+        auto_hop_btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        auto_hop_btn.Text = status_text or string_format("Auto Hop: ON (%ds)", config.auto_hop_delay)
+    else
+        auto_hop_btn.BackgroundColor3 = CARD_COLOR
+        auto_hop_btn.TextColor3 = MUTED_COLOR
+        auto_hop_btn.Text = "Auto Hop: OFF"
+    end
+end
+
+local function start_auto_hop()
+    if auto_hop_running then return end
+    auto_hop_running = true
+    task_spawn(function()
+        while config.auto_hop_enabled do
+            local current_delay = math.max(1, tonumber(config.auto_hop_delay) or 30)
+            for sec = current_delay, 1, -1 do
+                if not config.auto_hop_enabled then break end
+                set_auto_hop_ui(true, string_format("Auto Hop: ON (%ds)", sec))
+                task_wait(1)
+            end
+
+            if not config.auto_hop_enabled then break end
+
+            set_auto_hop_ui(true, "Auto Hop: Hopping...")
+            execute_server_hop()
+
+            local wait_start = tick()
+            while config.auto_hop_enabled and (tick() - wait_start) < 6 do
+                task_wait(0.5)
+            end
+        end
+        auto_hop_running = false
+        set_auto_hop_ui(false)
+    end)
+end
+
+auto_hop_btn.MouseButton1Click:Connect(function()
+    config.auto_hop_enabled = not config.auto_hop_enabled
+    save_config()
+    if config.auto_hop_enabled then
+        set_auto_hop_ui(true)
+        start_auto_hop()
+    else
+        set_auto_hop_ui(false)
+    end
+end)
+
+pcall(function()
+    teleport_service.TeleportInitFailed:Connect(function(player)
+        if player == local_player then
+            hopping = false
+        end
+    end)
+end)
+
+if config.auto_hop_enabled then
+    set_auto_hop_ui(true)
+    start_auto_hop()
+end
