@@ -263,7 +263,7 @@ create_corner(main, 9); create_stroke(main, Color3.fromRGB(48, 48, 48), 1.2)
 local floating_btn = Instance.new("TextButton")
 floating_btn.Name = "FloatingRestore"
 floating_btn.Size = UDim2.new(0, 36, 0, 36)
-floating_btn.Position = UDim2.new(0, 15, 0.5, -18)
+floating_btn.Position = UDim2.new(0, 15, 0.5, -65)
 floating_btn.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
 floating_btn.BackgroundTransparency = 0
 floating_btn.Text = "K"
