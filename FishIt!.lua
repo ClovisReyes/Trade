@@ -1194,11 +1194,16 @@ local function create_ui()
         local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = thickness or 1; s.Parent = parent; return s
     end
 
+    local is_expanded = true
+    local saved_normal_size = UDim2.new(0, 250, 0, 200)
+    local saved_normal_pos = UDim2.new(0.5, -178, 0.5, -100)
+    local target_expanded_size = UDim2.new(1 - saved_normal_pos.X.Scale, -saved_normal_pos.X.Offset - 115, 1 - saved_normal_pos.Y.Scale, -saved_normal_pos.Y.Offset - 10)
+
     local player_panel
     local main = Instance.new("Frame")
     main.Name = "MainFrame"
-    main.Size = UDim2.new(0, 250, 0, 200)
-    main.Position = UDim2.new(0.5, -178, 0.5, -100)
+    main.Size = target_expanded_size
+    main.Position = saved_normal_pos
     main.BackgroundColor3 = BG_COLOR
     main.BackgroundTransparency = 0
     main.BorderSizePixel = 0
@@ -1309,16 +1314,12 @@ local function create_ui()
     min_btn.MouseLeave:Connect(function() min_btn.TextColor3 = MUTED_COLOR end)
     min_btn.MouseButton1Click:Connect(function() main.Visible = false; floating_btn.Visible = true end)
 
-    local is_expanded = false
-    local saved_normal_size = UDim2.new(0, 250, 0, 200)
-    local saved_normal_pos = UDim2.new(0.5, -178, 0.5, -100)
-
     local restore_btn = Instance.new("TextButton")
     restore_btn.Name = "RestoreBtn"
     restore_btn.Size = UDim2.new(0, 22, 0, 22)
     restore_btn.Position = UDim2.new(1, -60, 0.5, -11)
     restore_btn.BackgroundTransparency = 1
-    restore_btn.Text = "[]"
+    restore_btn.Text = "[-]"
     restore_btn.TextColor3 = MUTED_COLOR
     restore_btn.TextSize = 11
     restore_btn.Font = Enum.Font.SourceSansBold
