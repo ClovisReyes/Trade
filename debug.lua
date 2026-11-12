@@ -2024,14 +2024,17 @@ local function create_ui()
     coin_check_btn.MouseButton1Click:Connect(function()
         local total_worth = 0
         local total_fish = 0
+        local skipped_fav = 0
         local inv = get_inventory()
         local itms = inv and inv.Items or {}
         for _, itm in ipairs(itms) do
             if itm and itm.Id and is_item_tradable(itm) then
                 local is_fav = is_item_favorited(itm)
-                if not is_fav or config.trade_favorited then
-                    local val = calculate_fish_coin_value(itm)
-                    if val > 0 then
+                local val = calculate_fish_coin_value(itm)
+                if val > 0 then
+                    if is_fav and not config.trade_favorited then
+                        skipped_fav = skipped_fav + 1
+                    else
                         total_worth = total_worth + val
                         total_fish = total_fish + 1
                     end
@@ -2041,7 +2044,10 @@ local function create_ui()
 
         local worth_str = format_number(total_worth)
         coin_check_btn.Text = string_format("Worth: %s Coins (%d)", worth_str, total_fish)
-        set_status_msg("coin", string_format("Inventory Worth: %s Coins", worth_str))
+        set_status_msg("coin", string_format(
+            "Worth: %s Coins | Tradable: %d | Fav Skipped: %d | FavMode: %s",
+            worth_str, total_fish, skipped_fav, config.trade_favorited and "ON" or "OFF"
+        ))
         task_delay(4, function()
             if coin_check_btn and coin_check_btn.Parent then
                 coin_check_btn.Text = "Check Coin Worth"
