@@ -107,12 +107,24 @@ local remote_map = {
 }
 
 local _net_lookup = nil
+local _trade_data = nil
+local function get_trade_data()
+    if _trade_data then return _trade_data end
+    local ok, td = pcall(function()
+        local trade_data_mod = replicated_storage:WaitForChild("Shared"):WaitForChild("Trading"):WaitForChild("TradeData")
+        return require(trade_data_mod)
+    end)
+    if ok and type(td) == "table" then
+        _trade_data = td
+    end
+    return _trade_data
+end
+
 local function get_net_lookup()
     if _net_lookup then return _net_lookup end
     _net_lookup = {}
-    
-    local trade_data_mod = replicated_storage:WaitForChild("Shared"):WaitForChild("Trading"):WaitForChild("TradeData")
-    local td = require(trade_data_mod)
+
+    local td = get_trade_data()
     if td and td.Remotes then
         for k, v in pairs(td.Remotes) do
             _net_lookup[k] = v
@@ -306,15 +318,36 @@ end
 
 
 
+local function has_lock_fields(tbl)
+    if type(tbl) ~= "table" then return false end
+    return tbl.Locked == true
+        or tbl.TradeLocked == true
+        or tbl.Untradable == true
+        or (tbl.TradeLock ~= nil and tbl.TradeLock ~= false)
+end
+
 local function is_item_tradable(item)
     if not item or type(item) ~= "table" then return false end
-    if item.Locked == true then return false end
-    local meta = type(item.Metadata) == "table" and item.Metadata or nil
-    if meta then
-        if meta.Locked == true then return false end
-        if meta.TradeLock ~= nil and meta.TradeLock ~= false then return false end
+    if has_lock_fields(item) or has_lock_fields(item.Metadata) or has_lock_fields(item.Data) then
+        return false
     end
     return true
+end
+
+local function is_item_favorited(item)
+    if type(item) ~= "table" then return false end
+    if item.Favorited == true then return true end
+    local meta = type(item.Metadata) == "table" and item.Metadata or nil
+    if meta and meta.Favorited == true then return true end
+    return false
+end
+
+local function get_inventory()
+    if not player_data then return nil end
+    if type(player_data.Data) == "table" and type(player_data.Data.Inventory) == "table" then
+        return player_data.Data.Inventory
+    end
+    return player_data:Get("Inventory")
 end
 
 local function is_item_shiny(item)
@@ -357,13 +390,13 @@ local function select_fish_for_coin_trade(target_coins, already_sent_coins)
     local remaining_deficit = target_coins - already_sent_coins
     if remaining_deficit <= 0 then return {}, 0 end
 
-    local inventory = player_data:Get("Inventory")
+    local inventory = get_inventory()
     local items = inventory and inventory.Items or {}
 
     local candidate_pool = {}
     for _, itm in ipairs(items) do
         if itm and itm.Id and is_item_tradable(itm) then
-            local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
+            local is_fav = is_item_favorited(itm)
             if not is_fav or config.trade_favorited then
                 local val = calculate_fish_coin_value(itm)
                 if val > 0 then
@@ -438,10 +471,10 @@ local function get_inventory_items(type_filter, bypass_favorited)
     local result = {}
     pcall(function()
         if not player_data then return end
-        local inv = player_data:Get("Inventory")
+        local inv = get_inventory()
         for _, item in ipairs(inv and inv.Items or {}) do
             if item and item.Id and is_item_tradable(item) then
-                local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
+                local is_fav = (not bypass_favorited) and is_item_favorited(item) or false
                 if bypass_favorited or not is_fav or config.trade_favorited then
                     local data = item_utility:GetItemData(item.Id)
                     if data and data.Data then
@@ -493,7 +526,7 @@ end
 
 local function should_trade_fish(item_data, inventory_item)
     if not is_item_tradable(inventory_item) then return false end
-    local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
+    local is_fav = is_item_favorited(inventory_item)
     if not config.enabled or (is_fav and not config.trade_favorited) then return false end
     if #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil then return true end
     local fish_name = string_lower(item_data.Data.Name)
@@ -505,7 +538,7 @@ end
 
 local function should_trade_fish_by_rarity(item_data, inventory_item)
     if not is_item_tradable(inventory_item) then return false end
-    local is_fav = (inventory_item.Favorited == true or (inventory_item.Metadata and inventory_item.Metadata.Favorited == true))
+    local is_fav = is_item_favorited(inventory_item)
     if not config.enabled or (is_fav and not config.trade_favorited) then return false end
     if #config.selected_tiers == 0 or table_find(config.selected_tiers, "All") ~= nil then return true end
     local raw_tier = item_data.Data.Tier
@@ -864,7 +897,7 @@ local function wait_for_trade_end(mode_name, trade_listener)
 end
 
 local function collect_trade_items(mode)
-    local inventory = player_data and player_data:Get("Inventory")
+    local inventory = get_inventory()
     local items = inventory and inventory.Items or {}
     local items_to_trade = {}
     local added_uuids = {}
@@ -912,7 +945,7 @@ local function collect_trade_items(mode)
     elseif mode == "enchant" then
         for _, item in ipairs(items) do
             if item and item.Id and is_item_tradable(item) then
-                local is_fav = (item.Favorited == true or (item.Metadata and item.Metadata.Favorited == true))
+                local is_fav = is_item_favorited(item)
                 if not (is_fav and not config.trade_favorited) then
                     local d = item_utility:GetItemData(item.Id)
                     if d and d.Data and d.Data.Type == "Enchant Stones" then
@@ -1025,7 +1058,7 @@ local function execute_trade(mode)
             break
         end
 
-        if item and item.UUID then
+        if item and item.UUID and (config.trade_favorited or not is_item_favorited(item)) then
             set_status_msg(mode, string_format("Adding %s... (%d/%d)", get_mode_display_name(mode), #added_items + 1, target_count))
 
             local ok, res = pcall(function()
@@ -1991,22 +2024,30 @@ local function create_ui()
     coin_check_btn.MouseButton1Click:Connect(function()
         local total_worth = 0
         local total_fish = 0
-        local inv = player_data and player_data:Get("Inventory")
+        local skipped_fav = 0
+        local inv = get_inventory()
         local itms = inv and inv.Items or {}
         for _, itm in ipairs(itms) do
-            local is_fav = (itm.Favorited == true or (itm.Metadata and itm.Metadata.Favorited == true))
-            if not is_fav or config.trade_favorited then
+            if itm and itm.Id and is_item_tradable(itm) then
+                local is_fav = is_item_favorited(itm)
                 local val = calculate_fish_coin_value(itm)
                 if val > 0 then
-                    total_worth = total_worth + val
-                    total_fish = total_fish + 1
+                    if is_fav and not config.trade_favorited then
+                        skipped_fav = skipped_fav + 1
+                    else
+                        total_worth = total_worth + val
+                        total_fish = total_fish + 1
+                    end
                 end
             end
         end
 
         local worth_str = format_number(total_worth)
         coin_check_btn.Text = string_format("Worth: %s Coins (%d)", worth_str, total_fish)
-        set_status_msg("coin", string_format("Inventory Worth: %s Coins", worth_str))
+        set_status_msg("coin", string_format(
+            "Worth: %s Coins | Tradable: %d | Fav Skipped: %d | FavMode: %s",
+            worth_str, total_fish, skipped_fav, config.trade_favorited and "ON" or "OFF"
+        ))
         task_delay(4, function()
             if coin_check_btn and coin_check_btn.Parent then
                 coin_check_btn.Text = "Check Coin Worth"
@@ -2052,6 +2093,9 @@ local function create_ui()
                 if toggle_ctrls[mode] and flag_name then
                     toggle_ctrls[mode].set_state(config.enabled and config[flag_name])
                 end
+            end
+            for _, t in pairs(fav_toggles) do
+                t.set_state(config.trade_favorited)
             end
             task_wait(0.5)
         end
