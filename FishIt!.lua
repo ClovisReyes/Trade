@@ -157,7 +157,9 @@ local trade_remotes = setmetatable({}, {
 local config = {
     enabled                = false,
     auto_accept_enabled    = false,
-    trade_favorited        = false,
+    trade_favorited_fish   = false,
+    trade_favorited_rarity = false,
+    trade_favorited_coin   = false,
     quantity               = 0,
     target_coin_amount     = 0,
     trade_with             = "",
@@ -183,7 +185,9 @@ local function save_config()
             trade_with             = config.trade_with,
             quantity               = config.quantity,
             target_coin_amount     = config.target_coin_amount,
-            trade_favorited        = config.trade_favorited,
+            trade_favorited_fish   = config.trade_favorited_fish,
+            trade_favorited_rarity = config.trade_favorited_rarity,
+            trade_favorited_coin   = config.trade_favorited_coin,
             auto_accept_enabled    = config.auto_accept_enabled,
             selected_fish          = config.selected_fish,
             selected_tiers         = config.selected_tiers,
@@ -205,7 +209,9 @@ local function load_config()
         if type(data.trade_with) == "string" then config.trade_with = data.trade_with end
         if type(data.quantity) == "number" then config.quantity = data.quantity end
         if type(data.target_coin_amount) == "number" then config.target_coin_amount = data.target_coin_amount end
-        if type(data.trade_favorited) == "boolean" then config.trade_favorited = data.trade_favorited end
+        if type(data.trade_favorited_fish) == "boolean" then config.trade_favorited_fish = data.trade_favorited_fish end
+        if type(data.trade_favorited_rarity) == "boolean" then config.trade_favorited_rarity = data.trade_favorited_rarity end
+        if type(data.trade_favorited_coin) == "boolean" then config.trade_favorited_coin = data.trade_favorited_coin end
         if type(data.auto_accept_enabled) == "boolean" then config.auto_accept_enabled = data.auto_accept_enabled end
         if type(data.selected_fish) == "table" and #data.selected_fish > 0 then config.selected_fish = data.selected_fish end
         if type(data.selected_tiers) == "table" and #data.selected_tiers > 0 then config.selected_tiers = data.selected_tiers end
@@ -239,6 +245,17 @@ local mode_flag_map = {
     enchant = "trade_enchants_enabled",
     coin    = "trade_coins_enabled",
 }
+
+local mode_fav_flag_map = {
+    fish   = "trade_favorited_fish",
+    rarity = "trade_favorited_rarity",
+    coin   = "trade_favorited_coin",
+}
+
+local function is_trade_favorited_enabled(mode)
+    local flag = mode_fav_flag_map[mode]
+    return flag ~= nil and config[flag] == true
+end
 
 local tier_mapping = {
     [1] = "common", [2] = "uncommon", [3] = "rare", [4] = "epic",
@@ -397,7 +414,7 @@ local function select_fish_for_coin_trade(target_coins, already_sent_coins)
     for _, itm in ipairs(items) do
         if itm and itm.Id and is_item_tradable(itm) then
             local is_fav = is_item_favorited(itm)
-            if not is_fav or config.trade_favorited then
+            if not is_fav or is_trade_favorited_enabled("coin") then
                 local val = calculate_fish_coin_value(itm)
                 if val > 0 then
                     table_insert(candidate_pool, {
@@ -469,13 +486,14 @@ end
 
 local function get_inventory_items(type_filter, bypass_favorited)
     local result = {}
+    local allow_fav = is_trade_favorited_enabled(type_filter == "Fish" and "fish" or "enchant")
     pcall(function()
         if not player_data then return end
         local inv = get_inventory()
         for _, item in ipairs(inv and inv.Items or {}) do
             if item and item.Id and is_item_tradable(item) then
                 local is_fav = (not bypass_favorited) and is_item_favorited(item) or false
-                if bypass_favorited or not is_fav or config.trade_favorited then
+                if bypass_favorited or not is_fav or allow_fav then
                     local data = item_utility:GetItemData(item.Id)
                     if data and data.Data then
                         local name = data.Data.Name
@@ -527,7 +545,7 @@ end
 local function should_trade_fish(item_data, inventory_item)
     if not is_item_tradable(inventory_item) then return false end
     local is_fav = is_item_favorited(inventory_item)
-    if not config.enabled or (is_fav and not config.trade_favorited) then return false end
+    if not config.enabled or (is_fav and not is_trade_favorited_enabled("fish")) then return false end
     if #config.selected_fish == 0 or table_find(config.selected_fish, "All") ~= nil then return true end
     local fish_name = string_lower(item_data.Data.Name)
     for _, sel in ipairs(config.selected_fish) do
@@ -539,7 +557,7 @@ end
 local function should_trade_fish_by_rarity(item_data, inventory_item)
     if not is_item_tradable(inventory_item) then return false end
     local is_fav = is_item_favorited(inventory_item)
-    if not config.enabled or (is_fav and not config.trade_favorited) then return false end
+    if not config.enabled or (is_fav and not is_trade_favorited_enabled("rarity")) then return false end
     if #config.selected_tiers == 0 or table_find(config.selected_tiers, "All") ~= nil then return true end
     local raw_tier = item_data.Data.Tier
     local tier_name = type(raw_tier) == "number" and (tier_mapping[raw_tier] or "") or string_lower(tostring(raw_tier))
@@ -946,7 +964,7 @@ local function collect_trade_items(mode)
         for _, item in ipairs(items) do
             if item and item.Id and is_item_tradable(item) then
                 local is_fav = is_item_favorited(item)
-                if not (is_fav and not config.trade_favorited) then
+                if not (is_fav and not is_trade_favorited_enabled("enchant")) then
                     local d = item_utility:GetItemData(item.Id)
                     if d and d.Data and d.Data.Type == "Enchant Stones" then
                         local name = d.Data.Name
@@ -1058,7 +1076,7 @@ local function execute_trade(mode)
             break
         end
 
-        if item and item.UUID and (config.trade_favorited or not is_item_favorited(item)) then
+        if item and item.UUID and (is_trade_favorited_enabled(mode) or not is_item_favorited(item)) then
             set_status_msg(mode, string_format("Adding %s... (%d/%d)", get_mode_display_name(mode), #added_items + 1, target_count))
 
             local ok, res = pcall(function()
@@ -1813,12 +1831,17 @@ local function create_ui()
     end
 
     local fav_toggles = {}
-    local function sync_fav(active)
-        config.trade_favorited = active
-        for _, t in pairs(fav_toggles) do t.set_state(active) end
-        cache.loaded_fish = get_owned_options("Fish")
-        cache.loaded_enchants = get_owned_options("Enchant")
-        save_config()
+    local function create_fav_toggle(parent, mode)
+        fav_toggles[mode] = create_toggle(parent, "Trade Favorite Items", is_trade_favorited_enabled(mode), function(active)
+            local flag = mode_fav_flag_map[mode]
+            if flag then
+                config[flag] = active
+            end
+            if mode == "fish" then
+                cache.loaded_fish = get_owned_options("Fish")
+            end
+            save_config()
+        end)
     end
 
     local qty_inputs = {}
@@ -1906,7 +1929,7 @@ local function create_ui()
             config.enabled = false; config.trade_fish_enabled = false; set_status_msg("fish", "Idle")
         end
     end)
-    fav_toggles.fish = create_toggle(byname_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
+    create_fav_toggle(byname_inner, "fish")
 
     
     local en_inner = create_accordion("Trade Enchant Stone")
@@ -1981,7 +2004,7 @@ local function create_ui()
             config.enabled = false; config.trade_rarity_enabled = false; set_status_msg("rarity", "Idle")
         end
     end)
-    fav_toggles.rarity = create_toggle(r_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
+    create_fav_toggle(r_inner, "rarity")
 
     
     local c_inner = create_accordion("Trade By Coin")
@@ -2032,7 +2055,7 @@ local function create_ui()
                 local is_fav = is_item_favorited(itm)
                 local val = calculate_fish_coin_value(itm)
                 if val > 0 then
-                    if is_fav and not config.trade_favorited then
+                    if is_fav and not is_trade_favorited_enabled("coin") then
                         skipped_fav = skipped_fav + 1
                     else
                         total_worth = total_worth + val
@@ -2046,7 +2069,7 @@ local function create_ui()
         coin_check_btn.Text = string_format("Worth: %s Coins (%d)", worth_str, total_fish)
         set_status_msg("coin", string_format(
             "Worth: %s Coins | Tradable: %d | Fav Skipped: %d | FavMode: %s",
-            worth_str, total_fish, skipped_fav, config.trade_favorited and "ON" or "OFF"
+            worth_str, total_fish, skipped_fav, is_trade_favorited_enabled("coin") and "ON" or "OFF"
         ))
         task_delay(4, function()
             if coin_check_btn and coin_check_btn.Parent then
@@ -2070,7 +2093,7 @@ local function create_ui()
             config.enabled = false; config.trade_coins_enabled = false; set_status_msg("coin", "Idle")
         end
     end)
-    fav_toggles.coin = create_toggle(c_inner, "Trade Favorite Items", config.trade_favorited, sync_fav)
+    create_fav_toggle(c_inner, "coin")
 
 
 
@@ -2094,8 +2117,8 @@ local function create_ui()
                     toggle_ctrls[mode].set_state(config.enabled and config[flag_name])
                 end
             end
-            for _, t in pairs(fav_toggles) do
-                t.set_state(config.trade_favorited)
+            for m, t in pairs(fav_toggles) do
+                t.set_state(is_trade_favorited_enabled(m))
             end
             task_wait(0.5)
         end
