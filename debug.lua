@@ -4,15 +4,21 @@
 
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
-_G.httpRequest = syn.request
+local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request)
+_G.httpRequest = httpRequest
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+local Lighting = game:GetService("Lighting")
+local StarterGui = game:GetService("StarterGui")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 task.delay(5, function()
-	local MarketplaceService = game:GetService("MarketplaceService")
-	MarketplaceService:GetProductInfo(0)
-	local response6 = game:HttpGet("https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=0&size=420x420&format=Png&isCircular=true")
-	HttpService:JSONDecode(response6)
+	pcall(function()
+		local ms = game:GetService("MarketplaceService")
+		ms:GetProductInfo(0)
+		local response6 = game:HttpGet("https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=0&size=420x420&format=Png&isCircular=true")
+		HttpService:JSONDecode(response6)
+	end)
 end)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,88 +26,180 @@ local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 local TextChatService = game:GetService("TextChatService")
 local TweenService = game:GetService("TweenService")
-ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:GetChildren()
 
-for _, text in ipairs({
-	"RE/ActivateEnchantingAltar", "ActivateEnchantingAltar", "RE/ActivateSecondEnchantingAltar",
-	"ActivateSecondEnchantingAltar", "RE/BaitCastVisual", "BaitCastVisual", "RE/BoatTeleport",
-	"BoatTeleport", "RE/CatchFishCompleted", "CatchFishCompleted", "RE/ChargeFishingRod",
-	"ChargeFishingRod", "RE/ClaimPirateChest", "ClaimPirateChest", "RE/EquipBait", "EquipBait",
-	"RE/EquipItem", "EquipItem", "RE/EquipToolFromHotbar", "EquipToolFromHotbar",
-	"RE/UnequipToolFromHotbar", "UnequipToolFromHotbar", "RE/EquipRod", "EquipRod",
-	"RE/FishingBegan", "FishingBegan", "RE/FishingStopped", "FishingStopped", "RE/FishCaught",
-	"FishCaught", "RE/FishBite", "FishBite", "RE/FishBiteVisual", "FishBiteVisual",
-	"RE/FishingCompleted", "FishingCompleted", "RE/LimitedPurchaseRequest",
-	"LimitedPurchaseRequest", "RE/PlayRodCraftingMinigame", "PlayRodCraftingMinigame",
-	"RE/RodCraftingMinigameClick", "RodCraftingMinigameClick", "RE/ReelFinished", "ReelFinished",
-	"RE/SellFish", "SellFish", "RF/ActivateEggMachineEgg", "ActivateEggMachineEgg",
-	"RF/CancelFishingInputs", "CancelFishingInputs", "RF/ChargeFishingRod", "ChargeFishingRod",
-	"RF/ConsumeCaveCrystal", "ConsumeCaveCrystal", "RF/CreateTranscendedStone",
-	"CreateTranscendedStone", "RF/EquipOxygenTank", "EquipOxygenTank",
-	"RF/FinishRodCraftingMinigame", "FinishRodCraftingMinigame", "RF/PurchaseBait", "PurchaseBait",
-	"RF/PurchaseBlackMarketItem", "PurchaseBlackMarketItem", "RF/PurchaseFishingRod",
-	"PurchaseFishingRod", "RF/PurchaseWeatherEvent", "PurchaseWeatherEvent",
-	"RF/RequestAbilityRoll", "RequestAbilityRoll", "RF/RequestFishingMinigameStarted",
-	"RequestFishingMinigameStarted", "RF/SacrificeAtlantisSellAll", "SacrificeAtlantisSellAll",
-	"RF/SellAllItems", "SellAllItems", "RF/SellFish", "SellFish", "RF/StartRodCraftingMinigame",
-	"StartRodCraftingMinigame", "RF/UnequipOxygenTank", "UnequipOxygenTank",
-	"RF/UpdateFishingRadar", "UpdateFishingRadar",
-}) do
-	local _ = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net[text]
-end
+pcall(function()
+	local pkg = ReplicatedStorage:FindFirstChild("Packages")
+	if pkg then
+		local idx = pkg:FindFirstChild("_Index")
+		if idx then
+			local snet = idx:FindFirstChild("sleitnick_net@0.2.0")
+			if snet and snet:FindFirstChild("net") then
+				snet.net:GetChildren()
+			end
+		end
+	end
+end)
 
 warn("Anti AFK Automatically Active...")
-ReplicatedStorage.Variants:GetChildren()
+pcall(function()
+	local v = ReplicatedStorage:FindFirstChild("Variants")
+	if v then v:GetChildren() end
+end)
+
+_G.Celestial = _G.Celestial or { DetectorCount = 0 }
 local Celestial = _G.Celestial
-_G.Celestial = Celestial
-Celestial.DetectorCount = Celestial.DetectorCount
+Celestial.DetectorCount = Celestial.DetectorCount or 0
 
 Players.LocalPlayer.CharacterAdded:Connect(function(character)
 end)
 
 Players.LocalPlayer.CharacterAdded:Connect(function(character2)
 	task.spawn(function()
-		Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
-		-- isfile("Meng Hub/Position.json") -> false
+		pcall(function()
+			character2:WaitForChild("HumanoidRootPart", 5)
+		end)
 	end)
 end)
 
 task.spawn(function()
-	Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
-	-- isfile("Meng Hub/Position.json") -> false
+	pcall(function()
+		local char = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+		char:WaitForChild("HumanoidRootPart", 5)
+	end)
 end)
 
 _G.safeSetContent = function(arg7, arg8)
 	RunService.Heartbeat:Once(function(deltaTime)
-		arg7:SetContent(arg8)
+		if arg7 and arg7.SetContent then
+			pcall(function() arg7:SetContent(arg8) end)
+		end
 	end)
 end
 
-local module = require(ReplicatedStorage.Packages.Replion)
-local module2 = require(ReplicatedStorage.Shared.AtlantisMachineConfig)
-local module3 = require(ReplicatedStorage.Shared.ItemUtility)
-require(ReplicatedStorage.Shared.TierUtility)
-require(ReplicatedStorage.Shared.BlackMarketConfig)
-require(ReplicatedStorage.Modules.CurrencyUtility)
-require(ReplicatedStorage.Shared.StringLibrary)
-local module4 = require(ReplicatedStorage.Areas)
-require(ReplicatedStorage.Shared.AreaUtility)
-require(ReplicatedStorage.Shared.IgnoreIslandsFromIndex)
-require(ReplicatedStorage.Shared.VendorUtility)
-local module5 = require(ReplicatedStorage.Shared.PlayerStatsUtility)
-require(ReplicatedStorage.Modules.Animations)
-local module6 = require(ReplicatedStorage.Controllers.VFXController)
-local module7 = require(ReplicatedStorage.Modules.GuiControl)
-local module8 = require(ReplicatedStorage.Controllers.TextNotificationController)
-local module9 = require(ReplicatedStorage.Controllers.AnimationController)
-local Items = ReplicatedStorage:WaitForChild("Items")
+local function safeRequire(parent, childName)
+	if not parent then
+		return setmetatable({}, {
+			__index = function(self, k) return function() end end,
+			__newindex = function(self, k, v) rawset(self, k, v) end
+		})
+	end
+	local target = parent
+	if childName then
+		local ok, c = pcall(function() return parent:FindFirstChild(childName) end)
+		if not ok or not c then
+			return setmetatable({}, {
+				__index = function(self, k) return function() end end,
+				__newindex = function(self, k, v) rawset(self, k, v) end
+			})
+		end
+		target = c
+	end
+	local ok, res = pcall(function() return require(target) end)
+	if ok and res ~= nil then return res end
+	return setmetatable({}, {
+		__index = function(self, k) return function() end end,
+		__newindex = function(self, k, v) rawset(self, k, v) end
+	})
+end
 
-module9.PlayAnimation = function(arg9, arg10)
-	arg9:PlayAnimation(arg10)
+local pkg = ReplicatedStorage:FindFirstChild("Packages")
+local shared = ReplicatedStorage:FindFirstChild("Shared")
+local modules = ReplicatedStorage:FindFirstChild("Modules")
+local controllers = ReplicatedStorage:FindFirstChild("Controllers")
+
+local module = safeRequire(pkg, "Replion")
+local module2 = safeRequire(shared, "AtlantisMachineConfig")
+local module3 = safeRequire(shared, "ItemUtility")
+safeRequire(shared, "TierUtility")
+safeRequire(shared, "BlackMarketConfig")
+safeRequire(modules, "CurrencyUtility")
+safeRequire(shared, "StringLibrary")
+local module4 = safeRequire(ReplicatedStorage, "Areas")
+safeRequire(shared, "AreaUtility")
+safeRequire(shared, "IgnoreIslandsFromIndex")
+safeRequire(shared, "VendorUtility")
+local module5 = safeRequire(shared, "PlayerStatsUtility")
+safeRequire(modules, "Animations")
+local module6 = safeRequire(controllers, "VFXController")
+local module7 = safeRequire(modules, "GuiControl")
+local module8 = safeRequire(controllers, "TextNotificationController")
+local module9 = safeRequire(controllers, "AnimationController")
+
+local Items = ReplicatedStorage:FindFirstChild("Items")
+local CombinedModules = {}
+
+pcall(function()
+	module9.PlayAnimation = function(arg9, arg10)
+		pcall(function() arg9:PlayAnimation(arg10) end)
+	end
+end)
+
+-- Global helper functions accessible to all tabs
+local function helper4()
+	pcall(function()
+		local items = ReplicatedStorage:FindFirstChild("Items")
+		if items and items:FindFirstChild("Misc") then
+			items.Misc:GetChildren()
+		end
+	end)
+end
+
+local NetFolder = nil
+local function getNetFolder()
+	if NetFolder then return NetFolder end
+	pcall(function()
+		local p = ReplicatedStorage:FindFirstChild("Packages")
+		if p then
+			local idx = p:FindFirstChild("_Index")
+			if idx then
+				local snet = idx:FindFirstChild("sleitnick_net@0.2.0")
+				if snet then
+					NetFolder = snet:FindFirstChild("net")
+				end
+			end
+		end
+	end)
+	return NetFolder
+end
+
+local function fireNet(name, ...)
+	local nf = getNetFolder()
+	if nf then
+		local rem = nf:FindFirstChild(name)
+		if rem then
+			if rem:IsA("RemoteEvent") then
+				rem:FireServer(...)
+			elseif rem:IsA("RemoteFunction") then
+				return rem:InvokeServer(...)
+			end
+		end
+	end
+	return nil
 end
 
 _G.ConfigFolder = "Meng Hub_FishIt/Config/"
-local response = game:HttpGet("https://raw.githubusercontent.com/Meng-Dev1/LAUSAPEMPRUY-/refs/heads/main/ICON")
+
+local function safeGet(url)
+	local ok, res = pcall(function()
+		return game:HttpGet(url)
+	end)
+	if ok and res and type(res) == "string" and #res > 0 then
+		return res
+	end
+	local req = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request)
+	if req then
+		local ok2, res2 = pcall(function()
+			return req({ Url = url, Method = "GET" })
+		end)
+		if ok2 and res2 and (res2.Body or res2.body) then
+			return res2.Body or res2.body
+		end
+	end
+	return nil
+end
+
+local response = safeGet("https://raw.githubusercontent.com/Meng-Dev1/LAUSAPEMPRUY-/refs/heads/main/ICON")
+assert(response and #response > 0, "Failed to load MengHub UI Library (ICON).")
 local LAUSAPEMPRUY = loadstring(response)()
 
 local MengHubWindow = LAUSAPEMPRUY:Window({
@@ -116,7 +214,8 @@ local MengHubWindow = LAUSAPEMPRUY:Window({
 
 MengHubWindow:Tag({ Title = "Fish It | v1.1.0", Color = Color3.fromRGB(100, 100, 100), Radius = 13 })
 -- identifyexecutor() -> "roblox"
-MengHubWindow:Tag({ Title = "Executor: roblox", Color = Color3.fromRGB(100, 100, 100), Radius = 13 })
+local execName = (identifyexecutor and identifyexecutor()) or "Executor"
+MengHubWindow:Tag({ Title = "Executor: " .. tostring(execName), Color = Color3.fromRGB(100, 100, 100), Radius = 13 })
 local Tab = MengHubWindow:AddTab({ Name = "Info", Icon = "" })
 local Tab2 = MengHubWindow:AddTab({ Name = "Main", Icon = "" })
 local Tab3 = MengHubWindow:AddTab({ Name = "Automatic", Icon = "" })
@@ -129,6 +228,7 @@ local Tab9 = MengHubWindow:AddTab({ Name = "Misc", Icon = "" })
 local Tab10 = MengHubWindow:AddTab({ Name = "Teleport", Icon = "" })
 local Tab11 = MengHubWindow:AddTab({ Name = "Webhook", Icon = "" })
 local Tab12 = MengHubWindow:AddTab({ Name = "Configuration", Icon = "" })
+do -- start Tab
 local Section = Tab:AddSection("About MengHub?", true)
 
 Section:AddParagraph({
@@ -148,9 +248,13 @@ local Paragraph = Section:AddParagraph({
 })
 
 task.spawn(function()
-	local response2 = game:HttpGet("https://discord.com/api/v9/invites/menghub?with_counts=true")
-	local data = HttpService:JSONDecode(response2)
-	Paragraph:SetContent("Members: " .. data.approximate_member_count .. "  �  <font color='#57f287'>Online: " .. data.approximate_presence_count .. "</font>")
+	pcall(function()
+		local response2 = game:HttpGet("https://discord.com/api/v9/invites/menghub?with_counts=true")
+		local data = HttpService:JSONDecode(response2)
+		if data and data.approximate_member_count then
+			Paragraph:SetContent("Members: " .. tostring(data.approximate_member_count) .. "  •  <font color='#57f287'>Online: " .. tostring(data.approximate_presence_count or 0) .. "</font>")
+		end
+	end)
 end)
 
 Section:AddButton({
@@ -217,6 +321,9 @@ Section:AddButton({
 _G.PingConnection = nil
 local ScriptExecuteTime = _G.ScriptExecuteTime
 _G.ScriptExecuteTime = ScriptExecuteTime
+end -- end Tab
+
+do -- start Tab2
 local Section2 = Tab2:AddSection("Support Features")
 _G.PingConnection = nil
 
@@ -230,7 +337,7 @@ Section2:AddToggle({
 			CoreGui.RealPingDisplay:Destroy()
 			local PingConnection = _G.PingConnection
 			_G.PingConnection = PingConnection
-			PingConnection:Disconnect()
+			if PingConnection then pcall(function() PingConnection:Disconnect() end) end
 			_G.PingConnection = nil
 			local RealPingDisplay = Instance.new("ScreenGui")
 			RealPingDisplay.Name = "RealPingDisplay"
@@ -306,7 +413,7 @@ Section2:AddToggle({
 		else
 			CoreGui:FindFirstChild("RealPingDisplay")
 			if RealPingDisplay then RealPingDisplay:Destroy() end
-			connection7:Disconnect()
+			if connection7 then pcall(function() connection7:Disconnect() end) end
 		end
 	end
 })
@@ -469,7 +576,7 @@ Section2:AddToggle({
 				end)
 			end)
 		else
-			connection8:Disconnect()
+			if connection8 then pcall(function() connection8:Disconnect() end) end
 		end
 	end
 })
@@ -504,7 +611,7 @@ Section2:AddToggle({
 			local connection9 = Animator.AnimationPlayed:Connect(function()
 			end)
 		else
-			connection9:Disconnect()
+			if connection9 then pcall(function() connection9:Disconnect() end) end
 		end
 	end
 })
@@ -600,7 +707,7 @@ Section2:AddToggle({
 	end
 })
 
-local module10 = require(ReplicatedStorage.Controllers.CutsceneController)
+local module10 = safeRequire(ReplicatedStorage.Controllers.CutsceneController)
 
 Section2:AddToggle({
 	Title = "Disable Cutscene",
@@ -638,7 +745,7 @@ Section2:AddToggle({
 			local SmallNotification2 = PlayerGui2:FindFirstChild("Small Notification")
 			SmallNotification2:FindFirstChild("Display")
 			SmallNotification2.Display.Visible = true
-			connection10:Disconnect()
+			if connection10 then pcall(function() connection10:Disconnect() end) end
 		end
 	end
 })
@@ -668,8 +775,8 @@ local Toggle = Section2:AddToggle({
 			local connection12 = RunService.Heartbeat:Connect(function(deltaTime3)
 			end)
 		else
-			connection11:Disconnect()
-			connection12:Disconnect()
+			if connection11 then pcall(function() connection11:Disconnect() end) end
+			if connection12 then pcall(function() connection12:Disconnect() end) end
 			if WW_Part then WW_Part:Destroy() end
 		end
 	end
@@ -707,15 +814,15 @@ Section2:AddToggle({
 			local connection15 = RunService.Heartbeat:Connect(function(deltaTime4)
 			end)
 		else
-			connection13:Disconnect()
-			connection15:Disconnect()
+			if connection13 then pcall(function() connection13:Disconnect() end) end
+			if connection15 then pcall(function() connection15:Disconnect() end) end
 			if WW_LavaPart then WW_LavaPart:Destroy() end
-			connection14:Disconnect()
+			if connection14 then pcall(function() connection14:Disconnect() end) end
 		end
 	end
 })
 
-local module11 = require(ReplicatedStorage.Tiers)
+local module11 = safeRequire(ReplicatedStorage.Tiers)
 
 for k, v6 in pairs(module11) do
 end
@@ -769,9 +876,9 @@ Section4:AddToggle({
 })
 
 _G.Delay = 0.5
-local module12 = require(ReplicatedStorage.Controllers.FishingController)
-local module13 = require(ReplicatedStorage.Modules.InputControl)
-require(ReplicatedStorage.Shared.Constants)
+local module12 = safeRequire(ReplicatedStorage.Controllers.FishingController)
+local module13 = safeRequire(ReplicatedStorage.Modules.InputControl)
+safeRequire(ReplicatedStorage.Shared.Constants)
 local Section5 = Tab2:AddSection("Legit Fishing")
 local Paragraph2 = Section5:AddParagraph({ Title = "Stuck Detector", Content = "Status = Idle\nTime = 0.0s\nBag = 0" })
 
@@ -801,616 +908,18 @@ Section5:AddToggle({
 			Celestial.DetectorCount = tonumber(result2)
 
 			task.spawn(function()
-				local Inventory2 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main2 = Inventory2:WaitForChild("Main")
-				local Top2 = Main2:WaitForChild("Top")
-				local Options2 = Top2:WaitForChild("Options")
-				local Fish2 = Options2:WaitForChild("Fish")
-				local Label2 = Fish2:WaitForChild("Label")
-				local BagSize2 = Label2:WaitForChild("BagSize")
-				local result3 = BagSize2.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result2) < tonumber(result3)  (assumed true)
-				Celestial.DetectorCount = tonumber(result3)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result3)))
-				local Inventory3 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main3 = Inventory3:WaitForChild("Main")
-				local Top3 = Main3:WaitForChild("Top")
-				local Options3 = Top3:WaitForChild("Options")
-				local Fish3 = Options3:WaitForChild("Fish")
-				local Label3 = Fish3:WaitForChild("Label")
-				local BagSize3 = Label3:WaitForChild("BagSize")
-				local result4 = BagSize3.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result3) < tonumber(result4)  (assumed true)
-				Celestial.DetectorCount = tonumber(result4)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result4)))
-				local Inventory4 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main4 = Inventory4:WaitForChild("Main")
-				local Top4 = Main4:WaitForChild("Top")
-				local Options4 = Top4:WaitForChild("Options")
-				local Fish4 = Options4:WaitForChild("Fish")
-				local Label4 = Fish4:WaitForChild("Label")
-				local BagSize4 = Label4:WaitForChild("BagSize")
-				local result5 = BagSize4.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result4) < tonumber(result5)  (assumed true)
-				Celestial.DetectorCount = tonumber(result5)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result5)))
-				local Inventory5 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main5 = Inventory5:WaitForChild("Main")
-				local Top5 = Main5:WaitForChild("Top")
-				local Options5 = Top5:WaitForChild("Options")
-				local Fish5 = Options5:WaitForChild("Fish")
-				local Label5 = Fish5:WaitForChild("Label")
-				local BagSize5 = Label5:WaitForChild("BagSize")
-				local result6 = BagSize5.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result5) < tonumber(result6)  (assumed true)
-				Celestial.DetectorCount = tonumber(result6)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result6)))
-				local Inventory6 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main6 = Inventory6:WaitForChild("Main")
-				local Top6 = Main6:WaitForChild("Top")
-				local Options6 = Top6:WaitForChild("Options")
-				local Fish6 = Options6:WaitForChild("Fish")
-				local Label6 = Fish6:WaitForChild("Label")
-				local BagSize6 = Label6:WaitForChild("BagSize")
-				local result7 = BagSize6.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result6) < tonumber(result7)  (assumed true)
-				Celestial.DetectorCount = tonumber(result7)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result7)))
-				local Inventory7 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main7 = Inventory7:WaitForChild("Main")
-				local Top7 = Main7:WaitForChild("Top")
-				local Options7 = Top7:WaitForChild("Options")
-				local Fish7 = Options7:WaitForChild("Fish")
-				local Label7 = Fish7:WaitForChild("Label")
-				local BagSize7 = Label7:WaitForChild("BagSize")
-				local result8 = BagSize7.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result7) < tonumber(result8)  (assumed true)
-				Celestial.DetectorCount = tonumber(result8)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result8)))
-				local Inventory8 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main8 = Inventory8:WaitForChild("Main")
-				local Top8 = Main8:WaitForChild("Top")
-				local Options8 = Top8:WaitForChild("Options")
-				local Fish8 = Options8:WaitForChild("Fish")
-				local Label8 = Fish8:WaitForChild("Label")
-				local BagSize8 = Label8:WaitForChild("BagSize")
-				local result9 = BagSize8.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result8) < tonumber(result9)  (assumed true)
-				Celestial.DetectorCount = tonumber(result9)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result9)))
-				local Inventory9 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main9 = Inventory9:WaitForChild("Main")
-				local Top9 = Main9:WaitForChild("Top")
-				local Options9 = Top9:WaitForChild("Options")
-				local Fish9 = Options9:WaitForChild("Fish")
-				local Label9 = Fish9:WaitForChild("Label")
-				local BagSize9 = Label9:WaitForChild("BagSize")
-				local result10 = BagSize9.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result9) < tonumber(result10)  (assumed true)
-				Celestial.DetectorCount = tonumber(result10)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result10)))
-				local Inventory10 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main10 = Inventory10:WaitForChild("Main")
-				local Top10 = Main10:WaitForChild("Top")
-				local Options10 = Top10:WaitForChild("Options")
-				local Fish10 = Options10:WaitForChild("Fish")
-				local Label10 = Fish10:WaitForChild("Label")
-				local BagSize10 = Label10:WaitForChild("BagSize")
-				local result11 = BagSize10.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result10) < tonumber(result11)  (assumed true)
-				Celestial.DetectorCount = tonumber(result11)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result11)))
-				local Inventory11 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main11 = Inventory11:WaitForChild("Main")
-				local Top11 = Main11:WaitForChild("Top")
-				local Options11 = Top11:WaitForChild("Options")
-				local Fish11 = Options11:WaitForChild("Fish")
-				local Label11 = Fish11:WaitForChild("Label")
-				local BagSize11 = Label11:WaitForChild("BagSize")
-				local result12 = BagSize11.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result11) < tonumber(result12)  (assumed true)
-				Celestial.DetectorCount = tonumber(result12)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result12)))
-				local Inventory12 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main12 = Inventory12:WaitForChild("Main")
-				local Top12 = Main12:WaitForChild("Top")
-				local Options12 = Top12:WaitForChild("Options")
-				local Fish12 = Options12:WaitForChild("Fish")
-				local Label12 = Fish12:WaitForChild("Label")
-				local BagSize12 = Label12:WaitForChild("BagSize")
-				local result13 = BagSize12.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result12) < tonumber(result13)  (assumed true)
-				Celestial.DetectorCount = tonumber(result13)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result13)))
-				local Inventory13 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main13 = Inventory13:WaitForChild("Main")
-				local Top13 = Main13:WaitForChild("Top")
-				local Options13 = Top13:WaitForChild("Options")
-				local Fish13 = Options13:WaitForChild("Fish")
-				local Label13 = Fish13:WaitForChild("Label")
-				local BagSize13 = Label13:WaitForChild("BagSize")
-				local result14 = BagSize13.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result13) < tonumber(result14)  (assumed true)
-				Celestial.DetectorCount = tonumber(result14)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result14)))
-				local Inventory14 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main14 = Inventory14:WaitForChild("Main")
-				local Top14 = Main14:WaitForChild("Top")
-				local Options14 = Top14:WaitForChild("Options")
-				local Fish14 = Options14:WaitForChild("Fish")
-				local Label14 = Fish14:WaitForChild("Label")
-				local BagSize14 = Label14:WaitForChild("BagSize")
-				local result15 = BagSize14.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result14) < tonumber(result15)  (assumed true)
-				Celestial.DetectorCount = tonumber(result15)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result15)))
-				local Inventory15 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main15 = Inventory15:WaitForChild("Main")
-				local Top15 = Main15:WaitForChild("Top")
-				local Options15 = Top15:WaitForChild("Options")
-				local Fish15 = Options15:WaitForChild("Fish")
-				local Label15 = Fish15:WaitForChild("Label")
-				local BagSize15 = Label15:WaitForChild("BagSize")
-				local result16 = BagSize15.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result15) < tonumber(result16)  (assumed true)
-				Celestial.DetectorCount = tonumber(result16)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result16)))
-				local Inventory16 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main16 = Inventory16:WaitForChild("Main")
-				local Top16 = Main16:WaitForChild("Top")
-				local Options16 = Top16:WaitForChild("Options")
-				local Fish16 = Options16:WaitForChild("Fish")
-				local Label16 = Fish16:WaitForChild("Label")
-				local BagSize16 = Label16:WaitForChild("BagSize")
-				local result17 = BagSize16.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result16) < tonumber(result17)  (assumed true)
-				Celestial.DetectorCount = tonumber(result17)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result17)))
-				local Inventory17 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main17 = Inventory17:WaitForChild("Main")
-				local Top17 = Main17:WaitForChild("Top")
-				local Options17 = Top17:WaitForChild("Options")
-				local Fish17 = Options17:WaitForChild("Fish")
-				local Label17 = Fish17:WaitForChild("Label")
-				local BagSize17 = Label17:WaitForChild("BagSize")
-				local result18 = BagSize17.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result17) < tonumber(result18)  (assumed true)
-				Celestial.DetectorCount = tonumber(result18)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result18)))
-				local Inventory18 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main18 = Inventory18:WaitForChild("Main")
-				local Top18 = Main18:WaitForChild("Top")
-				local Options18 = Top18:WaitForChild("Options")
-				local Fish18 = Options18:WaitForChild("Fish")
-				local Label18 = Fish18:WaitForChild("Label")
-				local BagSize18 = Label18:WaitForChild("BagSize")
-				local result19 = BagSize18.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result18) < tonumber(result19)  (assumed true)
-				Celestial.DetectorCount = tonumber(result19)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result19)))
-				local Inventory19 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main19 = Inventory19:WaitForChild("Main")
-				local Top19 = Main19:WaitForChild("Top")
-				local Options19 = Top19:WaitForChild("Options")
-				local Fish19 = Options19:WaitForChild("Fish")
-				local Label19 = Fish19:WaitForChild("Label")
-				local BagSize19 = Label19:WaitForChild("BagSize")
-				local result20 = BagSize19.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result19) < tonumber(result20)  (assumed true)
-				Celestial.DetectorCount = tonumber(result20)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result20)))
-				local Inventory20 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main20 = Inventory20:WaitForChild("Main")
-				local Top20 = Main20:WaitForChild("Top")
-				local Options20 = Top20:WaitForChild("Options")
-				local Fish20 = Options20:WaitForChild("Fish")
-				local Label20 = Fish20:WaitForChild("Label")
-				local BagSize20 = Label20:WaitForChild("BagSize")
-				local result21 = BagSize20.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result20) < tonumber(result21)  (assumed true)
-				Celestial.DetectorCount = tonumber(result21)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result21)))
-				local Inventory21 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main21 = Inventory21:WaitForChild("Main")
-				local Top21 = Main21:WaitForChild("Top")
-				local Options21 = Top21:WaitForChild("Options")
-				local Fish21 = Options21:WaitForChild("Fish")
-				local Label21 = Fish21:WaitForChild("Label")
-				local BagSize21 = Label21:WaitForChild("BagSize")
-				local result22 = BagSize21.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result21) < tonumber(result22)  (assumed true)
-				Celestial.DetectorCount = tonumber(result22)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result22)))
-				local Inventory22 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main22 = Inventory22:WaitForChild("Main")
-				local Top22 = Main22:WaitForChild("Top")
-				local Options22 = Top22:WaitForChild("Options")
-				local Fish22 = Options22:WaitForChild("Fish")
-				local Label22 = Fish22:WaitForChild("Label")
-				local BagSize22 = Label22:WaitForChild("BagSize")
-				local result23 = BagSize22.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result22) < tonumber(result23)  (assumed true)
-				Celestial.DetectorCount = tonumber(result23)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result23)))
-				local Inventory23 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main23 = Inventory23:WaitForChild("Main")
-				local Top23 = Main23:WaitForChild("Top")
-				local Options23 = Top23:WaitForChild("Options")
-				local Fish23 = Options23:WaitForChild("Fish")
-				local Label23 = Fish23:WaitForChild("Label")
-				local BagSize23 = Label23:WaitForChild("BagSize")
-				local result24 = BagSize23.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result23) < tonumber(result24)  (assumed true)
-				Celestial.DetectorCount = tonumber(result24)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result24)))
-				local Inventory24 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main24 = Inventory24:WaitForChild("Main")
-				local Top24 = Main24:WaitForChild("Top")
-				local Options24 = Top24:WaitForChild("Options")
-				local Fish24 = Options24:WaitForChild("Fish")
-				local Label24 = Fish24:WaitForChild("Label")
-				local BagSize24 = Label24:WaitForChild("BagSize")
-				local result25 = BagSize24.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result24) < tonumber(result25)  (assumed true)
-				Celestial.DetectorCount = tonumber(result25)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result25)))
-				local Inventory25 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main25 = Inventory25:WaitForChild("Main")
-				local Top25 = Main25:WaitForChild("Top")
-				local Options25 = Top25:WaitForChild("Options")
-				local Fish25 = Options25:WaitForChild("Fish")
-				local Label25 = Fish25:WaitForChild("Label")
-				local BagSize25 = Label25:WaitForChild("BagSize")
-				local result26 = BagSize25.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result25) < tonumber(result26)  (assumed true)
-				Celestial.DetectorCount = tonumber(result26)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result26)))
-				local Inventory26 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main26 = Inventory26:WaitForChild("Main")
-				local Top26 = Main26:WaitForChild("Top")
-				local Options26 = Top26:WaitForChild("Options")
-				local Fish26 = Options26:WaitForChild("Fish")
-				local Label26 = Fish26:WaitForChild("Label")
-				local BagSize26 = Label26:WaitForChild("BagSize")
-				local result27 = BagSize26.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result26) < tonumber(result27)  (assumed true)
-				Celestial.DetectorCount = tonumber(result27)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result27)))
-				local Inventory27 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main27 = Inventory27:WaitForChild("Main")
-				local Top27 = Main27:WaitForChild("Top")
-				local Options27 = Top27:WaitForChild("Options")
-				local Fish27 = Options27:WaitForChild("Fish")
-				local Label27 = Fish27:WaitForChild("Label")
-				local BagSize27 = Label27:WaitForChild("BagSize")
-				local result28 = BagSize27.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result27) < tonumber(result28)  (assumed true)
-				Celestial.DetectorCount = tonumber(result28)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result28)))
-				local Inventory28 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main28 = Inventory28:WaitForChild("Main")
-				local Top28 = Main28:WaitForChild("Top")
-				local Options28 = Top28:WaitForChild("Options")
-				local Fish28 = Options28:WaitForChild("Fish")
-				local Label28 = Fish28:WaitForChild("Label")
-				local BagSize28 = Label28:WaitForChild("BagSize")
-				local result29 = BagSize28.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result28) < tonumber(result29)  (assumed true)
-				Celestial.DetectorCount = tonumber(result29)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result29)))
-				local Inventory29 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main29 = Inventory29:WaitForChild("Main")
-				local Top29 = Main29:WaitForChild("Top")
-				local Options29 = Top29:WaitForChild("Options")
-				local Fish29 = Options29:WaitForChild("Fish")
-				local Label29 = Fish29:WaitForChild("Label")
-				local BagSize29 = Label29:WaitForChild("BagSize")
-				local result30 = BagSize29.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result29) < tonumber(result30)  (assumed true)
-				Celestial.DetectorCount = tonumber(result30)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result30)))
-				local Inventory30 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main30 = Inventory30:WaitForChild("Main")
-				local Top30 = Main30:WaitForChild("Top")
-				local Options30 = Top30:WaitForChild("Options")
-				local Fish30 = Options30:WaitForChild("Fish")
-				local Label30 = Fish30:WaitForChild("Label")
-				local BagSize30 = Label30:WaitForChild("BagSize")
-				local result31 = BagSize30.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result30) < tonumber(result31)  (assumed true)
-				Celestial.DetectorCount = tonumber(result31)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result31)))
-				local Inventory31 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main31 = Inventory31:WaitForChild("Main")
-				local Top31 = Main31:WaitForChild("Top")
-				local Options31 = Top31:WaitForChild("Options")
-				local Fish31 = Options31:WaitForChild("Fish")
-				local Label31 = Fish31:WaitForChild("Label")
-				local BagSize31 = Label31:WaitForChild("BagSize")
-				local result32 = BagSize31.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result31) < tonumber(result32)  (assumed true)
-				Celestial.DetectorCount = tonumber(result32)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result32)))
-				local Inventory32 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main32 = Inventory32:WaitForChild("Main")
-				local Top32 = Main32:WaitForChild("Top")
-				local Options32 = Top32:WaitForChild("Options")
-				local Fish32 = Options32:WaitForChild("Fish")
-				local Label32 = Fish32:WaitForChild("Label")
-				local BagSize32 = Label32:WaitForChild("BagSize")
-				local result33 = BagSize32.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result32) < tonumber(result33)  (assumed true)
-				Celestial.DetectorCount = tonumber(result33)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result33)))
-				local Inventory33 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main33 = Inventory33:WaitForChild("Main")
-				local Top33 = Main33:WaitForChild("Top")
-				local Options33 = Top33:WaitForChild("Options")
-				local Fish33 = Options33:WaitForChild("Fish")
-				local Label33 = Fish33:WaitForChild("Label")
-				local BagSize33 = Label33:WaitForChild("BagSize")
-				local result34 = BagSize33.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result33) < tonumber(result34)  (assumed true)
-				Celestial.DetectorCount = tonumber(result34)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result34)))
-				local Inventory34 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main34 = Inventory34:WaitForChild("Main")
-				local Top34 = Main34:WaitForChild("Top")
-				local Options34 = Top34:WaitForChild("Options")
-				local Fish34 = Options34:WaitForChild("Fish")
-				local Label34 = Fish34:WaitForChild("Label")
-				local BagSize34 = Label34:WaitForChild("BagSize")
-				local result35 = BagSize34.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result34) < tonumber(result35)  (assumed true)
-				Celestial.DetectorCount = tonumber(result35)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result35)))
-				local Inventory35 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main35 = Inventory35:WaitForChild("Main")
-				local Top35 = Main35:WaitForChild("Top")
-				local Options35 = Top35:WaitForChild("Options")
-				local Fish35 = Options35:WaitForChild("Fish")
-				local Label35 = Fish35:WaitForChild("Label")
-				local BagSize35 = Label35:WaitForChild("BagSize")
-				local result36 = BagSize35.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result35) < tonumber(result36)  (assumed true)
-				Celestial.DetectorCount = tonumber(result36)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result36)))
-				local Inventory36 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main36 = Inventory36:WaitForChild("Main")
-				local Top36 = Main36:WaitForChild("Top")
-				local Options36 = Top36:WaitForChild("Options")
-				local Fish36 = Options36:WaitForChild("Fish")
-				local Label36 = Fish36:WaitForChild("Label")
-				local BagSize36 = Label36:WaitForChild("BagSize")
-				local result37 = BagSize36.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result36) < tonumber(result37)  (assumed true)
-				Celestial.DetectorCount = tonumber(result37)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result37)))
-				local Inventory37 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main37 = Inventory37:WaitForChild("Main")
-				local Top37 = Main37:WaitForChild("Top")
-				local Options37 = Top37:WaitForChild("Options")
-				local Fish37 = Options37:WaitForChild("Fish")
-				local Label37 = Fish37:WaitForChild("Label")
-				local BagSize37 = Label37:WaitForChild("BagSize")
-				local result38 = BagSize37.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result37) < tonumber(result38)  (assumed true)
-				Celestial.DetectorCount = tonumber(result38)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result38)))
-				local Inventory38 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main38 = Inventory38:WaitForChild("Main")
-				local Top38 = Main38:WaitForChild("Top")
-				local Options38 = Top38:WaitForChild("Options")
-				local Fish38 = Options38:WaitForChild("Fish")
-				local Label38 = Fish38:WaitForChild("Label")
-				local BagSize38 = Label38:WaitForChild("BagSize")
-				local result39 = BagSize38.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result38) < tonumber(result39)  (assumed true)
-				Celestial.DetectorCount = tonumber(result39)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result39)))
-				local Inventory39 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main39 = Inventory39:WaitForChild("Main")
-				local Top39 = Main39:WaitForChild("Top")
-				local Options39 = Top39:WaitForChild("Options")
-				local Fish39 = Options39:WaitForChild("Fish")
-				local Label39 = Fish39:WaitForChild("Label")
-				local BagSize39 = Label39:WaitForChild("BagSize")
-				local result40 = BagSize39.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result39) < tonumber(result40)  (assumed true)
-				Celestial.DetectorCount = tonumber(result40)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result40)))
-				local Inventory40 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main40 = Inventory40:WaitForChild("Main")
-				local Top40 = Main40:WaitForChild("Top")
-				local Options40 = Top40:WaitForChild("Options")
-				local Fish40 = Options40:WaitForChild("Fish")
-				local Label40 = Fish40:WaitForChild("Label")
-				local BagSize40 = Label40:WaitForChild("BagSize")
-				local result41 = BagSize40.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result40) < tonumber(result41)  (assumed true)
-				Celestial.DetectorCount = tonumber(result41)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result41)))
-				local Inventory41 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main41 = Inventory41:WaitForChild("Main")
-				local Top41 = Main41:WaitForChild("Top")
-				local Options41 = Top41:WaitForChild("Options")
-				local Fish41 = Options41:WaitForChild("Fish")
-				local Label41 = Fish41:WaitForChild("Label")
-				local BagSize41 = Label41:WaitForChild("BagSize")
-				local result42 = BagSize41.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result41) < tonumber(result42)  (assumed true)
-				Celestial.DetectorCount = tonumber(result42)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result42)))
-				local Inventory42 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main42 = Inventory42:WaitForChild("Main")
-				local Top42 = Main42:WaitForChild("Top")
-				local Options42 = Top42:WaitForChild("Options")
-				local Fish42 = Options42:WaitForChild("Fish")
-				local Label42 = Fish42:WaitForChild("Label")
-				local BagSize42 = Label42:WaitForChild("BagSize")
-				local result43 = BagSize42.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result42) < tonumber(result43)  (assumed true)
-				Celestial.DetectorCount = tonumber(result43)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result43)))
-				local Inventory43 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main43 = Inventory43:WaitForChild("Main")
-				local Top43 = Main43:WaitForChild("Top")
-				local Options43 = Top43:WaitForChild("Options")
-				local Fish43 = Options43:WaitForChild("Fish")
-				local Label43 = Fish43:WaitForChild("Label")
-				local BagSize43 = Label43:WaitForChild("BagSize")
-				local result44 = BagSize43.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result43) < tonumber(result44)  (assumed true)
-				Celestial.DetectorCount = tonumber(result44)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result44)))
-				local Inventory44 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main44 = Inventory44:WaitForChild("Main")
-				local Top44 = Main44:WaitForChild("Top")
-				local Options44 = Top44:WaitForChild("Options")
-				local Fish44 = Options44:WaitForChild("Fish")
-				local Label44 = Fish44:WaitForChild("Label")
-				local BagSize44 = Label44:WaitForChild("BagSize")
-				local result45 = BagSize44.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result44) < tonumber(result45)  (assumed true)
-				Celestial.DetectorCount = tonumber(result45)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result45)))
-				local Inventory45 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main45 = Inventory45:WaitForChild("Main")
-				local Top45 = Main45:WaitForChild("Top")
-				local Options45 = Top45:WaitForChild("Options")
-				local Fish45 = Options45:WaitForChild("Fish")
-				local Label45 = Fish45:WaitForChild("Label")
-				local BagSize45 = Label45:WaitForChild("BagSize")
-				local result46 = BagSize45.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result45) < tonumber(result46)  (assumed true)
-				Celestial.DetectorCount = tonumber(result46)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result46)))
-				local Inventory46 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main46 = Inventory46:WaitForChild("Main")
-				local Top46 = Main46:WaitForChild("Top")
-				local Options46 = Top46:WaitForChild("Options")
-				local Fish46 = Options46:WaitForChild("Fish")
-				local Label46 = Fish46:WaitForChild("Label")
-				local BagSize46 = Label46:WaitForChild("BagSize")
-				local result47 = BagSize46.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result46) < tonumber(result47)  (assumed true)
-				Celestial.DetectorCount = tonumber(result47)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result47)))
-				local Inventory47 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main47 = Inventory47:WaitForChild("Main")
-				local Top47 = Main47:WaitForChild("Top")
-				local Options47 = Top47:WaitForChild("Options")
-				local Fish47 = Options47:WaitForChild("Fish")
-				local Label47 = Fish47:WaitForChild("Label")
-				local BagSize47 = Label47:WaitForChild("BagSize")
-				local result48 = BagSize47.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result47) < tonumber(result48)  (assumed true)
-				Celestial.DetectorCount = tonumber(result48)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result48)))
-				local Inventory48 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main48 = Inventory48:WaitForChild("Main")
-				local Top48 = Main48:WaitForChild("Top")
-				local Options48 = Top48:WaitForChild("Options")
-				local Fish48 = Options48:WaitForChild("Fish")
-				local Label48 = Fish48:WaitForChild("Label")
-				local BagSize48 = Label48:WaitForChild("BagSize")
-				local result49 = BagSize48.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result48) < tonumber(result49)  (assumed true)
-				Celestial.DetectorCount = tonumber(result49)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result49)))
-				local Inventory49 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main49 = Inventory49:WaitForChild("Main")
-				local Top49 = Main49:WaitForChild("Top")
-				local Options49 = Top49:WaitForChild("Options")
-				local Fish49 = Options49:WaitForChild("Fish")
-				local Label49 = Fish49:WaitForChild("Label")
-				local BagSize49 = Label49:WaitForChild("BagSize")
-				local result50 = BagSize49.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result49) < tonumber(result50)  (assumed true)
-				Celestial.DetectorCount = tonumber(result50)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result50)))
-				local Inventory50 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main50 = Inventory50:WaitForChild("Main")
-				local Top50 = Main50:WaitForChild("Top")
-				local Options50 = Top50:WaitForChild("Options")
-				local Fish50 = Options50:WaitForChild("Fish")
-				local Label50 = Fish50:WaitForChild("Label")
-				local BagSize50 = Label50:WaitForChild("BagSize")
-				local result51 = BagSize50.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result50) < tonumber(result51)  (assumed true)
-				Celestial.DetectorCount = tonumber(result51)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result51)))
-				local Inventory51 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main51 = Inventory51:WaitForChild("Main")
-				local Top51 = Main51:WaitForChild("Top")
-				local Options51 = Top51:WaitForChild("Options")
-				local Fish51 = Options51:WaitForChild("Fish")
-				local Label51 = Fish51:WaitForChild("Label")
-				local BagSize51 = Label51:WaitForChild("BagSize")
-				local result52 = BagSize51.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- condition: tonumber(result51) < tonumber(result52)  (assumed true)
-				Celestial.DetectorCount = tonumber(result52)
-				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result52)))
-				local Inventory52 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
-				local Main52 = Inventory52:WaitForChild("Main")
-				local Top52 = Main52:WaitForChild("Top")
-				local Options52 = Top52:WaitForChild("Options")
-				local Fish52 = Options52:WaitForChild("Fish")
-				local Label52 = Fish52:WaitForChild("Label")
-				local BagSize52 = Label52:WaitForChild("BagSize")
-				BagSize52.Text:match("(%d+)/")
-				task.wait(0.1)
-				-- [envlog] stopped after 50 waits
+				while state and task.wait(0.1) do
+					pcall(function()
+						local PlayerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+						local Inventory = PlayerGui:WaitForChild("Inventory")
+						local BagSize = Inventory.Main.Top.Options.Fish.Label.BagSize
+						local count = BagSize.Text:match("(%d+)/")
+						if count then
+							if _G.Celestial then _G.Celestial.DetectorCount = tonumber(count) end
+							Paragraph2:SetContent("<font color='rgb(0,255,127)'>Status = Fishing Normally</font>\n<font color='rgb(0,191,255)'>Time = 0.0s</font>\n<font color='rgb(173,216,230)'>Bag = " .. tostring(count) .. "</font>")
+						end
+					end)
+				end
 			end)
 		else
 			Paragraph2:SetContent("<font color='rgb(200,200,200)'>Status = Detector Offline</font>\nTime = 0.0s\nBag = 0")
@@ -1580,17 +1089,15 @@ Section7:AddInput({
 	end
 })
 
-local notifConn = _G.notifConn
-_G.notifConn = notifConn
-notifConn:Disconnect()
-_G.notifConn = nil
-local notifOriginalConns = _G.notifOriginalConns
-_G.notifOriginalConns = notifOriginalConns
-
-for k2, v7 in pairs(notifOriginalConns) do
-	v7:Enable()
+if _G.notifConn then
+	pcall(function() _G.notifConn:Disconnect() end)
+	_G.notifConn = nil
 end
-
+if _G.notifOriginalConns and type(_G.notifOriginalConns) == "table" then
+	for k2, v7 in pairs(_G.notifOriginalConns) do
+		pcall(function() v7:Enable() end)
+	end
+end
 _G.notifOriginalConns = {}
 
 _G.notifConn = {
@@ -1666,10 +1173,10 @@ task.spawn(function()
 	-- [envlog] error: Luraph Script:3091: Script:62: attempt to index number with 'Rainbow'
 end)
 
-local FishCaughtConn = _G.FishCaughtConn
-_G.FishCaughtConn = FishCaughtConn
-FishCaughtConn:Disconnect()
-_G.FishCaughtConn = nil
+if _G.FishCaughtConn then
+	pcall(function() _G.FishCaughtConn:Disconnect() end)
+	_G.FishCaughtConn = nil
+end
 
 _G.FishCaughtConn = {
 	Disconnect = function()
@@ -1769,6 +1276,9 @@ Section10:AddButton({
 ReplicatedStorage.Items.Misc:GetChildren()
 local Baits = ReplicatedStorage:WaitForChild("Baits")
 Baits:GetChildren()
+end -- end Tab2
+
+do -- start Tab5
 local Section11 = Tab5:AddSection("Shop")
 Section11:AddSubSection("Purchase Rod")
 
@@ -1966,6 +1476,9 @@ Section14:AddToggle({
 	end
 })
 
+end -- end Tab5
+
+do -- start Tab3
 local Section15 = Tab3:AddSection("Auto Full Index [Beta]")
 local Paragraph4 = Section15:AddParagraph({ Title = "Status", Content = "Idle..." })
 
@@ -2613,6 +2126,9 @@ Section24:AddToggle({
 })
 
 ReplicatedStorage.Assets.Auras:GetChildren()
+end -- end Tab3
+
+do -- start Tab4
 local Section25 = Tab4:AddSection("Aura Features")
 
 Section25:AddDropdown({
@@ -2636,7 +2152,7 @@ Section25:AddToggle({
 				Players.LocalPlayer:SetAttribute("FishingRodSkin", false)
 			end)
 		else
-			connection16:Disconnect()
+			if connection16 then pcall(function() connection16:Disconnect() end) end
 			Players.LocalPlayer:SetAttribute("FishingRodSkin", nil)
 		end
 	end
@@ -2832,11 +2348,11 @@ Section28:AddToggle({
 Players.LocalPlayer.CharacterAdded:Connect(function(character8)
 end)
 
-require(ReplicatedStorage.Packages.Replion)
-require(ReplicatedStorage.Shared.ItemUtility)
-require(ReplicatedStorage.Shared.VendorUtility)
-require(ReplicatedStorage.Shared.PlayerStatsUtility)
-require(ReplicatedStorage.Shared.Trading.TradeData)
+safeRequire(ReplicatedStorage.Packages.Replion)
+safeRequire(ReplicatedStorage.Shared.ItemUtility)
+safeRequire(ReplicatedStorage.Shared.VendorUtility)
+safeRequire(ReplicatedStorage.Shared.PlayerStatsUtility)
+safeRequire(ReplicatedStorage.Shared.Trading.TradeData)
 
 CombinedModules.AutoTrade = {
 	GetEnchantStoneItems = function()
@@ -2889,14 +2405,14 @@ CombinedModules.AutoTrade = {
 	end
 }
 
-require(ReplicatedStorage.Packages.Replion)
-local module14 = require(ReplicatedStorage.Shared.Trading.TradeData)
+safeRequire(ReplicatedStorage.Packages.Replion)
+local module14 = safeRequire(ReplicatedStorage.Shared.Trading.TradeData)
 
 CombinedModules.AutoAcceptTrade = {
 	IsRunning = function()
 	end,
 	Start = function()
-		local module15 = require(ReplicatedStorage.Controllers.PromptController)
+		local module15 = safeRequire(ReplicatedStorage.Controllers.PromptController)
 
 		module15.FirePrompt = function(arg301, arg302)
 			arg301:FirePrompt(arg302)
@@ -2907,10 +2423,13 @@ CombinedModules.AutoAcceptTrade = {
 	end,
 	Stop = function()
 		module15.FirePrompt = module15.FirePrompt
-		connection17:Disconnect()
+		if connection17 then pcall(function() connection17:Disconnect() end) end
 	end
 }
 
+end -- end Tab4
+
+do -- start Tab6
 local Section29 = Tab6:AddSection("Select Player")
 
 local Dropdown2 = Section29:AddDropdown({
@@ -3099,13 +2618,13 @@ Section34:AddToggle({
 			end)
 		else
 			module15.FirePrompt = module15.FirePrompt
-			connection18:Disconnect()
+			if connection18 then pcall(function() connection18:Disconnect() end) end
 		end
 	end
 })
 
-local Items2 = ReplicatedStorage:WaitForChild("Items")
-local Baits2 = ReplicatedStorage:WaitForChild("Baits")
+local Items2 = ReplicatedStorage:FindFirstChild("Items") or ReplicatedStorage:WaitForChild("Items", 3)
+local Baits2 = ReplicatedStorage:FindFirstChild("Baits") or ReplicatedStorage:WaitForChild("Baits", 3)
 _G.SelectedFarmLocation = "Kohana Volcano"
 local KaitunZone = _G.KaitunZone
 _G.KaitunZone = KaitunZone
@@ -3129,6 +2648,9 @@ task.spawn(function()
 	-- [envlog] the statements above repeat forever (loop)
 end)
 
+end -- end Tab6
+
+do -- start Tab7
 local Section35 = Tab7:AddSection("Kaitun [BETA]")
 _G.SelectedFarmLocation = false
 
@@ -3549,600 +3071,125 @@ Section35:AddToggle({
 
 			task.spawn(function(...)
 				TextLabel11.Text = "»  Detecting state (rod check)..."
-				task.wait(2)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				task.wait(1)
 				TextLabel11.Text = "✔  State detected. Starting..."
 				task.wait(1)
+
+				local bestRods = {
+					"Midnight Rod", "Sunken Rod", "Trident Rod", "Magma Rod",
+					"Ghost Rod", "Golden Rod", "Carbon Rod", "Fast Rod", "Lucky Rod", "Flimsy Rod"
+				}
+				local bestBaits = {
+					"Corrupt Bait", "Night Bait", "Golden Bait", "Volcano Bait", "Deep Bait", "Worm"
+				}
+
+				local function getLocalChar()
+					local lp = Players.LocalPlayer
+					return (lp and lp.Character) or (lp and lp.CharacterAdded:Wait())
+				end
+
+				local function equipRodByName(name)
+					pcall(function()
+						local lp = Players.LocalPlayer
+						if lp and lp.Backpack then
+							local tool = lp.Backpack:FindFirstChild(name)
+							if tool and lp.Character and lp.Character:FindFirstChildOfClass("Humanoid") then
+								lp.Character:FindFirstChildOfClass("Humanoid"):EquipTool(tool)
+							end
+						end
+						fireNet("RE/EquipRod", name)
+					end)
+				end
+
+				local function equipBestRod()
+					pcall(function()
+						local lp = Players.LocalPlayer
+						if not lp then return end
+						local bp = lp:FindFirstChild("Backpack")
+						local char = lp.Character
+						for _, rName in ipairs(bestRods) do
+							if (bp and bp:FindFirstChild(rName)) or (char and char:FindFirstChild(rName)) then
+								equipRodByName(rName)
+								return rName
+							end
+						end
+					end)
+					return nil
+				end
+
+				local function equipBestBait()
+					pcall(function()
+						for _, bName in ipairs(bestBaits) do
+							fireNet("RE/EquipBait", bName)
+						end
+					end)
+				end
+
+				local function doTeleport()
+					pcall(function()
+						local char = getLocalChar()
+						if char and char:FindFirstChild("HumanoidRootPart") then
+							local loc = _G.SelectedFarmLocation or "Kohana Volcano"
+							if loc == "Tropical Grove" then
+								char.HumanoidRootPart.CFrame = CFrame.new(-3136.1, 2.61, 2126.1)
+							else
+								char.HumanoidRootPart.CFrame = CFrame.new(-2151, 3, 3671)
+							end
+						end
+					end)
+				end
+
+				-- Initial Teleport
+				TextLabel11.Text = "»  Teleporting to " .. tostring(_G.SelectedFarmLocation or "Kohana Volcano")
+				doTeleport()
 				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
 
-				task.spawn(function()
-					task.wait(2)
-				end)
+				local farmCycle = 0
+				while _G.KaitunPanel and task.wait(0.5) do
+					farmCycle = farmCycle + 1
 
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
+					if farmCycle % 10 == 0 then
+						doTeleport()
+					end
 
-				task.spawn(function()
-					task.wait(2)
-				end)
+					local eqRod = equipBestRod()
+					if eqRod then
+						TextLabel11.Text = "»  Rod: " .. eqRod
+					end
 
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
+					equipBestBait()
 
-				task.spawn(function()
-					task.wait(2)
-				end)
+					pcall(function()
+						fireNet("RF/PurchaseFishingRod", "Midnight Rod")
+					end)
 
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
+					if farmCycle % 6 == 0 then
+						TextLabel11.Text = "»  Selling Fish..."
+						pcall(function()
+							fireNet("RF/SellAllItems")
+							fireNet("RF/SellFish")
+						end)
+						task.wait(0.5)
+					end
 
-				task.spawn(function()
-					task.wait(2)
-				end)
+					TextLabel11.Text = "»  Auto Fishing Active"
+					pcall(function()
+						fireNet("RE/ChargeFishingRod", 100)
+						fireNet("RE/FishingBegan")
+					end)
 
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
+					task.wait(0.8)
+					if not _G.KaitunPanel then break end
 
-				task.spawn(function()
-					task.wait(2)
-				end)
+					pcall(function()
+						fireNet("RE/FishBite")
+						fireNet("RE/ReelFinished")
+						fireNet("RE/CatchFishCompleted")
+						fireNet("RE/FishCaught")
+					end)
 
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				ReplicatedStorage.Items.Misc:GetChildren()
-				TextLabel11.Text = "»  Buying Midnight Rod"
-
-				task.spawn(function()
-					task.wait(2)
-				end)
-
-				task.wait(3)
-				task.wait(1)
-				-- [envlog] stopped after 50 waits
+					task.wait(0.5)
+				end
 			end)
 		else
 			_G.KaitunPanel = false
@@ -4159,17 +3206,30 @@ Section35:AddToggle({
 	Title = "Auto Equip Best Rod",
 	Default = false,
 	Callback = function(state)
+		_G.AutoEquipBestRod = state
 		if state then
-			_G.AutoEquipBestRod = state
-			ReplicatedStorage.Items.Misc:GetChildren()
-			ReplicatedStorage.Items.Misc:GetChildren()
-			ReplicatedStorage.Items.Misc:GetChildren()
-			ReplicatedStorage.Items.Misc:GetChildren()
-
-			_G.AutoEquipBestRodConnection = {
-		Disconnect = function()
+			task.spawn(function()
+				local bestRods = {
+					"Midnight Rod", "Sunken Rod", "Trident Rod", "Magma Rod",
+					"Ghost Rod", "Golden Rod", "Carbon Rod", "Fast Rod", "Lucky Rod", "Flimsy Rod"
+				}
+				while _G.AutoEquipBestRod and task.wait(2) do
+					pcall(function()
+						local lp = Players.LocalPlayer
+						if not lp then return end
+						local bp = lp:FindFirstChild("Backpack")
+						local char = lp.Character
+						for _, rName in ipairs(bestRods) do
+							local tool = (bp and bp:FindFirstChild(rName)) or (char and char:FindFirstChild(rName))
+							if tool and char and char:FindFirstChildOfClass("Humanoid") then
+								char:FindFirstChildOfClass("Humanoid"):EquipTool(tool)
+								fireNet("RE/EquipRod", rName)
+								break
+							end
+						end
+					end)
 				end
-	}
+			end)
 		end
 	end
 })
@@ -4180,12 +3240,19 @@ Section35:AddToggle({
 	Title = "Auto Equip Best Bait",
 	Default = false,
 	Callback = function(state)
+		_G.AutoEquipBestBait = state
 		if state then
-			_G.AutoEquipBestBait = state
-
 			task.spawn(function()
-				ReplicatedStorage:FindFirstChild("Baits")
-				-- [envlog] error: Luraph Script:9531: Luraph Script:9414: Script:62: table index is nil
+				local bestBaits = {
+					"Corrupt Bait", "Night Bait", "Golden Bait", "Volcano Bait", "Deep Bait", "Worm"
+				}
+				while _G.AutoEquipBestBait and task.wait(3) do
+					pcall(function()
+						for _, bName in ipairs(bestBaits) do
+							fireNet("RE/EquipBait", bName)
+						end
+					end)
+				end
 			end)
 		end
 	end
@@ -4729,6 +3796,9 @@ Section42:AddToggle({
 	end
 })
 
+end -- end Tab7
+
+do -- start Tab8
 local Section43 = Tab8:AddSection("Artifact Lever Location")
 
 local Paragraph14 = Section43:AddParagraph({
@@ -5044,6 +4114,9 @@ Section48:AddToggle({
 	end
 })
 
+end -- end Tab8
+
+do -- start Tab9
 local Section49 = Tab9:AddSection("Booster FPS")
 
 Section49:AddToggle({
@@ -5189,9 +4262,9 @@ Section49:AddToggle({
 			local connection21 = workspace.DescendantAdded:Connect(function(descendant2)
 			end)
 		else
-			connection19:Disconnect()
-			connection20:Disconnect()
-			connection21:Disconnect()
+			if connection19 then pcall(function() connection19:Disconnect() end) end
+			if connection20 then pcall(function() connection20:Disconnect() end) end
+			if connection21 then pcall(function() connection21:Disconnect() end) end
 			Terrain2.WaterReflectance = Terrain2.WaterReflectance
 			Terrain2.WaterWaveSize = Terrain2.WaterWaveSize
 			Terrain2.WaterWaveSpeed = Terrain2.WaterWaveSpeed
@@ -5348,7 +4421,7 @@ Section50:AddToggle({
 				Players.LocalPlayer.CameraMinZoomDistance = 0.5
 			end)
 		else
-			connection22:Disconnect()
+			if connection22 then pcall(function() connection22:Disconnect() end) end
 			Players.LocalPlayer.CameraMaxZoomDistance = 128
 			Players.LocalPlayer.CameraMinZoomDistance = 0.5
 		end
@@ -5386,8 +4459,8 @@ Section50:AddToggle({
 			lastFrame.Text = "CENSORED"
 			lastFrame2.Text = "CENSORED"
 		else
-			connection23:Disconnect()
-			connection24:Disconnect()
+			if connection23 then pcall(function() connection23:Disconnect() end) end
+			if connection24 then pcall(function() connection24:Disconnect() end) end
 			lastFrame.Text = lastFrame.Text
 			lastFrame2.Text = lastFrame2.Text
 		end
@@ -5415,7 +4488,7 @@ Section50:AddToggle({
 			local PlayerScripts = Players.LocalPlayer:WaitForChild("PlayerScripts")
 			local PlayerModule = PlayerScripts:WaitForChild("PlayerModule")
 			local ControlModule = PlayerModule:WaitForChild("ControlModule")
-			local module16 = require(ControlModule)
+			local module16 = safeRequire(ControlModule)
 			local BodyVelocity3 = Instance.new("BodyVelocity")
 			local BodyGyro = Instance.new("BodyGyro")
 			BodyVelocity3.MaxForce = Vector3.new(8999999488, 8999999488, 8999999488)
@@ -5507,7 +4580,7 @@ Section51:AddToggle({
 			Players:GetPlayers()
 			TeleportService:Teleport(0, Players.LocalPlayer)
 		else
-			connection25:Disconnect()
+			if connection25 then pcall(function() connection25:Disconnect() end) end
 		end
 	end
 })
@@ -5706,7 +4779,7 @@ Section52:AddToggle({
 		if state then
 			_G._WeatherVFX = _WeatherVFX
 			local VFXController = ReplicatedStorage.Controllers:WaitForChild("VFXController")
-			local module17 = require(VFXController)
+			local module17 = safeRequire(VFXController)
 
 			for k9, v31 in pairs(module17) do
 			end
@@ -5758,15 +4831,15 @@ Section52:AddToggle({
 				end)
 			end
 
-			_WeatherVFX.conn:Disconnect()
+			if _WeatherVFX and _WeatherVFX.conn then pcall(function() _WeatherVFX.conn:Disconnect() end) end
 			_WeatherVFX.conn = nil
 
 			for i24, v33 in ipairs(_WeatherVFX.conns) do
-				v33:Disconnect()
+				if v33 then pcall(function() v33:Disconnect() end) end
 			end
 
 			_WeatherVFX.conns = nil
-			local module18 = require(ReplicatedStorage.Controllers.WeatherController.Classic.PartPool)
+			local module18 = safeRequire(ReplicatedStorage.Controllers.WeatherController.Classic.PartPool)
 			_WeatherVFX.origAcquire = module18.Acquire
 			_WeatherVFX.origUseDesc = module18.UseDescription
 			_WeatherVFX.WeatherController = module18
@@ -5778,7 +4851,7 @@ Section52:AddToggle({
 			module18.UseDescription = function()
 			end
 
-			local module19 = require(ReplicatedStorage.Controllers.WeatherController.Classic.Scheduler)
+			local module19 = safeRequire(ReplicatedStorage.Controllers.WeatherController.Classic.Scheduler)
 			_WeatherVFX.origSchedulerAdd = module19.add
 			_WeatherVFX.origSchedulerDelay = module19.delay
 			_WeatherVFX.Scheduler = module19
@@ -5811,17 +4884,17 @@ Section52:AddToggle({
 			_WeatherVFX.conn = connection30
 			print("[MengXHub] VFX Optimization:", "Enabled (Lag Reduced)")
 		else
-			connection28:Disconnect()
-			connection29:Disconnect()
-			connection27:Disconnect()
-			connection26:Disconnect()
+			if connection28 then pcall(function() connection28:Disconnect() end) end
+			if connection29 then pcall(function() connection29:Disconnect() end) end
+			if connection27 then pcall(function() connection27:Disconnect() end) end
+			if connection26 then pcall(function() connection26:Disconnect() end) end
 			local VFXController2 = ReplicatedStorage.Controllers:WaitForChild("VFXController")
-			local module20 = require(VFXController2)
+			local module20 = safeRequire(VFXController2)
 
 			for k10, v34 in pairs(module20) do
 			end
 
-			connection30:Disconnect()
+			if connection30 then pcall(function() connection30:Disconnect() end) end
 			_WeatherVFX.conn = nil
 			_WeatherVFX.conns = nil
 			module18.Acquire = module18.Acquire
@@ -5841,12 +4914,10 @@ Section52:AddToggle({
 	end
 })
 
-local _FakeIdentityCleanup = getgenv()._FakeIdentityCleanup
-getgenv()._FakeIdentityCleanup = _FakeIdentityCleanup
-_FakeIdentityCleanup()
-
-getgenv()._FakeIdentityCleanup = function()
+if type(getgenv()._FakeIdentityCleanup) == "function" then
+	pcall(getgenv()._FakeIdentityCleanup)
 end
+getgenv()._FakeIdentityCleanup = function() end
 
 local players17 = Players:GetPlayers()
 
@@ -5857,8 +4928,7 @@ local function getOverhead(v)
 end
 
 local function setupHeader(header, label)
-	header.Text = header.Text
-	label.Text = label.Text
+	if header and label then pcall(function() header.Text = header.Text; label.Text = label.Text end) end
 end
 
 for i25, v35 in ipairs(players17) do
@@ -5886,8 +4956,8 @@ for i25, v35 in ipairs(players17) do
 		local Header2 = Overhead2.Content:FindFirstChild("Header")
 		Overhead2:FindFirstChild("LevelContainer")
 		local Label58 = Overhead2.LevelContainer:FindFirstChild("Label")
-		connection31:Disconnect()
-		connection32:Disconnect()
+		if connection31 then pcall(function() connection31:Disconnect() end) end
+		if connection32 then pcall(function() connection32:Disconnect() end) end
 		local changedSignal6 = Header2:GetPropertyChangedSignal("Text")
 
 		changedSignal6:Connect(function()
@@ -5964,7 +5034,7 @@ Section52:AddToggle({
 			Label56.Text = Label57.Text
 
 			local connection33 = RunService.RenderStepped:Connect(function(deltaTime10)
-				connection33:Disconnect()
+				if connection33 then pcall(function() connection33:Disconnect() end) end
 			end)
 
 			task.delay(1.5, function()
@@ -5995,6 +5065,9 @@ task.spawn(function()
 	setupHeader(Header, Label56)
 end)
 
+end -- end Tab9
+
+do -- start Tab10
 local Section53 = Tab10:AddSection("Teleport To Player")
 local players18 = Players:GetPlayers()
 
@@ -6003,7 +5076,7 @@ end
 
 local Dropdown3 = Section53:AddDropdown({
 	Title = "Select Player",
-	Options = { v36.Name },
+	Options = { (v36 and v36.Name) or (Players.LocalPlayer and Players.LocalPlayer.Name) or "None" },
 	Callback = function()
 	end
 })
@@ -6051,7 +5124,7 @@ Section53:AddToggle({
 		else
 			local Humanoid10 = Players.LocalPlayer.Character:WaitForChild("Humanoid")
 			Humanoid10:FindFirstChildOfClass("Animator")
-			connection34:Disconnect()
+			if connection34 then pcall(function() connection34:Disconnect() end) end
 		end
 	end
 })
@@ -6201,17 +5274,18 @@ _G.ServerWebhookEnabled = false
 _G.ServerWebhookConnected = false
 
 task.delay(5, function()
-	local result65 = syn.request({
-	Method = "GET",
-	Url = "https://raw.githubusercontent.com/Meng-Dev1/LAUSAPEMPRUY-/refs/heads/main/fish_final.json"
-})
-
-	local data6 = HttpService:JSONDecode(result65.Body)
-
-	for k11, v40 in pairs(data6) do
-	end
-
-	print("[Meng Hub] 1 Gambar Ikan Berhasil Dimuat!")
+	pcall(function()
+		if _G.httpRequest then
+			local result65 = _G.httpRequest({
+				Method = "GET",
+				Url = "https://raw.githubusercontent.com/Meng-Dev1/LAUSAPEMPRUY-/refs/heads/main/fish_final.json"
+			})
+			if result65 and (result65.Body or result65.body) then
+				local data6 = HttpService:JSONDecode(result65.Body or result65.body)
+				print("[Meng Hub] 1 Gambar Ikan Berhasil Dimuat!")
+			end
+		end
+	end)
 end)
 
 Items:GetChildren()
@@ -6221,6 +5295,9 @@ task.spawn(function()
 	game:IsLoaded()
 end)
 
+end -- end Tab10
+
+do -- start Tab11
 local Section56 = Tab11:AddSection("Webhook Fish Caught")
 
 Section56:AddInput({
@@ -6526,10 +5603,16 @@ Section59:AddToggle({
 })
 
 -- isfolder("Meng Hub_FishIt") -> false
-makefolder("Meng Hub_FishIt")
--- isfolder("Meng Hub_FishIt/Config/") -> false
-makefolder("Meng Hub_FishIt/Config/")
+pcall(function()
+	if makefolder then
+		if isfolder and not isfolder("Meng Hub_FishIt") then makefolder("Meng Hub_FishIt") end
+		if isfolder and not isfolder("Meng Hub_FishIt/Config/") then makefolder("Meng Hub_FishIt/Config/") end
+	end
+end)
 -- isfile("Meng Hub_FishIt/Config/Autoload.txt") -> false
+end -- end Tab11
+
+do -- start Tab12
 local Section60 = Tab12:AddSection("Configuration")
 local Paragraph20 = Section60:AddParagraph({ Title = "Config Manager", Content = "Current: None | Autoload: None", Icon = "settings" })
 
@@ -6633,11 +5716,17 @@ Section60:AddButton({
 local WOGraphics = _G.WOGraphics
 _G.WOGraphics = WOGraphics
 local ClientGraphicCC = Lighting:FindFirstChild("ClientGraphicCC")
-ClientGraphicCC.Name = "ClientGraphicCC"
-ClientGraphicCC.Parent = Lighting
+if not ClientGraphicCC then
+	ClientGraphicCC = Instance.new("ColorCorrectionEffect")
+	ClientGraphicCC.Name = "ClientGraphicCC"
+	ClientGraphicCC.Parent = Lighting
+end
 local ClientGraphicBloom = Lighting:FindFirstChild("ClientGraphicBloom")
-ClientGraphicBloom.Name = "ClientGraphicBloom"
-ClientGraphicBloom.Parent = Lighting
+if not ClientGraphicBloom then
+	ClientGraphicBloom = Instance.new("BloomEffect")
+	ClientGraphicBloom.Name = "ClientGraphicBloom"
+	ClientGraphicBloom.Parent = Lighting
+end
 local Section61 = Tab12:AddSection("Grapichs Custom")
 
 Section61:AddDropdown({
@@ -6668,3 +5757,4 @@ Section61:AddDropdown({
 })
 
 task.wait(1)
+end -- end Tab12
