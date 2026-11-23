@@ -588,16 +588,33 @@ do
 					SectionContainer.Size = UDim2.new(1, 0, 0, SecLayout.AbsoluteContentSize.Y + 8)
 				end)
 
+				local HeaderBar = Instance.new("Frame")
+				HeaderBar.Name = "HeaderBar"
+				HeaderBar.Size = UDim2.new(1, 0, 0, 24)
+				HeaderBar.BackgroundTransparency = 1
+				HeaderBar.Parent = SectionContainer
+
 				local Header = Instance.new("TextLabel")
 				Header.Name = "Header"
-				Header.Size = UDim2.new(1, 0, 0, 22)
+				Header.Size = UDim2.new(1, -30, 1, 0)
 				Header.BackgroundTransparency = 1
 				Header.Text = tostring(secTitle)
 				Header.TextColor3 = accentColor
 				Header.Font = Enum.Font.GothamBold
 				Header.TextSize = 13
 				Header.TextXAlignment = Enum.TextXAlignment.Left
-				Header.Parent = SectionContainer
+				Header.Parent = HeaderBar
+
+				local Chev = Instance.new("TextLabel")
+				Chev.Name = "Chev"
+				Chev.Size = UDim2.new(0, 20, 1, 0)
+				Chev.Position = UDim2.new(1, -22, 0, 0)
+				Chev.BackgroundTransparency = 1
+				Chev.Text = "v"
+				Chev.TextColor3 = Color3.fromRGB(170, 170, 185)
+				Chev.Font = Enum.Font.GothamBold
+				Chev.TextSize = 11
+				Chev.Parent = HeaderBar
 
 				local SectionObj = {}
 
@@ -774,26 +791,40 @@ do
 					Title.TextXAlignment = Enum.TextXAlignment.Left
 					Title.Parent = HeaderBtn
 
+					-- Rounded Pill on the right side (matching exact UI design)
+					local ValPill = Instance.new("Frame")
+					ValPill.Name = "ValPill"
+					ValPill.Size = UDim2.new(0, 150, 0, 24)
+					ValPill.Position = UDim2.new(1, -158, 0.5, -12)
+					ValPill.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+					ValPill.BorderSizePixel = 0
+					ValPill.Parent = HeaderBtn
+
+					local PillCorner = Instance.new("UICorner")
+					PillCorner.CornerRadius = UDim.new(0, 6)
+					PillCorner.Parent = ValPill
+
 					local ValLabel = Instance.new("TextLabel")
-					ValLabel.Size = UDim2.new(0.5, -35, 1, 0)
-					ValLabel.Position = UDim2.new(0.5, 0, 0, 0)
+					ValLabel.Size = UDim2.new(1, -22, 1, 0)
+					ValLabel.Position = UDim2.new(0, 8, 0, 0)
 					ValLabel.BackgroundTransparency = 1
 					ValLabel.Text = isMulti and (type(current) == "table" and table.concat(current, ", ") or "") or tostring(current)
-					ValLabel.TextColor3 = accentColor
+					ValLabel.TextColor3 = Color3.fromRGB(200, 200, 215)
 					ValLabel.Font = Enum.Font.Gotham
 					ValLabel.TextSize = 11
-					ValLabel.TextXAlignment = Enum.TextXAlignment.Right
-					ValLabel.Parent = HeaderBtn
+					ValLabel.TextXAlignment = Enum.TextXAlignment.Left
+					ValLabel.TextTruncate = Enum.TextTruncate.AtEnd
+					ValLabel.Parent = ValPill
 
 					local Arrow = Instance.new("TextLabel")
-					Arrow.Size = UDim2.new(0, 20, 1, 0)
-					Arrow.Position = UDim2.new(1, -25, 0, 0)
+					Arrow.Size = UDim2.new(0, 14, 1, 0)
+					Arrow.Position = UDim2.new(1, -16, 0, 0)
 					Arrow.BackgroundTransparency = 1
-					Arrow.Text = "v"
+					Arrow.Text = ">"
 					Arrow.TextColor3 = Color3.fromRGB(150, 150, 165)
 					Arrow.Font = Enum.Font.GothamBold
 					Arrow.TextSize = 10
-					Arrow.Parent = HeaderBtn
+					Arrow.Parent = ValPill
 
 					local OptContainer = Instance.new("Frame")
 					OptContainer.Name = "OptContainer"
@@ -1871,6 +1902,335 @@ Section7:AddToggle({
 -- ============================================================================
 -- [[ TAB: AUTOMATIC (KAITUN AUTOMATION CORE) ]]
 -- ============================================================================
+
+-- [[ KAITUN FARMING COORDINATES & HIERARCHY ]]
+local KaitunFarmCoordinates = {
+	["Kohana Volcano"] = Vector3.new(-4001, 10, -850),
+	["Kohana 1"] = Vector3.new(-3800, 15, -700),
+	["Tropical Grove"] = Vector3.new(2450, 8, 1200),
+	["Crater Island"] = Vector3.new(1200, 12, -2300),
+	["Coral Reefs 1"] = Vector3.new(-1800, 5, 2100),
+	["Coral Reefs 2"] = Vector3.new(-2000, 5, 2300),
+	["Lost Shore"] = Vector3.new(-800, 10, -1500),
+	["Esoteric Depths"] = Vector3.new(3100, -500, 1900),
+	["Ancient Jungle"] = Vector3.new(-1200, 10, 3200),
+	["Crystal Depths"] = Vector3.new(1500, -800, -1200),
+	["Mariana Trench"] = Vector3.new(500, -1200, 3500),
+	["Elemental Volcano"] = Vector3.new(-4200, 20, -1100),
+	["Elemental Storm"] = Vector3.new(-4500, 25, -900),
+	["Elemental Blizzard"] = Vector3.new(-4100, 15, -600),
+	["Fisherman Island Underground"] = Vector3.new(150, -30, 200),
+	["Pirate Island's"] = Vector3.new(-2800, 12, 1400),
+	["Lava Basin"] = Vector3.new(-3950, -50, -950),
+	["Secret Passage"] = Vector3.new(900, -100, -500),
+	["Treasure Room"] = Vector3.new(-2750, -80, 1450),
+	["Sisyphus Statue"] = Vector3.new(-1500, 50, -800),
+	["Weather Machine"] = Vector3.new(2100, 15, -1800),
+	["Sacred Temple"] = Vector3.new(-1100, 25, 3300),
+	["Ancient Ruin"] = Vector3.new(-1350, 15, 3450),
+}
+
+local KaitunFarmSpotsList = {
+	"Kohana Volcano",
+	"Tropical Grove",
+	"Crater Island",
+	"Coral Reefs 1",
+	"Coral Reefs 2",
+	"Lost Shore",
+	"Esoteric Depths",
+	"Ancient Jungle",
+	"Crystal Depths",
+	"Mariana Trench",
+	"Elemental Volcano",
+	"Elemental Storm",
+	"Elemental Blizzard",
+	"Fisherman Island Underground",
+	"Pirate Island's",
+	"Lava Basin",
+	"Secret Passage",
+	"Treasure Room",
+	"Sisyphus Statue",
+	"Weather Machine",
+	"Sacred Temple",
+	"Ancient Ruin",
+}
+
+local KaitunRodRanks = {
+	["Astral Rod"] = 100,
+	["Midas Rod"] = 90,
+	["Poseidon Rod"] = 85,
+	["Magma Rod"] = 80,
+	["Talon Rod"] = 75,
+	["Fortune Rod"] = 70,
+	["Steampunk Rod"] = 60,
+	["Golden Rod"] = 55,
+	["Gold Rod"] = 50,
+	["Carbon Rod"] = 40,
+	["Plastic Rod"] = 30,
+	["Flimsy Rod"] = 10,
+	["Training Rod"] = 5,
+}
+
+local KaitunBaitOrder = {
+	"Truffle Worm",
+	"Super Bait",
+	"Squid Bait",
+	"Night Bait",
+	"Coral Bait",
+	"Fish Head",
+	"Flies",
+	"Worm",
+	"Basic Bait",
+}
+
+_G.SelectedFarmLocation = "Kohana Volcano"
+_G.StartKaitun = false
+_G.KaitunAutoBestRod = false
+_G.KaitunAutoBestBait = false
+
+local function ensureKaitunPlatform(pos)
+	if not _G.KaitunPlatform or not _G.KaitunPlatform.Parent then
+		local p = Instance.new("Part")
+		p.Name = "Kaitun_Platform"
+		p.Size = Vector3.new(20, 1, 20)
+		p.Anchored = true
+		p.CanCollide = true
+		p.Transparency = 0.5
+		p.Material = Enum.Material.ForceField
+		p.BrickColor = BrickColor.new("Pastel light blue")
+		p.Parent = workspace
+		_G.KaitunPlatform = p
+	end
+	_G.KaitunPlatform.Position = pos - Vector3.new(0, 3.5, 0)
+end
+
+local function teleportToFarmSpot(locName)
+	locName = locName or _G.SelectedFarmLocation or "Kohana Volcano"
+	pcall(function()
+		local char = Players.LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+
+		-- Server-side BoatTeleport event
+		local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+		if net and net:FindFirstChild("RE/BoatTeleport") then
+			net["RE/BoatTeleport"]:FireServer(locName)
+		end
+
+		-- Direct CFrame positioning
+		local targetPos = KaitunFarmCoordinates[locName]
+		if not targetPos then
+			local areas = workspace:FindFirstChild("Areas") or workspace:FindFirstChild("Islands")
+			local a = areas and areas:FindFirstChild(locName)
+			if a then
+				targetPos = a:IsA("BasePart") and a.Position or (a.PrimaryPart and a.PrimaryPart.Position)
+			end
+		end
+
+		if targetPos then
+			task.wait(0.15)
+			hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 5, 0))
+			ensureKaitunPlatform(targetPos)
+		end
+		notif("Kaitun farming at: " .. tostring(locName), 2)
+	end)
+end
+
+local function getHighestRodTool()
+	local bestTool = nil
+	local bestScore = -1
+	local containers = { Players.LocalPlayer.Character, Players.LocalPlayer.Backpack }
+	for _, cont in ipairs(containers) do
+		if cont then
+			for _, item in ipairs(cont:GetChildren()) do
+				if item:IsA("Tool") then
+					local score = KaitunRodRanks[item.Name]
+					if not score and item.Name:lower():find("rod") then
+						score = 15
+					end
+					if score and score > bestScore then
+						bestScore = score
+						bestTool = item
+					end
+				end
+			end
+		end
+	end
+	return bestTool
+end
+
+local function doEquipBestRod()
+	pcall(function()
+		local char = Players.LocalPlayer.Character
+		if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hum then return end
+
+		local bestTool = getHighestRodTool()
+		if bestTool and bestTool.Parent ~= char then
+			hum:EquipTool(bestTool)
+			notif("Equipped: " .. bestTool.Name, 1)
+		end
+
+		local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+		if net and net:FindFirstChild("RE/EquipToolFromHotbar") then
+			net["RE/EquipToolFromHotbar"]:FireServer(1)
+		end
+	end)
+end
+
+local function doEquipBestBait()
+	pcall(function()
+		local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+		if not net or not net:FindFirstChild("RE/EquipBait") then return end
+
+		for _, bName in ipairs(KaitunBaitOrder) do
+			net["RE/EquipBait"]:FireServer(bName)
+		end
+	end)
+end
+
+local function stopKaitun()
+	_G.StartKaitun = false
+	if _G.KaitunPlatform then
+		pcall(function() _G.KaitunPlatform:Destroy() end)
+		_G.KaitunPlatform = nil
+	end
+	notif("Kaitun [BETA] Stopped", 2)
+end
+
+local function startKaitun()
+	_G.StartKaitun = true
+	notif("Kaitun [BETA] Active! Teleporting...", 2)
+
+	task.spawn(function()
+		local loc = _G.SelectedFarmLocation or "Kohana Volcano"
+		teleportToFarmSpot(loc)
+		task.wait(1.5)
+
+		local catchCounter = 0
+
+		while _G.StartKaitun do
+			local char = Players.LocalPlayer.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+			if not hrp or not hum or hum.Health <= 0 then
+				task.wait(2)
+				local newChar = Players.LocalPlayer.CharacterAdded:Wait()
+				task.wait(1)
+				teleportToFarmSpot(loc)
+				task.wait(1)
+			else
+				-- Equip Rod
+				if _G.KaitunAutoBestRod then
+					doEquipBestRod()
+				else
+					local equipped = char:FindFirstChildOfClass("Tool")
+					if not equipped or not equipped.Name:lower():find("rod") then
+						local any = getHighestRodTool()
+						if any and hum then hum:EquipTool(any) end
+					end
+				end
+
+				-- Equip Bait
+				if _G.KaitunAutoBestBait then
+					doEquipBestBait()
+				end
+
+				-- Cast Rod
+				local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+				pcall(function()
+					if net and net:FindFirstChild("RF/ChargeFishingRod") then
+						net["RF/ChargeFishingRod"]:InvokeServer(Vector2.new(0, 0), true)
+					elseif net and net:FindFirstChild("RE/ChargeFishingRod") then
+						net["RE/ChargeFishingRod"]:FireServer(Vector2.new(0, 0), true)
+					end
+				end)
+
+				local curTool = char:FindFirstChildOfClass("Tool")
+				if curTool and curTool:FindFirstChild("Handle") then
+					curTool:Activate()
+				end
+
+				-- Wait for fish bite
+				task.wait(1.2)
+
+				-- Hook and Complete Catch
+				pcall(function()
+					if net and net:FindFirstChild("RE/CatchFishCompleted") then
+						net["RE/CatchFishCompleted"]:FireServer()
+					end
+				end)
+
+				catchCounter = catchCounter + 1
+
+				-- Auto Sell Every 6 Catches
+				if catchCounter % 6 == 0 then
+					pcall(function()
+						if net and net:FindFirstChild("RF/SellAllItems") then
+							net["RF/SellAllItems"]:InvokeServer()
+						end
+					end)
+				end
+
+				task.wait(0.5)
+			end
+		end
+	end)
+end
+
+-- ============================================================================
+-- [[ SECTION: KAITUN [BETA] (EXACT DESIGN MATCH) ]]
+-- ============================================================================
+local KaitunSection = TabAuto:AddSection("Kaitun [BETA]")
+
+KaitunSection:AddDropdown({
+	Title = "Select Farm Location",
+	Options = KaitunFarmSpotsList,
+	Default = "Kohana Volcano",
+	Callback = function(val)
+		_G.SelectedFarmLocation = val
+		if _G.StartKaitun then
+			teleportToFarmSpot(val)
+		end
+	end
+})
+
+KaitunSection:AddToggle({
+	Title = "Start Kaitun",
+	Default = false,
+	Callback = function(state)
+		if state then
+			startKaitun()
+		else
+			stopKaitun()
+		end
+	end
+})
+
+KaitunSection:AddToggle({
+	Title = "Auto Equip Best Rod",
+	Default = false,
+	Callback = function(state)
+		_G.KaitunAutoBestRod = state
+		if state then
+			doEquipBestRod()
+		end
+	end
+})
+
+KaitunSection:AddToggle({
+	Title = "Auto Equip Best Bait",
+	Default = false,
+	Callback = function(state)
+		_G.KaitunAutoBestBait = state
+		if state then
+			doEquipBestBait()
+		end
+	end
+})
+
 local AutoSellSection = TabAuto:AddSection("Auto Sell")
 
 AutoSellSection:AddToggle({
@@ -2555,6 +2915,54 @@ SkinSection:AddButton({
 -- ============================================================================
 -- [[ TAB: MENU (GAME SHORTCUTS & CHEST CLAIM) ]]
 -- ============================================================================
+local MenuKaitunSection = TabMenu:AddSection("Kaitun [BETA]")
+
+MenuKaitunSection:AddDropdown({
+	Title = "Select Farm Location",
+	Options = KaitunFarmSpotsList,
+	Default = "Kohana Volcano",
+	Callback = function(val)
+		_G.SelectedFarmLocation = val
+		if _G.StartKaitun then
+			teleportToFarmSpot(val)
+		end
+	end
+})
+
+MenuKaitunSection:AddToggle({
+	Title = "Start Kaitun",
+	Default = false,
+	Callback = function(state)
+		if state then
+			startKaitun()
+		else
+			stopKaitun()
+		end
+	end
+})
+
+MenuKaitunSection:AddToggle({
+	Title = "Auto Equip Best Rod",
+	Default = false,
+	Callback = function(state)
+		_G.KaitunAutoBestRod = state
+		if state then
+			doEquipBestRod()
+		end
+	end
+})
+
+MenuKaitunSection:AddToggle({
+	Title = "Auto Equip Best Bait",
+	Default = false,
+	Callback = function(state)
+		_G.KaitunAutoBestBait = state
+		if state then
+			doEquipBestBait()
+		end
+	end
+})
+
 local MenuSection = TabMenu:AddSection("Game Shortcuts")
 MenuSection:AddButton({
 	Title = "Claim Pirate Treasure Chest",
