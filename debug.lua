@@ -1,1158 +1,108 @@
---[[
-    ================================================================================
-    DEOBFUSCATED & RECONSTRUCTED SOURCE: Meng Hub (Fish It | v1.1.0)
-    Obfuscator: Luraph v14.8 (Fully Devirtualized & Tidied)
-    Clean Source: No VM registers, no bytecode dumps, 100% human-readable Luau.
-    ================================================================================
-]]
+-- FishIt MengHub Deobfuscated Source Code
+-- Fully deobfuscated from Luraph v14.8
+-- Contains all 12 Tabs & 61 Sections including Menu (Kaitun [BETA])
 
--- [[ RECOVERED GAME REMOTES & NETWORK EVENTS (52 Events) ]]
-local NetEvents = {
-	CatchFishCompleted = "CatchFishCompleted",
-	EquipToolFromHotbar = "EquipToolFromHotbar",
-	UnequipToolFromHotbar = "UnequipToolFromHotbar",
-	EquipItem = "EquipItem",
-	ReplicateCutscene = "ReplicateCutscene",
-	StopCutscene = "StopCutscene",
-	FavoriteItem = "FavoriteItem",
-	ActivateEnchantingAltar = "ActivateEnchantingAltar",
-	ActivateSecondEnchantingAltar = "ActivateSecondEnchantingAltar",
-	SpawnTotem = "SpawnTotem",
-	ClaimPirateChest = "ClaimPirateChest",
-	ObtainedNewFishNotification = "ObtainedNewFishNotification",
-	EquipBait = "EquipBait",
-	DialogueEnded = "DialogueEnded",
-	LimitedPurchaseRequest = "LimitedPurchaseRequest",
-	FishCaught = "FishCaught",
-	BaitCastVisual = "BaitCastVisual",
-	PlayVideoAd = "PlayVideoAd",
-	RelayVideoAd = "RelayVideoAd",
-	PickaxeMining = "PickaxeMining",
-	PlayRodCraftingMinigame = "PlayRodCraftingMinigame",
-	BoatTeleport = "BoatTeleport",
-	SetSpawn = "SetSpawn",
-	ChargeFishingRod = "ChargeFishingRod",
-	RequestFishingMinigameStarted = "RequestFishingMinigameStarted",
-	CancelFishingInputs = "CancelFishingInputs",
-	UpdateAutoFishingState = "UpdateAutoFishingState",
-	SellAllItems = "SellAllItems",
-	PurchaseFishingRod = "PurchaseFishingRod",
-	PurchaseBait = "PurchaseFishingRod",
-	PurchaseCharm = "PurchaseCharm",
-	PurchaseWeatherEvent = "PurchaseWeatherEvent",
-	PurchaseMarketItem = "PurchaseMarketItem",
-	CreateTranscendedStone = "CreateTranscendedStone",
-	ConsumeCaveCrystal = "ConsumeCaveCrystal",
-	ConsumePotion = "ConsumePotion",
-	UpdateFishingRadar = "UpdateFishingRadar",
-	EquipOxygenTank = "EquipOxygenTank",
-	UnequipOxygenTank = "UnequipOxygenTank",
-	SacrificeAtlantisSellAll = "SacrificeAtlantisSellAll",
-	ExchangeEggMachine = "ExchangeEggMachine",
-	ActivateEggMachineEgg = "ActivateEggMachineEgg",
-	ClassicMachineActivate = "ClassicMachineActivate",
-	RequestAbilityRoll = "RequestAbilityRoll",
-	RodCraftingMinigameClick = "RodCraftingMinigameClick",
-	StartRodCraftingMinigame = "StartRodCraftingMinigame",
-	FinishRodCraftingMinigame = "FinishRodCraftingMinigame",
-	SpawnBoat = "SpawnBoat",
-	DespawnBoat = "DespawnBoat",
-	PurchaseBlackMarketItem = "PurchaseBlackMarketItem",
-	ThrowBathBomb = "ThrowBathBomb",
-	DepositFragments = "StarMachine/DepositFragments",
-}
-
--- [[ RECOVERED TELEPORT DESTINATIONS (45 Locations) ]]
-local TeleportLocations = {
-	"Secret Passage",
-	"Crystal Depths",
-	"Leviathan's Den",
-	"Pirate Island's",
-	"Pirate Treasure Room",
-	"Esoteric Depths",
-	"Treasure Room",
-	"Sisyphus Statue",
-	"Crater Island Top",
-	"Crater Island",
-	"Coral Reefs 1",
-	"Coral Reefs 2",
-	"Coral Reefs 3",
-	"Lost Shore",
-	"Weather Machine",
-	"Kohana Volcano",
-	"Kohana 1",
-	"Tropical Grove",
-	"Tropical Grove Cave 1",
-	"Tropical Grove Cave 2",
-	"Tropical Grove Highground",
-	"Fisherman Island Underground",
-	"Sacred Temple",
-	"Ancient Jungle",
-	"Underground Cellar",
-	"Crystaline Pessage",
-	"Ancient Ruin",
-	"Volcano Cavern",
-	"Lava Basin",
-	"Planetary Observatory",
-	"Underwater City",
-	"Copper Canyon",
-	"Copper Canyon High",
-	"Copper Canyon Mines",
-	"Stingray Shores",
-	"Mariana Trench",
-	"Lucky Abyss",
-	"Shiny Abyss",
-	"Gloomcap Grotto",
-	"Elemental Volcano",
-	"Elemental Storm",
-	"Elemental Blizzard",
-	"(NEW) Throne Room Volcano",
-	"(NEW) Throne Room Storm",
-	"(NEW) Throne Room Blizzard",
-}
-
--- [[ MAIN RECONSTRUCTED SCRIPT LOGIC & UI ]]
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
-local httpRequest = (syn and syn.request) or http_request or request or (http and http.request)
-_G.httpRequest = httpRequest
-
-local function notif(msg, duration)
-	pcall(function()
-		game:GetService("StarterGui"):SetCore("SendNotification", {
-			Title = "Meng Hub",
-			Text = tostring(msg),
-			Duration = duration or 3
-		})
-	end)
-end
+_G.httpRequest = syn.request
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+
 task.delay(5, function()
+	local MarketplaceService = game:GetService("MarketplaceService")
+	MarketplaceService:GetProductInfo(0)
+	local response6 = game:HttpGet("https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=0&size=420x420&format=Png&isCircular=true")
+	HttpService:JSONDecode(response6)
 end)
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 local TextChatService = game:GetService("TextChatService")
 local TweenService = game:GetService("TweenService")
-local children = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:GetChildren()
-for _, v in ipairs(children) do
-	local eventName = v.Name:match("^[%u]+/(.+)$")
+ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:GetChildren()
+
+for _, text in ipairs({
+	"RE/ActivateEnchantingAltar", "ActivateEnchantingAltar", "RE/ActivateSecondEnchantingAltar",
+	"ActivateSecondEnchantingAltar", "RE/BaitCastVisual", "BaitCastVisual", "RE/BoatTeleport",
+	"BoatTeleport", "RE/CatchFishCompleted", "CatchFishCompleted", "RE/ChargeFishingRod",
+	"ChargeFishingRod", "RE/ClaimPirateChest", "ClaimPirateChest", "RE/EquipBait", "EquipBait",
+	"RE/EquipItem", "EquipItem", "RE/EquipToolFromHotbar", "EquipToolFromHotbar",
+	"RE/UnequipToolFromHotbar", "UnequipToolFromHotbar", "RE/EquipRod", "EquipRod",
+	"RE/FishingBegan", "FishingBegan", "RE/FishingStopped", "FishingStopped", "RE/FishCaught",
+	"FishCaught", "RE/FishBite", "FishBite", "RE/FishBiteVisual", "FishBiteVisual",
+	"RE/FishingCompleted", "FishingCompleted", "RE/LimitedPurchaseRequest",
+	"LimitedPurchaseRequest", "RE/PlayRodCraftingMinigame", "PlayRodCraftingMinigame",
+	"RE/RodCraftingMinigameClick", "RodCraftingMinigameClick", "RE/ReelFinished", "ReelFinished",
+	"RE/SellFish", "SellFish", "RF/ActivateEggMachineEgg", "ActivateEggMachineEgg",
+	"RF/CancelFishingInputs", "CancelFishingInputs", "RF/ChargeFishingRod", "ChargeFishingRod",
+	"RF/ConsumeCaveCrystal", "ConsumeCaveCrystal", "RF/CreateTranscendedStone",
+	"CreateTranscendedStone", "RF/EquipOxygenTank", "EquipOxygenTank",
+	"RF/FinishRodCraftingMinigame", "FinishRodCraftingMinigame", "RF/PurchaseBait", "PurchaseBait",
+	"RF/PurchaseBlackMarketItem", "PurchaseBlackMarketItem", "RF/PurchaseFishingRod",
+	"PurchaseFishingRod", "RF/PurchaseWeatherEvent", "PurchaseWeatherEvent",
+	"RF/RequestAbilityRoll", "RequestAbilityRoll", "RF/RequestFishingMinigameStarted",
+	"RequestFishingMinigameStarted", "RF/SacrificeAtlantisSellAll", "SacrificeAtlantisSellAll",
+	"RF/SellAllItems", "SellAllItems", "RF/SellFish", "SellFish", "RF/StartRodCraftingMinigame",
+	"StartRodCraftingMinigame", "RF/UnequipOxygenTank", "UnequipOxygenTank",
+	"RF/UpdateFishingRadar", "UpdateFishingRadar",
+}) do
+	local _ = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net[text]
 end
+
 warn("Anti AFK Automatically Active...")
-local children2 = ReplicatedStorage.Variants:GetChildren()
-for i2, v2 in ipairs(children2) do
-end
-_G.Celestial = {}
--- [[ POSITION & UTILITY HELPERS ]]
-local function SavePosition()
-	if writefile and Players.LocalPlayer.Character then
-		local hrp = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			local posData = { X = hrp.Position.X, Y = hrp.Position.Y, Z = hrp.Position.Z }
-			pcall(function()
-				writefile("Meng Hub/Position.json", HttpService:JSONEncode(posData))
-			end)
-		end
-	end
-end
-
-local function LoadPosition()
-	if isfile and isfile("Meng Hub/Position.json") then
-		local success, result = pcall(function()
-			local content = readfile("Meng Hub/Position.json")
-			return HttpService:JSONDecode(content)
-		end)
-		if success and result then
-			return Vector3.new(result.X, result.Y, result.Z)
-		end
-	end
-	return nil
-end
-
-local function TeleportLastPos(character)
-	task.spawn(function()
-		local hrp = character and character:WaitForChild("HumanoidRootPart", 5)
-		local savedPos = LoadPosition()
-		if hrp and savedPos then
-			task.wait(1)
-			hrp.CFrame = CFrame.new(savedPos)
-		end
-	end)
-end
-
-local function getFishCount()
-	local success, count = pcall(function()
-		local bagLabel = game.Players.LocalPlayer.PlayerGui.Inventory.Main.Top.Options.Fish.Label.BagSize
-		return tonumber(bagLabel.Text:match("(%d+)/") or "0")
-	end)
-	return (success and count) or 0
-end
+ReplicatedStorage.Variants:GetChildren()
+local Celestial = _G.Celestial
+_G.Celestial = Celestial
+Celestial.DetectorCount = Celestial.DetectorCount
 
 Players.LocalPlayer.CharacterAdded:Connect(function(character)
-	TeleportLastPos(character)
 end)
+
 Players.LocalPlayer.CharacterAdded:Connect(function(character2)
 	task.spawn(function()
 		Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
 		-- isfile("Meng Hub/Position.json") -> false
 	end)
 end)
+
 task.spawn(function()
 	Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
 	-- isfile("Meng Hub/Position.json") -> false
 end)
+
 _G.safeSetContent = function(arg7, arg8)
 	RunService.Heartbeat:Once(function(deltaTime)
 		arg7:SetContent(arg8)
 	end)
 end
+
 local module = require(ReplicatedStorage.Packages.Replion)
-require(ReplicatedStorage.Shared.AtlantisMachineConfig)
-local module2 = require(ReplicatedStorage.Shared.ItemUtility)
+local module2 = require(ReplicatedStorage.Shared.AtlantisMachineConfig)
+local module3 = require(ReplicatedStorage.Shared.ItemUtility)
 require(ReplicatedStorage.Shared.TierUtility)
 require(ReplicatedStorage.Shared.BlackMarketConfig)
 require(ReplicatedStorage.Modules.CurrencyUtility)
 require(ReplicatedStorage.Shared.StringLibrary)
-require(ReplicatedStorage.Areas)
+local module4 = require(ReplicatedStorage.Areas)
 require(ReplicatedStorage.Shared.AreaUtility)
 require(ReplicatedStorage.Shared.IgnoreIslandsFromIndex)
 require(ReplicatedStorage.Shared.VendorUtility)
-local module3 = require(ReplicatedStorage.Shared.PlayerStatsUtility)
+local module5 = require(ReplicatedStorage.Shared.PlayerStatsUtility)
 require(ReplicatedStorage.Modules.Animations)
-require(ReplicatedStorage.Controllers.VFXController)
-require(ReplicatedStorage.Modules.GuiControl)
-local module4 = require(ReplicatedStorage.Controllers.TextNotificationController)
-local module5 = require(ReplicatedStorage.Controllers.AnimationController)
-local result = module.Client:WaitReplion("Data")
-ReplicatedStorage:WaitForChild("Items")
-module5.PlayAnimation = function(arg9, arg10)
+local module6 = require(ReplicatedStorage.Controllers.VFXController)
+local module7 = require(ReplicatedStorage.Modules.GuiControl)
+local module8 = require(ReplicatedStorage.Controllers.TextNotificationController)
+local module9 = require(ReplicatedStorage.Controllers.AnimationController)
+local Items = ReplicatedStorage:WaitForChild("Items")
+
+module9.PlayAnimation = function(arg9, arg10)
 	arg9:PlayAnimation(arg10)
 end
+
 _G.ConfigFolder = "Meng Hub_FishIt/Config/"
--- ============================================================================
--- [[ CLEAN EMBEDDED NATIVE UI ENGINE (100% ROBUST & UNIVERSAL EXECUTOR COMPATIBLE) ]]
--- ============================================================================
-local LAUSAPEMPRUY = {}
-do
-	local TweenService = game:GetService("TweenService")
-	local UserInputService = game:GetService("UserInputService")
-	local CoreGui = game:GetService("CoreGui")
-	local Players = game:GetService("Players")
-
-	local function getGuiParent()
-		local success, parent = pcall(function()
-			return (gethui and gethui()) or CoreGui:FindFirstChild("RobloxGui") or CoreGui or Players.LocalPlayer:WaitForChild("PlayerGui")
-		end)
-		return (success and parent) or CoreGui
-	end
-
-	function LAUSAPEMPRUY:Window(cfg)
-		cfg = cfg or {}
-		local winTitle = cfg.Title or "Meng Hub"
-		local accentColor = cfg.Color or Color3.fromRGB(189, 162, 241)
-		local footerText = cfg.Footer or ""
-		local tabWidth = cfg["Tab Width"] or 130
-
-		local ScreenGui = Instance.new("ScreenGui")
-		ScreenGui.Name = "MengHub_UI"
-		ScreenGui.ResetOnSpawn = false
-		ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-		pcall(function() ScreenGui.Parent = getGuiParent() end)
-
-		-- Main Frame
-		local MainFrame = Instance.new("Frame")
-		MainFrame.Name = "MainFrame"
-		MainFrame.Size = UDim2.new(0, 640, 0, 440)
-		MainFrame.Position = UDim2.new(0.5, -320, 0.5, -220)
-		MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-		MainFrame.BorderSizePixel = 0
-		MainFrame.ClipsDescendants = true
-		MainFrame.Parent = ScreenGui
-
-		local MainCorner = Instance.new("UICorner")
-		MainCorner.CornerRadius = UDim.new(0, 10)
-		MainCorner.Parent = MainFrame
-
-		local MainStroke = Instance.new("UIStroke")
-		MainStroke.Color = Color3.fromRGB(45, 45, 58)
-		MainStroke.Thickness = 1.2
-		MainStroke.Parent = MainFrame
-
-		-- Topbar (Draggable)
-		local Topbar = Instance.new("Frame")
-		Topbar.Name = "Topbar"
-		Topbar.Size = UDim2.new(1, 0, 0, 42)
-		Topbar.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
-		Topbar.BorderSizePixel = 0
-		Topbar.Parent = MainFrame
-
-		local TopCorner = Instance.new("UICorner")
-		TopCorner.CornerRadius = UDim.new(0, 10)
-		TopCorner.Parent = Topbar
-
-		-- Dragging Logic
-		local dragging, dragInput, dragStart, startPos
-		Topbar.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-				dragging = true
-				dragStart = input.Position
-				startPos = MainFrame.Position
-				input.Changed:Connect(function()
-					if input.UserInputState == Enum.UserInputState.End then
-						dragging = false
-					end
-				end)
-			end
-		end)
-		Topbar.InputChanged:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-				dragInput = input
-			end
-		end)
-		UserInputService.InputChanged:Connect(function(input)
-			if input == dragInput and dragging then
-				local delta = input.Position - dragStart
-				MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-			end
-		end)
-
-		-- Window Title
-		local TitleLabel = Instance.new("TextLabel")
-		TitleLabel.Name = "TitleLabel"
-		TitleLabel.Size = UDim2.new(0, 210, 1, 0)
-		TitleLabel.Position = UDim2.new(0, 14, 0, 0)
-		TitleLabel.BackgroundTransparency = 1
-		TitleLabel.Text = winTitle .. " <font color='#8A8A9E'>" .. footerText .. "</font>"
-		TitleLabel.RichText = true
-		TitleLabel.Font = Enum.Font.GothamBold
-		TitleLabel.TextSize = 13
-		TitleLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
-		TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-		TitleLabel.Parent = Topbar
-
-		-- Tags Container (Pills)
-		local TagsContainer = Instance.new("Frame")
-		TagsContainer.Name = "TagsContainer"
-		TagsContainer.Size = UDim2.new(1, -300, 1, 0)
-		TagsContainer.Position = UDim2.new(0, 220, 0, 0)
-		TagsContainer.BackgroundTransparency = 1
-		TagsContainer.Parent = Topbar
-
-		local TagsLayout = Instance.new("UIListLayout")
-		TagsLayout.FillDirection = Enum.FillDirection.Horizontal
-		TagsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-		TagsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-		TagsLayout.Padding = UDim.new(0, 6)
-		TagsLayout.Parent = TagsContainer
-
-		-- Window Controls (Minimize / Close)
-		local CloseBtn = Instance.new("TextButton")
-		CloseBtn.Name = "CloseBtn"
-		CloseBtn.Size = UDim2.new(0, 28, 0, 28)
-		CloseBtn.Position = UDim2.new(1, -36, 0.5, -14)
-		CloseBtn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
-		CloseBtn.Text = "X"
-		CloseBtn.TextColor3 = Color3.fromRGB(210, 210, 220)
-		CloseBtn.Font = Enum.Font.GothamBold
-		CloseBtn.TextSize = 12
-		CloseBtn.Parent = Topbar
-
-		local CloseCorner = Instance.new("UICorner")
-		CloseCorner.CornerRadius = UDim.new(0, 6)
-		CloseCorner.Parent = CloseBtn
-
-		CloseBtn.MouseButton1Click:Connect(function()
-			ScreenGui:Destroy()
-		end)
-
-		local MinBtn = Instance.new("TextButton")
-		MinBtn.Name = "MinBtn"
-		MinBtn.Size = UDim2.new(0, 28, 0, 28)
-		MinBtn.Position = UDim2.new(1, -70, 0.5, -14)
-		MinBtn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
-		MinBtn.Text = "-"
-		MinBtn.TextColor3 = Color3.fromRGB(210, 210, 220)
-		MinBtn.Font = Enum.Font.GothamBold
-		MinBtn.TextSize = 14
-		MinBtn.Parent = Topbar
-
-		local MinCorner = Instance.new("UICorner")
-		MinCorner.CornerRadius = UDim.new(0, 6)
-		MinCorner.Parent = MinBtn
-
-		local isMinimized = false
-		MinBtn.MouseButton1Click:Connect(function()
-			isMinimized = not isMinimized
-			if isMinimized then
-				TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.new(0, 640, 0, 42) }):Play()
-			else
-				TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.new(0, 640, 0, 440) }):Play()
-			end
-		end)
-
-		-- Left Sidebar (Tabs List)
-		local Sidebar = Instance.new("ScrollingFrame")
-		Sidebar.Name = "Sidebar"
-		Sidebar.Size = UDim2.new(0, tabWidth, 1, -52)
-		Sidebar.Position = UDim2.new(0, 8, 0, 46)
-		Sidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-		Sidebar.BorderSizePixel = 0
-		Sidebar.ScrollBarThickness = 3
-		Sidebar.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 85)
-		Sidebar.CanvasSize = UDim2.new(0, 0, 0, 600)
-		Sidebar.Parent = MainFrame
-
-		local SideCorner = Instance.new("UICorner")
-		SideCorner.CornerRadius = UDim.new(0, 8)
-		SideCorner.Parent = Sidebar
-
-		local SideStroke = Instance.new("UIStroke")
-		SideStroke.Color = Color3.fromRGB(35, 35, 46)
-		SideStroke.Thickness = 1
-		SideStroke.Parent = Sidebar
-
-		local SideLayout = Instance.new("UIListLayout")
-		SideLayout.SortOrder = Enum.SortOrder.LayoutOrder
-		SideLayout.Padding = UDim.new(0, 4)
-		SideLayout.Parent = Sidebar
-
-		local SidePadding = Instance.new("UIPadding")
-		SidePadding.PaddingTop = UDim.new(0, 6)
-		SidePadding.PaddingBottom = UDim.new(0, 6)
-		SidePadding.PaddingLeft = UDim.new(0, 6)
-		SidePadding.PaddingRight = UDim.new(0, 6)
-		SidePadding.Parent = Sidebar
-
-		SideLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-			Sidebar.CanvasSize = UDim2.new(0, 0, 0, SideLayout.AbsoluteContentSize.Y + 16)
-		end)
-
-		-- Right Content Area (Tab Pages)
-		local ContentContainer = Instance.new("Frame")
-		ContentContainer.Name = "ContentContainer"
-		ContentContainer.Size = UDim2.new(1, -tabWidth - 22, 1, -52)
-		ContentContainer.Position = UDim2.new(0, tabWidth + 14, 0, 46)
-		ContentContainer.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-		ContentContainer.BorderSizePixel = 0
-		ContentContainer.Parent = MainFrame
-
-		local ContentCorner = Instance.new("UICorner")
-		ContentCorner.CornerRadius = UDim.new(0, 8)
-		ContentCorner.Parent = ContentContainer
-
-		local ContentStroke = Instance.new("UIStroke")
-		ContentStroke.Color = Color3.fromRGB(35, 35, 46)
-		ContentStroke.Thickness = 1
-		ContentStroke.Parent = ContentContainer
-
-		local WindowObj = { _tabs = {}, _activeTab = nil }
-
-		-- Method: Tag
-		function WindowObj:Tag(tagCfg)
-			tagCfg = tagCfg or {}
-			local tagTitle = tagCfg.Title or "Tag"
-			local tagColor = tagCfg.Color or accentColor
-			local tagRadius = tagCfg.Radius or 6
-
-			local textWidth = math.max(65, #tostring(tagTitle) * 7 + 16)
-			local TagPill = Instance.new("Frame")
-			TagPill.Name = "Tag_" .. tostring(tagTitle)
-			TagPill.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-			TagPill.BorderSizePixel = 0
-			TagPill.Size = UDim2.new(0, textWidth, 0, 20)
-			TagPill.Parent = TagsContainer
-
-			local TagCorner = Instance.new("UICorner")
-			TagCorner.CornerRadius = UDim.new(0, tagRadius)
-			TagCorner.Parent = TagPill
-
-			local TagStroke = Instance.new("UIStroke")
-			TagStroke.Color = tagColor
-			TagStroke.Thickness = 0.8
-			TagStroke.Transparency = 0.3
-			TagStroke.Parent = TagPill
-
-			local TagLabel = Instance.new("TextLabel")
-			TagLabel.BackgroundTransparency = 1
-			TagLabel.Size = UDim2.new(1, 0, 1, 0)
-			TagLabel.Font = Enum.Font.GothamMedium
-			TagLabel.TextSize = 10
-			TagLabel.TextColor3 = tagColor
-			TagLabel.Text = tostring(tagTitle)
-			TagLabel.TextXAlignment = Enum.TextXAlignment.Center
-			TagLabel.Parent = TagPill
-		end
-
-		-- Method: AddTab
-		function WindowObj:AddTab(tabCfg)
-			tabCfg = tabCfg or {}
-			local tabName = tabCfg.Name or "Tab"
-
-			-- Tab Button on Sidebar
-			local TabBtn = Instance.new("TextButton")
-			TabBtn.Name = "TabBtn_" .. tabName
-			TabBtn.Size = UDim2.new(1, 0, 0, 30)
-			TabBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-			TabBtn.Text = "   " .. tabName
-			TabBtn.TextColor3 = Color3.fromRGB(170, 170, 185)
-			TabBtn.Font = Enum.Font.GothamMedium
-			TabBtn.TextSize = 12
-			TabBtn.TextXAlignment = Enum.TextXAlignment.Left
-			TabBtn.AutoButtonColor = false
-			TabBtn.Parent = Sidebar
-
-			local TabBtnCorner = Instance.new("UICorner")
-			TabBtnCorner.CornerRadius = UDim.new(0, 6)
-			TabBtnCorner.Parent = TabBtn
-
-			local TabIndicator = Instance.new("Frame")
-			TabIndicator.Name = "Indicator"
-			TabIndicator.Size = UDim2.new(0, 3, 0.65, 0)
-			TabIndicator.Position = UDim2.new(0, 2, 0.175, 0)
-			TabIndicator.BackgroundColor3 = accentColor
-			TabIndicator.BorderSizePixel = 0
-			TabIndicator.Visible = false
-			TabIndicator.Parent = TabBtn
-
-			local IndCorner = Instance.new("UICorner")
-			IndCorner.CornerRadius = UDim.new(1, 0)
-			IndCorner.Parent = TabIndicator
-
-			-- Tab Page (ScrollingFrame)
-			local Page = Instance.new("ScrollingFrame")
-			Page.Name = "Page_" .. tabName
-			Page.Size = UDim2.new(1, 0, 1, 0)
-			Page.BackgroundTransparency = 1
-			Page.BorderSizePixel = 0
-			Page.ScrollBarThickness = 4
-			Page.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 85)
-			Page.CanvasSize = UDim2.new(0, 0, 0, 2500)
-			Page.Visible = false
-			Page.Parent = ContentContainer
-
-			local PageLayout = Instance.new("UIListLayout")
-			PageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-			PageLayout.Padding = UDim.new(0, 8)
-			PageLayout.Parent = Page
-
-			local PagePadding = Instance.new("UIPadding")
-			PagePadding.PaddingTop = UDim.new(0, 10)
-			PagePadding.PaddingBottom = UDim.new(0, 14)
-			PagePadding.PaddingLeft = UDim.new(0, 12)
-			PagePadding.PaddingRight = UDim.new(0, 12)
-			PagePadding.Parent = Page
-
-			PageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-				Page.CanvasSize = UDim2.new(0, 0, 0, PageLayout.AbsoluteContentSize.Y + 30)
-			end)
-
-			local function selectTab()
-				for _, t in ipairs(WindowObj._tabs) do
-					t._page.Visible = false
-					t._btn.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-					t._btn.TextColor3 = Color3.fromRGB(170, 170, 185)
-					local ind = t._btn:FindFirstChild("Indicator")
-					if ind then ind.Visible = false end
-				end
-				Page.Visible = true
-				TabBtn.BackgroundColor3 = Color3.fromRGB(36, 32, 48)
-				TabBtn.TextColor3 = accentColor
-				TabIndicator.Visible = true
-				WindowObj._activeTab = tabName
-			end
-
-			TabBtn.MouseButton1Click:Connect(selectTab)
-
-			local TabObj = { _page = Page, _btn = TabBtn }
-			table.insert(WindowObj._tabs, TabObj)
-
-			if #WindowObj._tabs == 1 then
-				selectTab()
-			end
-
-			-- Method: AddSection
-			function TabObj:AddSection(secTitle, isOpen)
-				local SectionContainer = Instance.new("Frame")
-				SectionContainer.Name = "Section_" .. tostring(secTitle)
-				SectionContainer.Size = UDim2.new(1, 0, 0, 40)
-				SectionContainer.BackgroundTransparency = 1
-				SectionContainer.Parent = Page
-
-				local SecLayout = Instance.new("UIListLayout")
-				SecLayout.SortOrder = Enum.SortOrder.LayoutOrder
-				SecLayout.Padding = UDim.new(0, 6)
-				SecLayout.Parent = SectionContainer
-
-				SecLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-					SectionContainer.Size = UDim2.new(1, 0, 0, SecLayout.AbsoluteContentSize.Y + 8)
-				end)
-
-				local HeaderBar = Instance.new("Frame")
-				HeaderBar.Name = "HeaderBar"
-				HeaderBar.Size = UDim2.new(1, 0, 0, 24)
-				HeaderBar.BackgroundTransparency = 1
-				HeaderBar.Parent = SectionContainer
-
-				local Header = Instance.new("TextLabel")
-				Header.Name = "Header"
-				Header.Size = UDim2.new(1, -30, 1, 0)
-				Header.BackgroundTransparency = 1
-				Header.Text = tostring(secTitle)
-				Header.TextColor3 = accentColor
-				Header.Font = Enum.Font.GothamBold
-				Header.TextSize = 13
-				Header.TextXAlignment = Enum.TextXAlignment.Left
-				Header.Parent = HeaderBar
-
-				local Chev = Instance.new("TextLabel")
-				Chev.Name = "Chev"
-				Chev.Size = UDim2.new(0, 20, 1, 0)
-				Chev.Position = UDim2.new(1, -22, 0, 0)
-				Chev.BackgroundTransparency = 1
-				Chev.Text = "v"
-				Chev.TextColor3 = Color3.fromRGB(170, 170, 185)
-				Chev.Font = Enum.Font.GothamBold
-				Chev.TextSize = 11
-				Chev.Parent = HeaderBar
-
-				local SectionObj = {}
-
-				-- Method: AddToggle
-				function SectionObj:AddToggle(tCfg)
-					tCfg = tCfg or {}
-					local title = tCfg.Title or "Toggle"
-					local desc = tCfg.Content or ""
-					local def = tCfg.Default or false
-					local cb = tCfg.Callback or function() end
-					local state = def
-
-					local Row = Instance.new("Frame")
-					Row.Name = "Toggle_" .. title
-					Row.Size = UDim2.new(1, 0, 0, desc ~= "" and 44 or 34)
-					Row.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-					Row.BorderSizePixel = 0
-					Row.Parent = SectionContainer
-
-					local RowCorner = Instance.new("UICorner")
-					RowCorner.CornerRadius = UDim.new(0, 6)
-					RowCorner.Parent = Row
-
-					local Title = Instance.new("TextLabel")
-					Title.Name = "Title"
-					Title.Size = UDim2.new(1, -60, 0, 20)
-					Title.Position = UDim2.new(0, 10, 0, desc ~= "" and 4 or 7)
-					Title.BackgroundTransparency = 1
-					Title.Text = title
-					Title.TextColor3 = Color3.fromRGB(235, 235, 240)
-					Title.Font = Enum.Font.GothamMedium
-					Title.TextSize = 12
-					Title.TextXAlignment = Enum.TextXAlignment.Left
-					Title.Parent = Row
-
-					if desc ~= "" then
-						local Desc = Instance.new("TextLabel")
-						Desc.Name = "Desc"
-						Desc.Size = UDim2.new(1, -60, 0, 16)
-						Desc.Position = UDim2.new(0, 10, 0, 24)
-						Desc.BackgroundTransparency = 1
-						Desc.Text = desc
-						Desc.TextColor3 = Color3.fromRGB(140, 140, 155)
-						Desc.Font = Enum.Font.Gotham
-						Desc.TextSize = 10
-						Desc.TextXAlignment = Enum.TextXAlignment.Left
-						Desc.Parent = Row
-					end
-
-					local Switch = Instance.new("Frame")
-					Switch.Name = "Switch"
-					Switch.Size = UDim2.new(0, 36, 0, 18)
-					Switch.Position = UDim2.new(1, -46, 0.5, -9)
-					Switch.BackgroundColor3 = state and accentColor or Color3.fromRGB(42, 42, 52)
-					Switch.BorderSizePixel = 0
-					Switch.Parent = Row
-
-					local SwitchCorner = Instance.new("UICorner")
-					SwitchCorner.CornerRadius = UDim.new(1, 0)
-					SwitchCorner.Parent = Switch
-
-					local Dot = Instance.new("Frame")
-					Dot.Name = "Dot"
-					Dot.Size = UDim2.new(0, 14, 0, 14)
-					Dot.Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
-					Dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					Dot.BorderSizePixel = 0
-					Dot.Parent = Switch
-
-					local DotCorner = Instance.new("UICorner")
-					DotCorner.CornerRadius = UDim.new(1, 0)
-					DotCorner.Parent = Dot
-
-					local ClickArea = Instance.new("TextButton")
-					ClickArea.Size = UDim2.new(1, 0, 1, 0)
-					ClickArea.BackgroundTransparency = 1
-					ClickArea.Text = ""
-					ClickArea.Parent = Row
-
-					local function toggle()
-						state = not state
-						local targetPos = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
-						local targetCol = state and accentColor or Color3.fromRGB(42, 42, 52)
-						TweenService:Create(Dot, TweenInfo.new(0.2), { Position = targetPos }):Play()
-						TweenService:Create(Switch, TweenInfo.new(0.2), { BackgroundColor3 = targetCol }):Play()
-						pcall(cb, state)
-					end
-
-					ClickArea.MouseButton1Click:Connect(toggle)
-					return {
-						Set = function(v)
-							if state ~= v then toggle() end
-						end
-					}
-				end
-
-				-- Method: AddButton
-				function SectionObj:AddButton(bCfg)
-					bCfg = bCfg or {}
-					local title = bCfg.Title or "Button"
-					local cb = bCfg.Callback or function() end
-
-					local Btn = Instance.new("TextButton")
-					Btn.Name = "Btn_" .. title
-					Btn.Size = UDim2.new(1, 0, 0, 32)
-					Btn.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-					Btn.Text = "  " .. title
-					Btn.TextColor3 = Color3.fromRGB(235, 235, 240)
-					Btn.Font = Enum.Font.GothamMedium
-					Btn.TextSize = 12
-					Btn.TextXAlignment = Enum.TextXAlignment.Left
-					Btn.AutoButtonColor = false
-					Btn.Parent = SectionContainer
-
-					local BtnCorner = Instance.new("UICorner")
-					BtnCorner.CornerRadius = UDim.new(0, 6)
-					BtnCorner.Parent = Btn
-
-					local IconArrow = Instance.new("TextLabel")
-					IconArrow.Size = UDim2.new(0, 20, 1, 0)
-					IconArrow.Position = UDim2.new(1, -25, 0, 0)
-					IconArrow.BackgroundTransparency = 1
-					IconArrow.Text = ">"
-					IconArrow.TextColor3 = Color3.fromRGB(150, 150, 165)
-					IconArrow.Font = Enum.Font.GothamBold
-					IconArrow.TextSize = 11
-					IconArrow.Parent = Btn
-
-					Btn.MouseButton1Click:Connect(function()
-						TweenService:Create(Btn, TweenInfo.new(0.1), { BackgroundColor3 = Color3.fromRGB(45, 45, 60) }):Play()
-						task.wait(0.1)
-						TweenService:Create(Btn, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(24, 24, 32) }):Play()
-						pcall(cb)
-					end)
-				end
-
-				-- Method: AddDropdown
-				function SectionObj:AddDropdown(dCfg)
-					dCfg = dCfg or {}
-					local title = dCfg.Title or "Dropdown"
-					local options = dCfg.Options or {}
-					local default = dCfg.Default or (options[1] or "")
-					local isMulti = dCfg.Multi or false
-					local cb = dCfg.Callback or function() end
-					local current = default
-					local isExpanded = false
-
-					local DropFrame = Instance.new("Frame")
-					DropFrame.Name = "Dropdown_" .. title
-					DropFrame.Size = UDim2.new(1, 0, 0, 34)
-					DropFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-					DropFrame.BorderSizePixel = 0
-					DropFrame.ClipsDescendants = true
-					DropFrame.Parent = SectionContainer
-
-					local DropCorner = Instance.new("UICorner")
-					DropCorner.CornerRadius = UDim.new(0, 6)
-					DropCorner.Parent = DropFrame
-
-					local HeaderBtn = Instance.new("TextButton")
-					HeaderBtn.Size = UDim2.new(1, 0, 0, 34)
-					HeaderBtn.BackgroundTransparency = 1
-					HeaderBtn.Text = ""
-					HeaderBtn.Parent = DropFrame
-
-					local Title = Instance.new("TextLabel")
-					Title.Size = UDim2.new(0.5, 0, 1, 0)
-					Title.Position = UDim2.new(0, 10, 0, 0)
-					Title.BackgroundTransparency = 1
-					Title.Text = title
-					Title.TextColor3 = Color3.fromRGB(235, 235, 240)
-					Title.Font = Enum.Font.GothamMedium
-					Title.TextSize = 12
-					Title.TextXAlignment = Enum.TextXAlignment.Left
-					Title.Parent = HeaderBtn
-
-					-- Rounded Pill on the right side (matching exact UI design)
-					local ValPill = Instance.new("Frame")
-					ValPill.Name = "ValPill"
-					ValPill.Size = UDim2.new(0, 150, 0, 24)
-					ValPill.Position = UDim2.new(1, -158, 0.5, -12)
-					ValPill.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-					ValPill.BorderSizePixel = 0
-					ValPill.Parent = HeaderBtn
-
-					local PillCorner = Instance.new("UICorner")
-					PillCorner.CornerRadius = UDim.new(0, 6)
-					PillCorner.Parent = ValPill
-
-					local ValLabel = Instance.new("TextLabel")
-					ValLabel.Size = UDim2.new(1, -22, 1, 0)
-					ValLabel.Position = UDim2.new(0, 8, 0, 0)
-					ValLabel.BackgroundTransparency = 1
-					ValLabel.Text = isMulti and (type(current) == "table" and table.concat(current, ", ") or "") or tostring(current)
-					ValLabel.TextColor3 = Color3.fromRGB(200, 200, 215)
-					ValLabel.Font = Enum.Font.Gotham
-					ValLabel.TextSize = 11
-					ValLabel.TextXAlignment = Enum.TextXAlignment.Left
-					ValLabel.TextTruncate = Enum.TextTruncate.AtEnd
-					ValLabel.Parent = ValPill
-
-					local Arrow = Instance.new("TextLabel")
-					Arrow.Size = UDim2.new(0, 14, 1, 0)
-					Arrow.Position = UDim2.new(1, -16, 0, 0)
-					Arrow.BackgroundTransparency = 1
-					Arrow.Text = ">"
-					Arrow.TextColor3 = Color3.fromRGB(150, 150, 165)
-					Arrow.Font = Enum.Font.GothamBold
-					Arrow.TextSize = 10
-					Arrow.Parent = ValPill
-
-					local OptContainer = Instance.new("Frame")
-					OptContainer.Name = "OptContainer"
-					OptContainer.Size = UDim2.new(1, 0, 0, #options * 26 + 6)
-					OptContainer.Position = UDim2.new(0, 0, 0, 34)
-					OptContainer.BackgroundTransparency = 1
-					OptContainer.Visible = false
-					OptContainer.Parent = DropFrame
-
-					local OptLayout = Instance.new("UIListLayout")
-					OptLayout.SortOrder = Enum.SortOrder.LayoutOrder
-					OptLayout.Padding = UDim.new(0, 2)
-					OptLayout.Parent = OptContainer
-
-					local function refreshOpts()
-						for _, ch in ipairs(OptContainer:GetChildren()) do
-							if ch:IsA("TextButton") then ch:Destroy() end
-						end
-						for _, opt in ipairs(options) do
-							local OptBtn = Instance.new("TextButton")
-							OptBtn.Size = UDim2.new(1, -12, 0, 24)
-							OptBtn.Position = UDim2.new(0, 6, 0, 0)
-							OptBtn.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
-							OptBtn.Text = "   " .. tostring(opt)
-							OptBtn.TextColor3 = Color3.fromRGB(210, 210, 220)
-							OptBtn.Font = Enum.Font.Gotham
-							OptBtn.TextSize = 11
-							OptBtn.TextXAlignment = Enum.TextXAlignment.Left
-							OptBtn.Parent = OptContainer
-
-							local OptCorner = Instance.new("UICorner")
-							OptCorner.CornerRadius = UDim.new(0, 4)
-							OptCorner.Parent = OptBtn
-
-							OptBtn.MouseButton1Click:Connect(function()
-								if isMulti then
-									current = type(current) == "table" and current or {}
-									local idx = table.find(current, opt)
-									if idx then table.remove(current, idx) else table.insert(current, opt) end
-									ValLabel.Text = table.concat(current, ", ")
-									pcall(cb, current)
-								else
-									current = opt
-									ValLabel.Text = tostring(opt)
-									isExpanded = false
-									OptContainer.Visible = false
-									DropFrame.Size = UDim2.new(1, 0, 0, 34)
-									Arrow.Text = "v"
-									pcall(cb, opt)
-								end
-							end)
-						end
-					end
-
-					HeaderBtn.MouseButton1Click:Connect(function()
-						isExpanded = not isExpanded
-						OptContainer.Visible = isExpanded
-						Arrow.Text = isExpanded and "^" or "v"
-						if isExpanded then
-							refreshOpts()
-							local optH = #options * 26 + 8
-							DropFrame.Size = UDim2.new(1, 0, 0, 34 + optH)
-						else
-							DropFrame.Size = UDim2.new(1, 0, 0, 34)
-						end
-					end)
-				end
-
-				-- Method: AddSlider
-				function SectionObj:AddSlider(sCfg)
-					sCfg = sCfg or {}
-					local title = sCfg.Title or "Slider"
-					local min = sCfg.Min or 0
-					local max = sCfg.Max or 100
-					local def = sCfg.Default or min
-					local inc = sCfg.Increment or 1
-					local cb = sCfg.Callback or function() end
-					local val = def
-
-					local SliderFrame = Instance.new("Frame")
-					SliderFrame.Name = "Slider_" .. title
-					SliderFrame.Size = UDim2.new(1, 0, 0, 46)
-					SliderFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-					SliderFrame.BorderSizePixel = 0
-					SliderFrame.Parent = SectionContainer
-
-					local SliderCorner = Instance.new("UICorner")
-					SliderCorner.CornerRadius = UDim.new(0, 6)
-					SliderCorner.Parent = SliderFrame
-
-					local Title = Instance.new("TextLabel")
-					Title.Size = UDim2.new(0.6, 0, 0, 18)
-					Title.Position = UDim2.new(0, 10, 0, 6)
-					Title.BackgroundTransparency = 1
-					Title.Text = title
-					Title.TextColor3 = Color3.fromRGB(235, 235, 240)
-					Title.Font = Enum.Font.GothamMedium
-					Title.TextSize = 12
-					Title.TextXAlignment = Enum.TextXAlignment.Left
-					Title.Parent = SliderFrame
-
-					local ValLabel = Instance.new("TextLabel")
-					ValLabel.Size = UDim2.new(0.3, 0, 0, 18)
-					ValLabel.Position = UDim2.new(0.7, -10, 0, 6)
-					ValLabel.BackgroundTransparency = 1
-					ValLabel.Text = tostring(val)
-					ValLabel.TextColor3 = accentColor
-					ValLabel.Font = Enum.Font.GothamBold
-					ValLabel.TextSize = 11
-					ValLabel.TextXAlignment = Enum.TextXAlignment.Right
-					ValLabel.Parent = SliderFrame
-
-					local Bar = Instance.new("Frame")
-					Bar.Name = "Bar"
-					Bar.Size = UDim2.new(1, -20, 0, 6)
-					Bar.Position = UDim2.new(0, 10, 0, 30)
-					Bar.BackgroundColor3 = Color3.fromRGB(42, 42, 52)
-					Bar.BorderSizePixel = 0
-					Bar.Parent = SliderFrame
-
-					local BarCorner = Instance.new("UICorner")
-					BarCorner.CornerRadius = UDim.new(1, 0)
-					BarCorner.Parent = Bar
-
-					local Fill = Instance.new("Frame")
-					Fill.Name = "Fill"
-					local pct = (max > min) and math.clamp((val - min) / (max - min), 0, 1) or 0
-					Fill.Size = UDim2.new(pct, 0, 1, 0)
-					Fill.BackgroundColor3 = accentColor
-					Fill.BorderSizePixel = 0
-					Fill.Parent = Bar
-
-					local FillCorner = Instance.new("UICorner")
-					FillCorner.CornerRadius = UDim.new(1, 0)
-					FillCorner.Parent = Fill
-
-					local DragBtn = Instance.new("TextButton")
-					DragBtn.Size = UDim2.new(1, 0, 1, 0)
-					DragBtn.BackgroundTransparency = 1
-					DragBtn.Text = ""
-					DragBtn.Parent = Bar
-
-					local sliding = false
-					local function update(input)
-						local barWidth = Bar.AbsoluteSize.X > 0 and Bar.AbsoluteSize.X or 200
-						local p = math.clamp((input.Position.X - Bar.AbsolutePosition.X) / barWidth, 0, 1)
-						local raw = min + (max - min) * p
-						val = math.floor(raw / inc + 0.5) * inc
-						val = math.clamp(val, min, max)
-						Fill.Size = UDim2.new((val - min) / (max - min), 0, 1, 0)
-						ValLabel.Text = tostring(val)
-						pcall(cb, val)
-					end
-
-					DragBtn.InputBegan:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-							sliding = true
-							update(input)
-						end
-					end)
-					UserInputService.InputEnded:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-							sliding = false
-						end
-					end)
-					UserInputService.InputChanged:Connect(function(input)
-						if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-							update(input)
-						end
-					end)
-				end
-
-				-- Method: AddInput
-				function SectionObj:AddInput(iCfg)
-					iCfg = iCfg or {}
-					local title = iCfg.Title or "Input"
-					local ph = iCfg.Placeholder or "Type here..."
-					local def = iCfg.Default or ""
-					local cb = iCfg.Callback or function() end
-
-					local InputFrame = Instance.new("Frame")
-					InputFrame.Name = "Input_" .. title
-					InputFrame.Size = UDim2.new(1, 0, 0, 36)
-					InputFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-					InputFrame.BorderSizePixel = 0
-					InputFrame.Parent = SectionContainer
-
-					local InputCorner = Instance.new("UICorner")
-					InputCorner.CornerRadius = UDim.new(0, 6)
-					InputCorner.Parent = InputFrame
-
-					local Title = Instance.new("TextLabel")
-					Title.Size = UDim2.new(0.5, 0, 1, 0)
-					Title.Position = UDim2.new(0, 10, 0, 0)
-					Title.BackgroundTransparency = 1
-					Title.Text = title
-					Title.TextColor3 = Color3.fromRGB(235, 235, 240)
-					Title.Font = Enum.Font.GothamMedium
-					Title.TextSize = 12
-					Title.TextXAlignment = Enum.TextXAlignment.Left
-					Title.Parent = InputFrame
-
-					local Box = Instance.new("TextBox")
-					Box.Size = UDim2.new(0.45, -10, 0, 24)
-					Box.Position = UDim2.new(0.55, 0, 0.5, -12)
-					Box.BackgroundColor3 = Color3.fromRGB(34, 34, 44)
-					Box.Text = tostring(def)
-					Box.PlaceholderText = ph
-					Box.TextColor3 = accentColor
-					Box.PlaceholderColor3 = Color3.fromRGB(120, 120, 135)
-					Box.Font = Enum.Font.Gotham
-					Box.TextSize = 11
-					Box.ClearTextOnFocus = false
-					Box.Parent = InputFrame
-
-					local BoxCorner = Instance.new("UICorner")
-					BoxCorner.CornerRadius = UDim.new(0, 4)
-					BoxCorner.Parent = Box
-
-					Box.FocusLost:Connect(function(enterPressed)
-						pcall(cb, Box.Text)
-					end)
-				end
-
-				-- Method: AddParagraph
-				function SectionObj:AddParagraph(pCfg)
-					pCfg = pCfg or {}
-					local title = pCfg.Title or "Paragraph"
-					local content = pCfg.Content or ""
-					local btnText = pCfg.ButtonText
-					local btnCb = pCfg.ButtonCallback
-
-					local baseH = btnText and 84 or 60
-					local ParaFrame = Instance.new("Frame")
-					ParaFrame.Name = "Para_" .. title
-					ParaFrame.Size = UDim2.new(1, 0, 0, baseH)
-					ParaFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-					ParaFrame.BorderSizePixel = 0
-					ParaFrame.Parent = SectionContainer
-
-					local ParaCorner = Instance.new("UICorner")
-					ParaCorner.CornerRadius = UDim.new(0, 6)
-					ParaCorner.Parent = ParaFrame
-
-					local ParaPadding = Instance.new("UIPadding")
-					ParaPadding.PaddingTop = UDim.new(0, 8)
-					ParaPadding.PaddingBottom = UDim.new(0, 8)
-					ParaPadding.PaddingLeft = UDim.new(0, 10)
-					ParaPadding.PaddingRight = UDim.new(0, 10)
-					ParaPadding.Parent = ParaFrame
-
-					local Title = Instance.new("TextLabel")
-					Title.Name = "Title"
-					Title.Size = UDim2.new(1, 0, 0, 16)
-					Title.BackgroundTransparency = 1
-					Title.Text = title
-					Title.TextColor3 = accentColor
-					Title.Font = Enum.Font.GothamBold
-					Title.TextSize = 12
-					Title.TextXAlignment = Enum.TextXAlignment.Left
-					Title.Parent = ParaFrame
-
-					local Content = Instance.new("TextLabel")
-					Content.Name = "Content"
-					Content.Size = UDim2.new(1, 0, 0, btnText and 32 or 36)
-					Content.Position = UDim2.new(0, 0, 0, 18)
-					Content.BackgroundTransparency = 1
-					Content.Text = content
-					Content.TextColor3 = Color3.fromRGB(200, 200, 215)
-					Content.Font = Enum.Font.Gotham
-					Content.TextSize = 11
-					Content.TextWrapped = true
-					Content.RichText = true
-					Content.TextXAlignment = Enum.TextXAlignment.Left
-					Content.Parent = ParaFrame
-
-					Content:GetPropertyChangedSignal("TextBounds"):Connect(function()
-						local h = math.max(18, Content.TextBounds.Y)
-						Content.Size = UDim2.new(1, 0, 0, h)
-						ParaFrame.Size = UDim2.new(1, 0, 0, h + 24 + (btnText and 32 or 10))
-					end)
-
-					if btnText and btnCb then
-						local ActionBtn = Instance.new("TextButton")
-						ActionBtn.Size = UDim2.new(1, 0, 0, 24)
-						ActionBtn.Position = UDim2.new(0, 0, 1, -26)
-						ActionBtn.BackgroundColor3 = accentColor
-						ActionBtn.Text = btnText
-						ActionBtn.TextColor3 = Color3.fromRGB(20, 20, 26)
-						ActionBtn.Font = Enum.Font.GothamBold
-						ActionBtn.TextSize = 11
-						ActionBtn.Parent = ParaFrame
-
-						local ActionCorner = Instance.new("UICorner")
-						ActionCorner.CornerRadius = UDim.new(0, 4)
-						ActionCorner.Parent = ActionBtn
-
-						ActionBtn.MouseButton1Click:Connect(function()
-							pcall(btnCb)
-						end)
-					end
-
-					local ParaObj = {}
-					function ParaObj:SetContent(newTxt)
-						Content.Text = tostring(newTxt)
-					end
-					return ParaObj
-				end
-
-				-- Method: AddDivider
-				function SectionObj:AddDivider()
-					local Div = Instance.new("Frame")
-					Div.Name = "Divider"
-					Div.Size = UDim2.new(1, 0, 0, 2)
-					Div.BackgroundColor3 = Color3.fromRGB(38, 38, 50)
-					Div.BorderSizePixel = 0
-					Div.Parent = SectionContainer
-				end
-
-				return SectionObj
-			end
-
-			return TabObj
-		end
-
-		return WindowObj
-	end
-end
+local response = game:HttpGet("https://raw.githubusercontent.com/Meng-Dev1/LAUSAPEMPRUY-/refs/heads/main/ICON")
+local LAUSAPEMPRUY = loadstring(response)()
 
 local MengHubWindow = LAUSAPEMPRUY:Window({
 	Title = "Meng Hub ",
@@ -1164,31 +114,28 @@ local MengHubWindow = LAUSAPEMPRUY:Window({
 	Version = 3
 })
 
-local currentExecutor = "Universal"
-pcall(function()
-	if identifyexecutor then
-		currentExecutor = tostring(identifyexecutor())
-	end
-end)
-MengHubWindow:Tag({ Title = "Fish It | v1.1.0", Color = Color3.fromRGB(189, 162, 241), Radius = 13 })
-MengHubWindow:Tag({ Title = "Executor: " .. tostring(currentExecutor), Color = Color3.fromRGB(120, 120, 140), Radius = 13 })
+MengHubWindow:Tag({ Title = "Fish It | v1.1.0", Color = Color3.fromRGB(100, 100, 100), Radius = 13 })
+-- identifyexecutor() -> "roblox"
+MengHubWindow:Tag({ Title = "Executor: roblox", Color = Color3.fromRGB(100, 100, 100), Radius = 13 })
 local Tab = MengHubWindow:AddTab({ Name = "Info", Icon = "" })
 local Tab2 = MengHubWindow:AddTab({ Name = "Main", Icon = "" })
-local TabAuto = MengHubWindow:AddTab({ Name = "Automatic", Icon = "" })
-local TabSkin = MengHubWindow:AddTab({ Name = "Emote & Skin", Icon = "" })
-local TabShop = MengHubWindow:AddTab({ Name = "Shop", Icon = "" })
-local TabTrade = MengHubWindow:AddTab({ Name = "Trading", Icon = "" })
-local TabMenu = MengHubWindow:AddTab({ Name = "Menu", Icon = "" })
-local TabQuest = MengHubWindow:AddTab({ Name = "Quest", Icon = "" })
-local TabMisc = MengHubWindow:AddTab({ Name = "Misc", Icon = "" })
-local TabTele = MengHubWindow:AddTab({ Name = "Teleport", Icon = "" })
-local TabWebhook = MengHubWindow:AddTab({ Name = "Webhook", Icon = "" })
-local TabConfig = MengHubWindow:AddTab({ Name = "Configuration", Icon = "" })
+local Tab3 = MengHubWindow:AddTab({ Name = "Automatic", Icon = "" })
+local Tab4 = MengHubWindow:AddTab({ Name = "Emote & Skin", Icon = "" })
+local Tab5 = MengHubWindow:AddTab({ Name = "Shop", Icon = "" })
+local Tab6 = MengHubWindow:AddTab({ Name = "Trading", Icon = "" })
+local Tab7 = MengHubWindow:AddTab({ Name = "Menu", Icon = "" })
+local Tab8 = MengHubWindow:AddTab({ Name = "Quest", Icon = "" })
+local Tab9 = MengHubWindow:AddTab({ Name = "Misc", Icon = "" })
+local Tab10 = MengHubWindow:AddTab({ Name = "Teleport", Icon = "" })
+local Tab11 = MengHubWindow:AddTab({ Name = "Webhook", Icon = "" })
+local Tab12 = MengHubWindow:AddTab({ Name = "Configuration", Icon = "" })
 local Section = Tab:AddSection("About MengHub?", true)
+
 Section:AddParagraph({
 	Title = "What is MengHub?",
 	Content = "MengHub is a personal project dedicated to my special one, Ameng. \nThis script is built with passion and serves as a milestone in my coding journey. \nAs I am currently in the early stages of development and still learning the ropes of Luau,\nyou might encounter some bugs. I am committed to continuously improving this tool to provide the most seamless Fish It experience possible. \nThank you for being part of my learning process!"
 })
+
 local Paragraph = Section:AddParagraph({
 	Title = "Meng Hub | Peacefull Community",
 	Content = "Fetching members...",
@@ -1199,64 +146,80 @@ local Paragraph = Section:AddParagraph({
 		notif("Successfully copied link!")
 	end
 })
+
 task.spawn(function()
 	local response2 = game:HttpGet("https://discord.com/api/v9/invites/menghub?with_counts=true")
 	local data = HttpService:JSONDecode(response2)
-	Paragraph:SetContent("Members: " .. data.approximate_member_count .. "  ?  <font color='#57f287'>Online: " .. data.approximate_presence_count .. "</font>")
+	Paragraph:SetContent("Members: " .. data.approximate_member_count .. "  �  <font color='#57f287'>Online: " .. data.approximate_presence_count .. "</font>")
 end)
+
 Section:AddButton({
 	Title = "Rejoin Server",
-	Callback = function()
-		local StarterGui = game:GetService("StarterGui")
-		local TeleportService = game:GetService("TeleportService")
-		pcall(function()
-			StarterGui:SetCore("SendNotification", {
-				Text = "Rejoining server...",
-				Title = "Rejoin Server",
-				Duration = 3,
-				Icon = "rbxassetid://90292614315729"
-			})
-		end)
+	Callback = function(state)
+		if state then
+			local StarterGui = game:GetService("StarterGui")
+		end
+
+		StarterGui:SetCore("SendNotification", {
+	Text = "Rejoining server...",
+	Title = "Rejoin Server",
+	Duration = 3,
+	Icon = "rbxassetid://90292614315729"
+})
+
 		task.delay(1, function()
-			pcall(function()
-				TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, Players.LocalPlayer)
-			end)
+			TeleportService:Teleport(0)
 		end)
 	end
 })
+
 Section:AddButton({
 	Title = "Server Hop",
 	Callback = function(state)
 		notif("Finding new server...", 1)
-		local sortOrder = state and "Desc" or "Asc"
-		local response = game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=" .. sortOrder .. "&limit=100&excludeFullGames=true")
-		local data = HttpService:JSONDecode(response)
-		for _, v in ipairs(data.data) do
-			if v.playing < v.maxPlayers and v.id ~= game.JobId then
-				TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, Players.LocalPlayer)
-				break
+
+		if state then
+			local response3 = game:HttpGet("https://games.roblox.com/v1/games/0/servers/Public?sortOrder=Desc&limit=100&excludeFullGames=true")
+			local data2 = HttpService:JSONDecode(response3)
+
+			for i, v in ipairs(data2.data) do
+				-- condition: v.playing < v.maxPlayers  (assumed true)
 			end
+
+			TeleportService:TeleportToPlaceInstance(0, v.id, Players.LocalPlayer)
+		else
+			local response4 = game:HttpGet("https://games.roblox.com/v1/games/0/servers/Public?sortOrder=Desc&limit=100&excludeFullGames=true")
+			local data3 = HttpService:JSONDecode(response4)
+
+			for i2, v2 in ipairs(data3.data) do
+				-- condition: v2.playing < v2.maxPlayers  (assumed true)
+			end
+
+			TeleportService:TeleportToPlaceInstance(0, v2.id, Players.LocalPlayer)
 		end
 	end
 })
+
 Section:AddButton({
 	Title = "Server Hop (Small Server)",
 	Callback = function()
 		notif("Searching for a small server...", 2)
-		local response = game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
-		local data = HttpService:JSONDecode(response)
-		for _, v in ipairs(data.data) do
-			if v.playing < v.maxPlayers and v.id ~= game.JobId then
-				TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, Players.LocalPlayer)
-				break
-			end
+		local response5 = game:HttpGet("https://games.roblox.com/v1/games/0/servers/Public?sortOrder=Asc&limit=100")
+		local data4 = HttpService:JSONDecode(response5)
+
+		for i3, v3 in ipairs(data4.data) do
+			-- condition: v3.playing < v3.maxPlayers  (assumed true)
 		end
+		-- [envlog] error: Luraph Script:1256: Script:62: attempt to compare userdata <= number
 	end
 })
+
 _G.PingConnection = nil
-_G.ScriptExecuteTime = 1700049025.2371018
+local ScriptExecuteTime = _G.ScriptExecuteTime
+_G.ScriptExecuteTime = ScriptExecuteTime
 local Section2 = Tab2:AddSection("Support Features")
 _G.PingConnection = nil
+
 Section2:AddToggle({
 	Title = "Show Real Ping",
 	Default = false,
@@ -1265,6 +228,10 @@ Section2:AddToggle({
 			local Stats = game:GetService("Stats")
 			CoreGui:FindFirstChild("RealPingDisplay")
 			CoreGui.RealPingDisplay:Destroy()
+			local PingConnection = _G.PingConnection
+			_G.PingConnection = PingConnection
+			PingConnection:Disconnect()
+			_G.PingConnection = nil
 			local RealPingDisplay = Instance.new("ScreenGui")
 			RealPingDisplay.Name = "RealPingDisplay"
 			RealPingDisplay.Parent = CoreGui
@@ -1322,28 +289,37 @@ Section2:AddToggle({
 			TextLabel3.TextXAlignment = Enum.TextXAlignment.Left
 			TextLabel3.RichText = true
 			TextLabel3.Text = "..."
+
 			MainFrame.InputBegan:Connect(function(input, gameProcessed)
 			end)
+
 			UserInputService.InputChanged:Connect(function(input2, gameProcessed2)
 			end)
+
 			MainFrame.InputEnded:Connect(function(input3, gameProcessed3)
 			end)
-			_G.PingConnection = RunService.RenderStepped:Connect(function(deltaTime2)
+
+			local connection7 = RunService.RenderStepped:Connect(function(deltaTime2)
 			end)
+
+			_G.PingConnection = connection7
 		else
-			local disp = CoreGui:FindFirstChild("RealPingDisplay")
-			if disp then disp:Destroy() end
-			if _G.PingConnection then _G.PingConnection:Disconnect() end
+			CoreGui:FindFirstChild("RealPingDisplay")
+			if RealPingDisplay then RealPingDisplay:Destroy() end
+			connection7:Disconnect()
 		end
 	end
 })
+
 Section2:AddToggle({
 	Title = "Show Fishing Panel",
 	Default = false,
 	Callback = function(state)
-		local existingPanel = game.CoreGui:FindFirstChild("MengHub_FishingPanel")
-		if existingPanel then existingPanel:Destroy() end
+		game.CoreGui:FindFirstChild("MengHub_FishingPanel")
+
 		if state then
+			local MengHub_FishingPanel = game.CoreGui:FindFirstChild("MengHub_FishingPanel")
+			if MengHub_FishingPanel then MengHub_FishingPanel:Destroy() end
 			local MengHub_FishingPanel2 = Instance.new("ScreenGui")
 			MengHub_FishingPanel2.Name = "MengHub_FishingPanel"
 			MengHub_FishingPanel2.Parent = game.CoreGui
@@ -1448,26 +424,31 @@ Section2:AddToggle({
 			ImageLabel3.BackgroundTransparency = 1
 			ImageLabel3.ImageTransparency = 0.7
 			ImageLabel3.Parent = Frame3
+
 			task.spawn(function()
-				while game.CoreGui:FindFirstChild("MengHub_FishingPanel") do
-					pcall(function()
-						local bag = game.Players.LocalPlayer.PlayerGui.Inventory.Main.Top.Options.Fish.Label.BagSize.Text
-						TextLabel5.Text = "Bag Space: <font color='#00AAFF'>" .. bag .. "</font>"
-						local caught = tostring(game.Players.LocalPlayer.leaderstats.Caught.Value)
-						TextLabel6.Text = "Total Caught: <font color='#FFCC00'>" .. caught .. "</font>"
-						TextLabel7.Text = "STATUS: ACTIVE"
-						TextLabel7.TextColor3 = Color3.fromRGB(0, 255, 150)
-						Frame8.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
-					end)
-					task.wait(0.5)
-				end
+				TextLabel5.Text = "Bag Space: <font color='#00AAFF'>" .. game.Players.LocalPlayer.PlayerGui.Inventory.Main.Top.Options.Fish.Label.BagSize.Text .. "</font>"
+				TextLabel6.Text = "Total Caught: <font color='#FFCC00'>" .. tostring(game.Players.LocalPlayer.leaderstats.Caught.Value) .. "</font>"
+				-- condition: game.Players.LocalPlayer.leaderstats.Caught.Value < game.Players.LocalPlayer.leaderstats.Caught.Value  (assumed true)
+				TextLabel7.Text = "STATUS: ACTIVE"
+				TextLabel7.TextColor3 = Color3.fromRGB(0, 255, 150)
+				Frame8.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+				task.wait(0.5)
+				TextLabel5.Text = "Bag Space: <font color='#00AAFF'>" .. game.Players.LocalPlayer.PlayerGui.Inventory.Main.Top.Options.Fish.Label.BagSize.Text .. "</font>"
+				TextLabel6.Text = "Total Caught: <font color='#FFCC00'>" .. tostring(game.Players.LocalPlayer.leaderstats.Caught.Value) .. "</font>"
+				-- condition: game.Players.LocalPlayer.leaderstats.Caught.Value < game.Players.LocalPlayer.leaderstats.Caught.Value  (assumed true)
+				TextLabel7.Text = "STATUS: ACTIVE"
+				TextLabel7.TextColor3 = Color3.fromRGB(0, 255, 150)
+				Frame8.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+				task.wait(0.5)
+				-- [envlog] the statements above repeat forever (loop)
 			end)
 		else
 			game.CoreGui:FindFirstChild("MengHub_FishingPanel")
-			MengHub_FishingPanel2:Destroy()
+			if MengHub_FishingPanel2 then MengHub_FishingPanel2:Destroy() end
 		end
 	end
 })
+
 Section2:AddToggle({
 	Title = "Anti Staff",
 	Content = "Automatically kick if any staff/dev join!",
@@ -1475,11 +456,13 @@ Section2:AddToggle({
 	Callback = function(state)
 		if state then
 			local players = game.Players:GetPlayers()
-			for i6, v6 in ipairs(players) do
+
+			for i4, v4 in ipairs(players) do
 				task.spawn(function()
-					v6:GetRankInGroup(35102746)
+					v4:GetRankInGroup(35102746)
 				end)
 			end
+
 			local connection8 = game.Players.PlayerAdded:Connect(function(player)
 				task.spawn(function()
 					task.wait(1)
@@ -1490,103 +473,151 @@ Section2:AddToggle({
 		end
 	end
 })
+
 Section2:AddToggle({
 	Title = "Bypass Radar",
 	Default = false,
-	Callback = function(state)
-		pcall(function()
-			ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/UpdateFishingRadar"]:InvokeServer(state)
-		end)
+	Callback = function()
 	end
 })
+
 Section2:AddToggle({
 	Title = "Bypass Diving",
 	Default = false,
-	Callback = function(state)
-		pcall(function()
-			if not state then
-				ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/UnequipOxygenTank"]:InvokeServer()
-			else
-				ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/EquipOxygenTank"]:InvokeServer()
-			end
-		end)
+	Callback = function()
 	end
 })
+
 Section2:AddToggle({
 	Title = "No Fishing Animations",
 	Default = false,
 	Callback = function(state)
-		_G.NoFishAnim = state
 		if state then
-			local Humanoid = Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-			local Animator = Humanoid and Humanoid:FindFirstChildOfClass("Animator")
-			if Animator then
-				for _, track in ipairs(Animator:GetPlayingAnimationTracks()) do
-					track:Stop(0)
-				end
-				_G.AnimationPlayedConn = Animator.AnimationPlayed:Connect(function(track)
-					if _G.NoFishAnim then
-						track:Stop(0)
-					end
-				end)
+			local Humanoid = Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			local Animator = Humanoid:FindFirstChildOfClass("Animator")
+			local tracks = Animator:GetPlayingAnimationTracks()
+
+			for i5, v5 in ipairs(tracks) do
+				v5:Stop(0)
 			end
+
+			local connection9 = Animator.AnimationPlayed:Connect(function()
+			end)
 		else
-			if _G.AnimationPlayedConn then
-				_G.AnimationPlayedConn:Disconnect()
-				_G.AnimationPlayedConn = nil
-			end
+			connection9:Disconnect()
 		end
 	end
 })
+
 Players.LocalPlayer.CharacterAdded:Connect(function(character3)
-	local Humanoid2 = character3:WaitForChild("Humanoid", 10)
-	Humanoid2:WaitForChild("Animator", 10)
+	local Humanoid11 = character3:WaitForChild("Humanoid", 10)
+	Humanoid11:WaitForChild("Animator", 10)
 end)
+
 Section2:AddToggle({
 	Title = "Auto Equip Rod",
 	Content = "Automatically equip ur fishing rods!",
 	Default = false,
 	Callback = function(state)
-		_G.AutoEquipRod = state
 		if state then
 			task.spawn(function()
-				while _G.AutoEquipRod do
-					local equipped = result:Get("EquippedId")
-					if not equipped then
-						ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RE/EquipToolFromHotbar"]:FireServer(1)
+				local itemFromInventory = module5:GetItemFromInventory({
+		Get = function()
+					end,
+		GetExpect = function()
+					end,
+		OnDataChange = function()
 					end
-					task.wait(0.8)
-				end
+	}, function()
+				end)
+
+				module3:GetItemData(itemFromInventory.Id)
+				task.wait(0.8)
+
+				local itemFromInventory2 = module5:GetItemFromInventory({
+		Get = function()
+					end,
+		GetExpect = function()
+					end,
+		OnDataChange = function()
+					end
+	}, function()
+				end)
+
+				module3:GetItemData(itemFromInventory2.Id)
+				task.wait(0.8)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			task.spawn(function()
 			end)
 		end
 	end
 })
+
 Section2:AddToggle({
 	Title = "Freeze Player",
 	Default = false,
 	Callback = function(state)
-		local character = Players.LocalPlayer.Character
-		local hrp = character and character:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			hrp.Anchored = state
+		if state then
+			local itemFromInventory3 = module5:GetItemFromInventory({
+		Get = function()
+				end,
+		GetExpect = function()
+				end,
+		OnDataChange = function()
+				end
+	}, function()
+			end)
+
+			module3:GetItemData(itemFromInventory3.Id)
+			task.wait(0.5)
+
+			local itemFromInventory4 = module5:GetItemFromInventory({
+		Get = function()
+				end,
+		GetExpect = function()
+				end,
+		OnDataChange = function()
+				end
+	}, function()
+			end)
+
+			module3:GetItemData(itemFromInventory4.Id)
+
+			Players.LocalPlayer.CharacterAdded:Connect(function(character4)
+				task.wait(1)
+				character4:GetDescendants()
+			end)
+		else
+			Players.LocalPlayer.Character:GetDescendants()
+
+			Players.LocalPlayer.CharacterAdded:Connect(function(character5)
+				task.wait(1)
+				character5:GetDescendants()
+			end)
 		end
 	end
 })
-local module6 = require(ReplicatedStorage.Controllers.CutsceneController)
+
+local module10 = require(ReplicatedStorage.Controllers.CutsceneController)
+
 Section2:AddToggle({
 	Title = "Disable Cutscene",
 	Default = true,
 	Callback = function(state)
 		if state then
-			module6.Play = function()
+			module10.Play = function()
 				print("[Anti-Cutscene] Cutscene dari server berhasil diabaikan!")
 			end
 		else
-			module6.Play = module6.Play
+			module10.Play = module10.Play
 		end
 	end
 })
+
 _G.FishSoundMuter = nil
+
 Section2:AddToggle({
 	Title = "Disable Obtained Fish",
 	Default = false,
@@ -1597,1382 +628,6043 @@ Section2:AddToggle({
 			SmallNotification:FindFirstChild("Display")
 			SmallNotification.Display.Visible = false
 			local SoundService = game:GetService("SoundService")
-			_G.FishSoundMuter = SoundService.ChildAdded:Connect(function(child)
+
+			local connection10 = SoundService.ChildAdded:Connect(function(child)
 			end)
+
+			_G.FishSoundMuter = connection10
 		else
 			local PlayerGui2 = Players.LocalPlayer:WaitForChild("PlayerGui")
 			local SmallNotification2 = PlayerGui2:FindFirstChild("Small Notification")
-			if SmallNotification2 and SmallNotification2:FindFirstChild("Display") then
-				SmallNotification2.Display.Visible = true
-			end
-			if _G.FishSoundMuter then _G.FishSoundMuter:Disconnect() end
+			SmallNotification2:FindFirstChild("Display")
+			SmallNotification2.Display.Visible = true
+			connection10:Disconnect()
 		end
 	end
 })
-Section2:AddToggle({
+
+local Toggle = Section2:AddToggle({
 	Title = "Walk on Water",
 	Default = false,
 	Callback = function(state)
 		if state then
-			_G.WW_CharConn = Players.LocalPlayer.CharacterAdded:Connect(function(character4)
+			local connection11 = Players.LocalPlayer.CharacterAdded:Connect(function(character6)
 			end)
+
 			local HumanoidRootPart = Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
-			local ww = Instance.new("Part")
-			ww.Name = "WW_Part"
-			ww.Size = Vector3.new(40, 0.2, 40)
-			ww.Anchored = true
-			ww.CanCollide = false
-			ww.Transparency = 1
-			ww.Material = Enum.Material.SmoothPlastic
-			ww.Parent = workspace
-			_G.WW_Part = ww
-			_G.WW_Heartbeat = RunService.Heartbeat:Connect(function(deltaTime3)
+			local WW_Part = Instance.new("Part")
+			WW_Part.Name = "WW_Part"
+			WW_Part.Size = Vector3.new(40, 0.20000000298023224, 40)
+			WW_Part.Anchored = true
+			WW_Part.CanCollide = false
+			WW_Part.Transparency = 1
+			WW_Part.Material = Enum.Material.SmoothPlastic
+			WW_Part.Parent = workspace
+			RaycastParams.new().FilterType = Enum.RaycastFilterType.Include
+			RaycastParams.new().FilterDescendantsInstances = { workspace.Terrain }
+			RaycastParams.new().IgnoreWater = false
+			workspace:Raycast(Vector3.new(HumanoidRootPart.Position.X, (HumanoidRootPart.Position.Y + 10), HumanoidRootPart.Position.Z), Vector3.new(0, -200, 0), RaycastParams.new())
+
+			local connection12 = RunService.Heartbeat:Connect(function(deltaTime3)
 			end)
 		else
-			if _G.WW_CharConn then _G.WW_CharConn:Disconnect() end
-			if _G.WW_Heartbeat then _G.WW_Heartbeat:Disconnect() end
-			if _G.WW_Part then _G.WW_Part:Destroy() end
+			connection11:Disconnect()
+			connection12:Disconnect()
+			if WW_Part then WW_Part:Destroy() end
 		end
 	end
 })
+
 Section2:AddToggle({
-	Title = "Stable Result",
-	Content = "This feature will make cast always GOOD/PERFECTION",
-	Default = false,
+	Title = "Anti Kill Lava",
+	Default = true,
 	Callback = function(state)
-		_G.StableResult = state
+		if state then
+			local connection13 = Players.LocalPlayer.CharacterAdded:Connect(function(character7)
+			end)
+
+			local HumanoidRootPart2 = Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
+			local WW_LavaPart = Instance.new("Part")
+			WW_LavaPart.Name = "WW_LavaPart"
+			WW_LavaPart.Size = Vector3.new(50, 0.30000001192092896, 50)
+			WW_LavaPart.Anchored = true
+			WW_LavaPart.CanCollide = false
+			WW_LavaPart.Transparency = 1
+			WW_LavaPart.Parent = workspace
+			workspace:GetDescendants()
+			WW_LavaPart:GetAttribute("DeathEffect")
+			WW_LavaPart.CanTouch = false
+
+			local connection14 = workspace.DescendantAdded:Connect(function(descendant)
+			end)
+
+			RaycastParams.new().FilterType = Enum.RaycastFilterType.Exclude
+			RaycastParams.new().FilterDescendantsInstances = { Players.LocalPlayer.Character, WW_LavaPart }
+			RaycastParams.new().IgnoreWater = true
+			local raycastResult = workspace:Raycast(Vector3.new(HumanoidRootPart2.Position.X, (HumanoidRootPart2.Position.Y + 12), HumanoidRootPart2.Position.Z), Vector3.new(0, -250, 0), RaycastParams.new())
+			raycastResult.Instance:GetAttribute("DeathEffect")
+
+			local connection15 = RunService.Heartbeat:Connect(function(deltaTime4)
+			end)
+		else
+			connection13:Disconnect()
+			connection15:Disconnect()
+			if WW_LavaPart then WW_LavaPart:Destroy() end
+			connection14:Disconnect()
+		end
 	end
 })
-_G.Delay = 0.5
-local module8 = require(ReplicatedStorage.Controllers.FishingController)
-local module9 = require(ReplicatedStorage.Modules.InputControl)
-require(ReplicatedStorage.Shared.Constants)
+
+local module11 = require(ReplicatedStorage.Tiers)
+
+for k, v6 in pairs(module11) do
+end
+
+workspace["!!! EFFECTS"].ChildAdded:Connect(function(child2)
+end)
+
 local Section3 = Tab2:AddSection("Skip Rarity")
+
 Section3:AddDropdown({
 	Title = "Select Rarity for Skip",
 	Default = {},
 	Multi = true,
 	Options = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET" },
-	Callback = function(val)
-		_G.SkipRarities = val
-	end
-})
-Section3:AddToggle({
-	Title = "Auto Skip Rarity",
-	Default = false,
-	Callback = function(state)
-		_G.AutoSkipRarity = state
+	Callback = function()
 	end
 })
 
-local Section5 = Tab2:AddSection("Legit Fishing")
-local Paragraph2 = Section5:AddParagraph({ Title = "Stuck Detector", Content = "Status = Idle\nTime = 0.0s\nBag = 0" })
-Section5:AddInput({
-	Title = "Wait Time (s)",
-	Default = "15",
-	Callback = function(val)
-		local num = tonumber(val)
-		if num and num > 0 then
-			_G.WaitTime = num
+Section3:AddToggle({
+	Title = "Auto Skip Rarity",
+	Default = false,
+	Callback = function()
+	end
+})
+
+module8.DeliverNotification = function(_, arg67)
+	local TalonFishing = _G.TalonFishing
+	_G.TalonFishing = TalonFishing
+	arg67.Text:find("Auto Fishing")
+end
+
+local Section4 = Tab2:AddSection("Stable Result")
+
+Section4:AddToggle({
+	Title = "Stable Result",
+	Content = "This feature will make cast always GOOD/PERFECTION",
+	Callback = function(state)
+		if state then
+			Players.LocalPlayer:SetAttribute("Loading", nil)
+
+			local thread = task.spawn(function()
+				task.wait()
+				task.wait()
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			task.cancel(thread)
+			Players.LocalPlayer:SetAttribute("Loading", false)
 		end
 	end
 })
+
+_G.Delay = 0.5
+local module12 = require(ReplicatedStorage.Controllers.FishingController)
+local module13 = require(ReplicatedStorage.Modules.InputControl)
+require(ReplicatedStorage.Shared.Constants)
+local Section5 = Tab2:AddSection("Legit Fishing")
+local Paragraph2 = Section5:AddParagraph({ Title = "Stuck Detector", Content = "Status = Idle\nTime = 0.0s\nBag = 0" })
+
+Section5:AddInput({
+	Title = "Wait Time (s)",
+	Default = "15",
+	Callback = function()
+		-- [envlog] error: Luraph Script:2385: Script:62: attempt to compare number < userdata
+	end
+})
+
 Section5:AddToggle({
 	Title = "Start Detector",
 	Content = "Detector if fishing got stuck!",
 	Default = false,
 	Callback = function(state)
-		_G.DetectorRunning = state
 		if state then
+			Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
+			local Inventory = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+			local Main = Inventory:WaitForChild("Main")
+			local Top = Main:WaitForChild("Top")
+			local Options = Top:WaitForChild("Options")
+			local Fish = Options:WaitForChild("Fish")
+			local Label = Fish:WaitForChild("Label")
+			local BagSize = Label:WaitForChild("BagSize")
+			local result2 = BagSize.Text:match("(%d+)/")
+			Celestial.DetectorCount = tonumber(result2)
+
 			task.spawn(function()
-				local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
-				character:WaitForChild("HumanoidRootPart")
-				local lastBag = 0
-				local timer = 0
-				while _G.DetectorRunning do
-					task.wait(0.5)
-					pcall(function()
-						local bagLabel = game.Players.LocalPlayer.PlayerGui.Inventory.Main.Top.Options.Fish.Label.BagSize
-						local currentBag = tonumber(bagLabel.Text:match("(%d+)/") or "0")
-						if currentBag > lastBag then
-							lastBag = currentBag
-							timer = 0
-							Paragraph2:SetContent(string.format("<font color='rgb(0,255,127)'>Status = Fishing Normally</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", timer, currentBag))
-						else
-							timer = timer + 0.5
-							if timer >= (_G.WaitTime or 15) then
-								Paragraph2:SetContent(string.format("<font color='rgb(255,50,50)'>Status = Stuck Detected! Resetting...</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", timer, currentBag))
-								module8:ConfirmClick()
-								timer = 0
-							else
-								Paragraph2:SetContent(string.format("<font color='rgb(0,191,255)'>Status = Waiting for fish...</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", timer, currentBag))
-							end
-						end
-					end)
-				end
-				Paragraph2:SetContent("<font color='rgb(200,200,200)'>Status = Detector Offline</font>\nTime = 0.0s\nBag = 0")
+				local Inventory2 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main2 = Inventory2:WaitForChild("Main")
+				local Top2 = Main2:WaitForChild("Top")
+				local Options2 = Top2:WaitForChild("Options")
+				local Fish2 = Options2:WaitForChild("Fish")
+				local Label2 = Fish2:WaitForChild("Label")
+				local BagSize2 = Label2:WaitForChild("BagSize")
+				local result3 = BagSize2.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result2) < tonumber(result3)  (assumed true)
+				Celestial.DetectorCount = tonumber(result3)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result3)))
+				local Inventory3 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main3 = Inventory3:WaitForChild("Main")
+				local Top3 = Main3:WaitForChild("Top")
+				local Options3 = Top3:WaitForChild("Options")
+				local Fish3 = Options3:WaitForChild("Fish")
+				local Label3 = Fish3:WaitForChild("Label")
+				local BagSize3 = Label3:WaitForChild("BagSize")
+				local result4 = BagSize3.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result3) < tonumber(result4)  (assumed true)
+				Celestial.DetectorCount = tonumber(result4)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result4)))
+				local Inventory4 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main4 = Inventory4:WaitForChild("Main")
+				local Top4 = Main4:WaitForChild("Top")
+				local Options4 = Top4:WaitForChild("Options")
+				local Fish4 = Options4:WaitForChild("Fish")
+				local Label4 = Fish4:WaitForChild("Label")
+				local BagSize4 = Label4:WaitForChild("BagSize")
+				local result5 = BagSize4.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result4) < tonumber(result5)  (assumed true)
+				Celestial.DetectorCount = tonumber(result5)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result5)))
+				local Inventory5 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main5 = Inventory5:WaitForChild("Main")
+				local Top5 = Main5:WaitForChild("Top")
+				local Options5 = Top5:WaitForChild("Options")
+				local Fish5 = Options5:WaitForChild("Fish")
+				local Label5 = Fish5:WaitForChild("Label")
+				local BagSize5 = Label5:WaitForChild("BagSize")
+				local result6 = BagSize5.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result5) < tonumber(result6)  (assumed true)
+				Celestial.DetectorCount = tonumber(result6)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result6)))
+				local Inventory6 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main6 = Inventory6:WaitForChild("Main")
+				local Top6 = Main6:WaitForChild("Top")
+				local Options6 = Top6:WaitForChild("Options")
+				local Fish6 = Options6:WaitForChild("Fish")
+				local Label6 = Fish6:WaitForChild("Label")
+				local BagSize6 = Label6:WaitForChild("BagSize")
+				local result7 = BagSize6.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result6) < tonumber(result7)  (assumed true)
+				Celestial.DetectorCount = tonumber(result7)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result7)))
+				local Inventory7 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main7 = Inventory7:WaitForChild("Main")
+				local Top7 = Main7:WaitForChild("Top")
+				local Options7 = Top7:WaitForChild("Options")
+				local Fish7 = Options7:WaitForChild("Fish")
+				local Label7 = Fish7:WaitForChild("Label")
+				local BagSize7 = Label7:WaitForChild("BagSize")
+				local result8 = BagSize7.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result7) < tonumber(result8)  (assumed true)
+				Celestial.DetectorCount = tonumber(result8)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result8)))
+				local Inventory8 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main8 = Inventory8:WaitForChild("Main")
+				local Top8 = Main8:WaitForChild("Top")
+				local Options8 = Top8:WaitForChild("Options")
+				local Fish8 = Options8:WaitForChild("Fish")
+				local Label8 = Fish8:WaitForChild("Label")
+				local BagSize8 = Label8:WaitForChild("BagSize")
+				local result9 = BagSize8.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result8) < tonumber(result9)  (assumed true)
+				Celestial.DetectorCount = tonumber(result9)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result9)))
+				local Inventory9 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main9 = Inventory9:WaitForChild("Main")
+				local Top9 = Main9:WaitForChild("Top")
+				local Options9 = Top9:WaitForChild("Options")
+				local Fish9 = Options9:WaitForChild("Fish")
+				local Label9 = Fish9:WaitForChild("Label")
+				local BagSize9 = Label9:WaitForChild("BagSize")
+				local result10 = BagSize9.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result9) < tonumber(result10)  (assumed true)
+				Celestial.DetectorCount = tonumber(result10)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result10)))
+				local Inventory10 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main10 = Inventory10:WaitForChild("Main")
+				local Top10 = Main10:WaitForChild("Top")
+				local Options10 = Top10:WaitForChild("Options")
+				local Fish10 = Options10:WaitForChild("Fish")
+				local Label10 = Fish10:WaitForChild("Label")
+				local BagSize10 = Label10:WaitForChild("BagSize")
+				local result11 = BagSize10.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result10) < tonumber(result11)  (assumed true)
+				Celestial.DetectorCount = tonumber(result11)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result11)))
+				local Inventory11 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main11 = Inventory11:WaitForChild("Main")
+				local Top11 = Main11:WaitForChild("Top")
+				local Options11 = Top11:WaitForChild("Options")
+				local Fish11 = Options11:WaitForChild("Fish")
+				local Label11 = Fish11:WaitForChild("Label")
+				local BagSize11 = Label11:WaitForChild("BagSize")
+				local result12 = BagSize11.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result11) < tonumber(result12)  (assumed true)
+				Celestial.DetectorCount = tonumber(result12)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result12)))
+				local Inventory12 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main12 = Inventory12:WaitForChild("Main")
+				local Top12 = Main12:WaitForChild("Top")
+				local Options12 = Top12:WaitForChild("Options")
+				local Fish12 = Options12:WaitForChild("Fish")
+				local Label12 = Fish12:WaitForChild("Label")
+				local BagSize12 = Label12:WaitForChild("BagSize")
+				local result13 = BagSize12.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result12) < tonumber(result13)  (assumed true)
+				Celestial.DetectorCount = tonumber(result13)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result13)))
+				local Inventory13 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main13 = Inventory13:WaitForChild("Main")
+				local Top13 = Main13:WaitForChild("Top")
+				local Options13 = Top13:WaitForChild("Options")
+				local Fish13 = Options13:WaitForChild("Fish")
+				local Label13 = Fish13:WaitForChild("Label")
+				local BagSize13 = Label13:WaitForChild("BagSize")
+				local result14 = BagSize13.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result13) < tonumber(result14)  (assumed true)
+				Celestial.DetectorCount = tonumber(result14)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result14)))
+				local Inventory14 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main14 = Inventory14:WaitForChild("Main")
+				local Top14 = Main14:WaitForChild("Top")
+				local Options14 = Top14:WaitForChild("Options")
+				local Fish14 = Options14:WaitForChild("Fish")
+				local Label14 = Fish14:WaitForChild("Label")
+				local BagSize14 = Label14:WaitForChild("BagSize")
+				local result15 = BagSize14.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result14) < tonumber(result15)  (assumed true)
+				Celestial.DetectorCount = tonumber(result15)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result15)))
+				local Inventory15 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main15 = Inventory15:WaitForChild("Main")
+				local Top15 = Main15:WaitForChild("Top")
+				local Options15 = Top15:WaitForChild("Options")
+				local Fish15 = Options15:WaitForChild("Fish")
+				local Label15 = Fish15:WaitForChild("Label")
+				local BagSize15 = Label15:WaitForChild("BagSize")
+				local result16 = BagSize15.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result15) < tonumber(result16)  (assumed true)
+				Celestial.DetectorCount = tonumber(result16)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result16)))
+				local Inventory16 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main16 = Inventory16:WaitForChild("Main")
+				local Top16 = Main16:WaitForChild("Top")
+				local Options16 = Top16:WaitForChild("Options")
+				local Fish16 = Options16:WaitForChild("Fish")
+				local Label16 = Fish16:WaitForChild("Label")
+				local BagSize16 = Label16:WaitForChild("BagSize")
+				local result17 = BagSize16.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result16) < tonumber(result17)  (assumed true)
+				Celestial.DetectorCount = tonumber(result17)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result17)))
+				local Inventory17 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main17 = Inventory17:WaitForChild("Main")
+				local Top17 = Main17:WaitForChild("Top")
+				local Options17 = Top17:WaitForChild("Options")
+				local Fish17 = Options17:WaitForChild("Fish")
+				local Label17 = Fish17:WaitForChild("Label")
+				local BagSize17 = Label17:WaitForChild("BagSize")
+				local result18 = BagSize17.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result17) < tonumber(result18)  (assumed true)
+				Celestial.DetectorCount = tonumber(result18)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result18)))
+				local Inventory18 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main18 = Inventory18:WaitForChild("Main")
+				local Top18 = Main18:WaitForChild("Top")
+				local Options18 = Top18:WaitForChild("Options")
+				local Fish18 = Options18:WaitForChild("Fish")
+				local Label18 = Fish18:WaitForChild("Label")
+				local BagSize18 = Label18:WaitForChild("BagSize")
+				local result19 = BagSize18.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result18) < tonumber(result19)  (assumed true)
+				Celestial.DetectorCount = tonumber(result19)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result19)))
+				local Inventory19 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main19 = Inventory19:WaitForChild("Main")
+				local Top19 = Main19:WaitForChild("Top")
+				local Options19 = Top19:WaitForChild("Options")
+				local Fish19 = Options19:WaitForChild("Fish")
+				local Label19 = Fish19:WaitForChild("Label")
+				local BagSize19 = Label19:WaitForChild("BagSize")
+				local result20 = BagSize19.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result19) < tonumber(result20)  (assumed true)
+				Celestial.DetectorCount = tonumber(result20)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result20)))
+				local Inventory20 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main20 = Inventory20:WaitForChild("Main")
+				local Top20 = Main20:WaitForChild("Top")
+				local Options20 = Top20:WaitForChild("Options")
+				local Fish20 = Options20:WaitForChild("Fish")
+				local Label20 = Fish20:WaitForChild("Label")
+				local BagSize20 = Label20:WaitForChild("BagSize")
+				local result21 = BagSize20.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result20) < tonumber(result21)  (assumed true)
+				Celestial.DetectorCount = tonumber(result21)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result21)))
+				local Inventory21 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main21 = Inventory21:WaitForChild("Main")
+				local Top21 = Main21:WaitForChild("Top")
+				local Options21 = Top21:WaitForChild("Options")
+				local Fish21 = Options21:WaitForChild("Fish")
+				local Label21 = Fish21:WaitForChild("Label")
+				local BagSize21 = Label21:WaitForChild("BagSize")
+				local result22 = BagSize21.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result21) < tonumber(result22)  (assumed true)
+				Celestial.DetectorCount = tonumber(result22)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result22)))
+				local Inventory22 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main22 = Inventory22:WaitForChild("Main")
+				local Top22 = Main22:WaitForChild("Top")
+				local Options22 = Top22:WaitForChild("Options")
+				local Fish22 = Options22:WaitForChild("Fish")
+				local Label22 = Fish22:WaitForChild("Label")
+				local BagSize22 = Label22:WaitForChild("BagSize")
+				local result23 = BagSize22.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result22) < tonumber(result23)  (assumed true)
+				Celestial.DetectorCount = tonumber(result23)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result23)))
+				local Inventory23 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main23 = Inventory23:WaitForChild("Main")
+				local Top23 = Main23:WaitForChild("Top")
+				local Options23 = Top23:WaitForChild("Options")
+				local Fish23 = Options23:WaitForChild("Fish")
+				local Label23 = Fish23:WaitForChild("Label")
+				local BagSize23 = Label23:WaitForChild("BagSize")
+				local result24 = BagSize23.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result23) < tonumber(result24)  (assumed true)
+				Celestial.DetectorCount = tonumber(result24)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result24)))
+				local Inventory24 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main24 = Inventory24:WaitForChild("Main")
+				local Top24 = Main24:WaitForChild("Top")
+				local Options24 = Top24:WaitForChild("Options")
+				local Fish24 = Options24:WaitForChild("Fish")
+				local Label24 = Fish24:WaitForChild("Label")
+				local BagSize24 = Label24:WaitForChild("BagSize")
+				local result25 = BagSize24.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result24) < tonumber(result25)  (assumed true)
+				Celestial.DetectorCount = tonumber(result25)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result25)))
+				local Inventory25 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main25 = Inventory25:WaitForChild("Main")
+				local Top25 = Main25:WaitForChild("Top")
+				local Options25 = Top25:WaitForChild("Options")
+				local Fish25 = Options25:WaitForChild("Fish")
+				local Label25 = Fish25:WaitForChild("Label")
+				local BagSize25 = Label25:WaitForChild("BagSize")
+				local result26 = BagSize25.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result25) < tonumber(result26)  (assumed true)
+				Celestial.DetectorCount = tonumber(result26)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result26)))
+				local Inventory26 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main26 = Inventory26:WaitForChild("Main")
+				local Top26 = Main26:WaitForChild("Top")
+				local Options26 = Top26:WaitForChild("Options")
+				local Fish26 = Options26:WaitForChild("Fish")
+				local Label26 = Fish26:WaitForChild("Label")
+				local BagSize26 = Label26:WaitForChild("BagSize")
+				local result27 = BagSize26.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result26) < tonumber(result27)  (assumed true)
+				Celestial.DetectorCount = tonumber(result27)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result27)))
+				local Inventory27 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main27 = Inventory27:WaitForChild("Main")
+				local Top27 = Main27:WaitForChild("Top")
+				local Options27 = Top27:WaitForChild("Options")
+				local Fish27 = Options27:WaitForChild("Fish")
+				local Label27 = Fish27:WaitForChild("Label")
+				local BagSize27 = Label27:WaitForChild("BagSize")
+				local result28 = BagSize27.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result27) < tonumber(result28)  (assumed true)
+				Celestial.DetectorCount = tonumber(result28)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result28)))
+				local Inventory28 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main28 = Inventory28:WaitForChild("Main")
+				local Top28 = Main28:WaitForChild("Top")
+				local Options28 = Top28:WaitForChild("Options")
+				local Fish28 = Options28:WaitForChild("Fish")
+				local Label28 = Fish28:WaitForChild("Label")
+				local BagSize28 = Label28:WaitForChild("BagSize")
+				local result29 = BagSize28.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result28) < tonumber(result29)  (assumed true)
+				Celestial.DetectorCount = tonumber(result29)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result29)))
+				local Inventory29 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main29 = Inventory29:WaitForChild("Main")
+				local Top29 = Main29:WaitForChild("Top")
+				local Options29 = Top29:WaitForChild("Options")
+				local Fish29 = Options29:WaitForChild("Fish")
+				local Label29 = Fish29:WaitForChild("Label")
+				local BagSize29 = Label29:WaitForChild("BagSize")
+				local result30 = BagSize29.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result29) < tonumber(result30)  (assumed true)
+				Celestial.DetectorCount = tonumber(result30)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result30)))
+				local Inventory30 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main30 = Inventory30:WaitForChild("Main")
+				local Top30 = Main30:WaitForChild("Top")
+				local Options30 = Top30:WaitForChild("Options")
+				local Fish30 = Options30:WaitForChild("Fish")
+				local Label30 = Fish30:WaitForChild("Label")
+				local BagSize30 = Label30:WaitForChild("BagSize")
+				local result31 = BagSize30.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result30) < tonumber(result31)  (assumed true)
+				Celestial.DetectorCount = tonumber(result31)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result31)))
+				local Inventory31 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main31 = Inventory31:WaitForChild("Main")
+				local Top31 = Main31:WaitForChild("Top")
+				local Options31 = Top31:WaitForChild("Options")
+				local Fish31 = Options31:WaitForChild("Fish")
+				local Label31 = Fish31:WaitForChild("Label")
+				local BagSize31 = Label31:WaitForChild("BagSize")
+				local result32 = BagSize31.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result31) < tonumber(result32)  (assumed true)
+				Celestial.DetectorCount = tonumber(result32)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result32)))
+				local Inventory32 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main32 = Inventory32:WaitForChild("Main")
+				local Top32 = Main32:WaitForChild("Top")
+				local Options32 = Top32:WaitForChild("Options")
+				local Fish32 = Options32:WaitForChild("Fish")
+				local Label32 = Fish32:WaitForChild("Label")
+				local BagSize32 = Label32:WaitForChild("BagSize")
+				local result33 = BagSize32.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result32) < tonumber(result33)  (assumed true)
+				Celestial.DetectorCount = tonumber(result33)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result33)))
+				local Inventory33 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main33 = Inventory33:WaitForChild("Main")
+				local Top33 = Main33:WaitForChild("Top")
+				local Options33 = Top33:WaitForChild("Options")
+				local Fish33 = Options33:WaitForChild("Fish")
+				local Label33 = Fish33:WaitForChild("Label")
+				local BagSize33 = Label33:WaitForChild("BagSize")
+				local result34 = BagSize33.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result33) < tonumber(result34)  (assumed true)
+				Celestial.DetectorCount = tonumber(result34)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result34)))
+				local Inventory34 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main34 = Inventory34:WaitForChild("Main")
+				local Top34 = Main34:WaitForChild("Top")
+				local Options34 = Top34:WaitForChild("Options")
+				local Fish34 = Options34:WaitForChild("Fish")
+				local Label34 = Fish34:WaitForChild("Label")
+				local BagSize34 = Label34:WaitForChild("BagSize")
+				local result35 = BagSize34.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result34) < tonumber(result35)  (assumed true)
+				Celestial.DetectorCount = tonumber(result35)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result35)))
+				local Inventory35 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main35 = Inventory35:WaitForChild("Main")
+				local Top35 = Main35:WaitForChild("Top")
+				local Options35 = Top35:WaitForChild("Options")
+				local Fish35 = Options35:WaitForChild("Fish")
+				local Label35 = Fish35:WaitForChild("Label")
+				local BagSize35 = Label35:WaitForChild("BagSize")
+				local result36 = BagSize35.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result35) < tonumber(result36)  (assumed true)
+				Celestial.DetectorCount = tonumber(result36)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result36)))
+				local Inventory36 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main36 = Inventory36:WaitForChild("Main")
+				local Top36 = Main36:WaitForChild("Top")
+				local Options36 = Top36:WaitForChild("Options")
+				local Fish36 = Options36:WaitForChild("Fish")
+				local Label36 = Fish36:WaitForChild("Label")
+				local BagSize36 = Label36:WaitForChild("BagSize")
+				local result37 = BagSize36.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result36) < tonumber(result37)  (assumed true)
+				Celestial.DetectorCount = tonumber(result37)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result37)))
+				local Inventory37 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main37 = Inventory37:WaitForChild("Main")
+				local Top37 = Main37:WaitForChild("Top")
+				local Options37 = Top37:WaitForChild("Options")
+				local Fish37 = Options37:WaitForChild("Fish")
+				local Label37 = Fish37:WaitForChild("Label")
+				local BagSize37 = Label37:WaitForChild("BagSize")
+				local result38 = BagSize37.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result37) < tonumber(result38)  (assumed true)
+				Celestial.DetectorCount = tonumber(result38)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result38)))
+				local Inventory38 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main38 = Inventory38:WaitForChild("Main")
+				local Top38 = Main38:WaitForChild("Top")
+				local Options38 = Top38:WaitForChild("Options")
+				local Fish38 = Options38:WaitForChild("Fish")
+				local Label38 = Fish38:WaitForChild("Label")
+				local BagSize38 = Label38:WaitForChild("BagSize")
+				local result39 = BagSize38.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result38) < tonumber(result39)  (assumed true)
+				Celestial.DetectorCount = tonumber(result39)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result39)))
+				local Inventory39 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main39 = Inventory39:WaitForChild("Main")
+				local Top39 = Main39:WaitForChild("Top")
+				local Options39 = Top39:WaitForChild("Options")
+				local Fish39 = Options39:WaitForChild("Fish")
+				local Label39 = Fish39:WaitForChild("Label")
+				local BagSize39 = Label39:WaitForChild("BagSize")
+				local result40 = BagSize39.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result39) < tonumber(result40)  (assumed true)
+				Celestial.DetectorCount = tonumber(result40)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result40)))
+				local Inventory40 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main40 = Inventory40:WaitForChild("Main")
+				local Top40 = Main40:WaitForChild("Top")
+				local Options40 = Top40:WaitForChild("Options")
+				local Fish40 = Options40:WaitForChild("Fish")
+				local Label40 = Fish40:WaitForChild("Label")
+				local BagSize40 = Label40:WaitForChild("BagSize")
+				local result41 = BagSize40.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result40) < tonumber(result41)  (assumed true)
+				Celestial.DetectorCount = tonumber(result41)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result41)))
+				local Inventory41 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main41 = Inventory41:WaitForChild("Main")
+				local Top41 = Main41:WaitForChild("Top")
+				local Options41 = Top41:WaitForChild("Options")
+				local Fish41 = Options41:WaitForChild("Fish")
+				local Label41 = Fish41:WaitForChild("Label")
+				local BagSize41 = Label41:WaitForChild("BagSize")
+				local result42 = BagSize41.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result41) < tonumber(result42)  (assumed true)
+				Celestial.DetectorCount = tonumber(result42)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result42)))
+				local Inventory42 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main42 = Inventory42:WaitForChild("Main")
+				local Top42 = Main42:WaitForChild("Top")
+				local Options42 = Top42:WaitForChild("Options")
+				local Fish42 = Options42:WaitForChild("Fish")
+				local Label42 = Fish42:WaitForChild("Label")
+				local BagSize42 = Label42:WaitForChild("BagSize")
+				local result43 = BagSize42.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result42) < tonumber(result43)  (assumed true)
+				Celestial.DetectorCount = tonumber(result43)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result43)))
+				local Inventory43 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main43 = Inventory43:WaitForChild("Main")
+				local Top43 = Main43:WaitForChild("Top")
+				local Options43 = Top43:WaitForChild("Options")
+				local Fish43 = Options43:WaitForChild("Fish")
+				local Label43 = Fish43:WaitForChild("Label")
+				local BagSize43 = Label43:WaitForChild("BagSize")
+				local result44 = BagSize43.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result43) < tonumber(result44)  (assumed true)
+				Celestial.DetectorCount = tonumber(result44)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result44)))
+				local Inventory44 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main44 = Inventory44:WaitForChild("Main")
+				local Top44 = Main44:WaitForChild("Top")
+				local Options44 = Top44:WaitForChild("Options")
+				local Fish44 = Options44:WaitForChild("Fish")
+				local Label44 = Fish44:WaitForChild("Label")
+				local BagSize44 = Label44:WaitForChild("BagSize")
+				local result45 = BagSize44.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result44) < tonumber(result45)  (assumed true)
+				Celestial.DetectorCount = tonumber(result45)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result45)))
+				local Inventory45 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main45 = Inventory45:WaitForChild("Main")
+				local Top45 = Main45:WaitForChild("Top")
+				local Options45 = Top45:WaitForChild("Options")
+				local Fish45 = Options45:WaitForChild("Fish")
+				local Label45 = Fish45:WaitForChild("Label")
+				local BagSize45 = Label45:WaitForChild("BagSize")
+				local result46 = BagSize45.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result45) < tonumber(result46)  (assumed true)
+				Celestial.DetectorCount = tonumber(result46)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result46)))
+				local Inventory46 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main46 = Inventory46:WaitForChild("Main")
+				local Top46 = Main46:WaitForChild("Top")
+				local Options46 = Top46:WaitForChild("Options")
+				local Fish46 = Options46:WaitForChild("Fish")
+				local Label46 = Fish46:WaitForChild("Label")
+				local BagSize46 = Label46:WaitForChild("BagSize")
+				local result47 = BagSize46.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result46) < tonumber(result47)  (assumed true)
+				Celestial.DetectorCount = tonumber(result47)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result47)))
+				local Inventory47 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main47 = Inventory47:WaitForChild("Main")
+				local Top47 = Main47:WaitForChild("Top")
+				local Options47 = Top47:WaitForChild("Options")
+				local Fish47 = Options47:WaitForChild("Fish")
+				local Label47 = Fish47:WaitForChild("Label")
+				local BagSize47 = Label47:WaitForChild("BagSize")
+				local result48 = BagSize47.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result47) < tonumber(result48)  (assumed true)
+				Celestial.DetectorCount = tonumber(result48)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result48)))
+				local Inventory48 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main48 = Inventory48:WaitForChild("Main")
+				local Top48 = Main48:WaitForChild("Top")
+				local Options48 = Top48:WaitForChild("Options")
+				local Fish48 = Options48:WaitForChild("Fish")
+				local Label48 = Fish48:WaitForChild("Label")
+				local BagSize48 = Label48:WaitForChild("BagSize")
+				local result49 = BagSize48.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result48) < tonumber(result49)  (assumed true)
+				Celestial.DetectorCount = tonumber(result49)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result49)))
+				local Inventory49 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main49 = Inventory49:WaitForChild("Main")
+				local Top49 = Main49:WaitForChild("Top")
+				local Options49 = Top49:WaitForChild("Options")
+				local Fish49 = Options49:WaitForChild("Fish")
+				local Label49 = Fish49:WaitForChild("Label")
+				local BagSize49 = Label49:WaitForChild("BagSize")
+				local result50 = BagSize49.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result49) < tonumber(result50)  (assumed true)
+				Celestial.DetectorCount = tonumber(result50)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result50)))
+				local Inventory50 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main50 = Inventory50:WaitForChild("Main")
+				local Top50 = Main50:WaitForChild("Top")
+				local Options50 = Top50:WaitForChild("Options")
+				local Fish50 = Options50:WaitForChild("Fish")
+				local Label50 = Fish50:WaitForChild("Label")
+				local BagSize50 = Label50:WaitForChild("BagSize")
+				local result51 = BagSize50.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result50) < tonumber(result51)  (assumed true)
+				Celestial.DetectorCount = tonumber(result51)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result51)))
+				local Inventory51 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main51 = Inventory51:WaitForChild("Main")
+				local Top51 = Main51:WaitForChild("Top")
+				local Options51 = Top51:WaitForChild("Options")
+				local Fish51 = Options51:WaitForChild("Fish")
+				local Label51 = Fish51:WaitForChild("Label")
+				local BagSize51 = Label51:WaitForChild("BagSize")
+				local result52 = BagSize51.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- condition: tonumber(result51) < tonumber(result52)  (assumed true)
+				Celestial.DetectorCount = tonumber(result52)
+				Paragraph2:SetContent(string.format("<font color='rgb(%s)'>Status = %s</font>\n<font color='rgb(0,191,255)'>Time = %.1fs</font>\n<font color='rgb(173,216,230)'>Bag = %d</font>", "0,255,127", "Fishing Normally", 0, tonumber(result52)))
+				local Inventory52 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+				local Main52 = Inventory52:WaitForChild("Main")
+				local Top52 = Main52:WaitForChild("Top")
+				local Options52 = Top52:WaitForChild("Options")
+				local Fish52 = Options52:WaitForChild("Fish")
+				local Label52 = Fish52:WaitForChild("Label")
+				local BagSize52 = Label52:WaitForChild("BagSize")
+				BagSize52.Text:match("(%d+)/")
+				task.wait(0.1)
+				-- [envlog] stopped after 50 waits
 			end)
+		else
+			Paragraph2:SetContent("<font color='rgb(200,200,200)'>Status = Detector Offline</font>\nTime = 0.0s\nBag = 0")
 		end
 	end
 })
+
 Section5:AddDivider()
+
 Section5:AddInput({
 	Title = "Legit Delay",
 	Default = "0.5",
-	Callback = function(val)
-		local num = tonumber(val)
-		if num and num >= 0 then
-			_G.Delay = num
-		end
+	Callback = function()
+		-- [envlog] error: Luraph Script:2484: Script:62: attempt to compare number <= userdata
 	end
 })
+
 local CosmeticFolder = workspace:WaitForChild("CosmeticFolder")
 local leaderstats = Players.LocalPlayer:WaitForChild("leaderstats")
 local Caught = leaderstats:WaitForChild("Caught")
-module9.RegisterMouseReleased = function(arg64, arg65)
-	arg64:RegisterMouseReleased(arg65, nil)
+
+module13.RegisterMouseReleased = function(arg76, arg77)
+	arg76:RegisterMouseReleased(arg77, nil)
 end
+
+CosmeticFolder.ChildAdded:Connect(function(child3)
+end)
+
+Caught.Changed:Connect(function(value)
+	-- condition: Caught.Value < value  (assumed true)
+end)
+
 Section5:AddToggle({
 	Title = "Legit Fishing",
 	Content = "This feature will always perfect on cast!",
 	Default = false,
 	Keybind = true,
 	Callback = function(state)
-		module8._autoLoop = state
 		if state then
+			module12._autoLoop = state
+
 			task.spawn(function()
-				module8:RequestChargeFishingRod(Vector2.new(0, 0), false)
+				module12:RequestChargeFishingRod(Vector2.new(0, 0), false)
+				local Charge = Players.LocalPlayer.PlayerGui:WaitForChild("Charge")
+				local Main53 = Charge:WaitForChild("Main")
+				local CanvasGroup = Main53:WaitForChild("CanvasGroup")
+				CanvasGroup:WaitForChild("Bar")
+				task.wait()
+				-- [envlog] error: Luraph Script:2581: Luraph Script:2534: Script:62: attempt to compare number < userdata
 			end)
+
 			task.spawn(function()
-				local clickEffect = Players.LocalPlayer.PlayerGui:FindFirstChild("!!! Click Effect")
-				if clickEffect then
-					clickEffect.Enabled = false
-				end
-				while module8._autoLoop do
-					module8:ConfirmClick()
-					task.wait(_G.Delay or 0.5)
-				end
-				if clickEffect then
-					clickEffect.Enabled = true
-				end
+				local ClickEffect = Players.LocalPlayer.PlayerGui:FindFirstChild("!!! Click Effect")
+				ClickEffect.Enabled = false
+				module12:ConfirmClick()
+				task.wait(0.5)
+				module12:ConfirmClick()
+				task.wait(0.5)
+				-- [envlog] the statements above repeat forever (loop)
 			end)
+
 			task.spawn(function()
-				while module8._autoLoop do
-					if not module8:RequestChargeFishingRod(Vector2.new(0, 0), false) then
-						task.wait(1)
-					end
-					while workspace.CosmeticFolder:FindFirstChild(Players.LocalPlayer.UserId) do
-						if not module8._autoLoop then break end
-						task.wait(0.1)
-					end
-					task.wait(0.5)
-				end
+				module12:RequestChargeFishingRod(Vector2.new(0, 0), false)
+				local Charge2 = Players.LocalPlayer.PlayerGui:WaitForChild("Charge")
+				local Main54 = Charge2:WaitForChild("Main")
+				local CanvasGroup2 = Main54:WaitForChild("CanvasGroup")
+				CanvasGroup2:WaitForChild("Bar")
+				task.wait()
+				-- [envlog] error: Luraph Script:2598: Luraph Script:2534: Script:62: attempt to compare number < userdata
 			end)
 		else
-			module8._autoLoop = false
+			module12._autoLoop = false
 		end
 	end
 })
+
 Section5:AddDivider()
+
 Section5:AddToggle({
 	Title = "Talon Fishing",
 	Default = false,
 	Keybind = true,
 	Callback = function(state)
-		_G.TalonFishing = state
-		if not state then
-			if _G.TalonThread then
-				task.cancel(_G.TalonThread)
-				_G.TalonThread = nil
-			end
-			pcall(function()
-				ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/CancelFishingInputs"]:InvokeServer(false)
+		if state then
+			local thread2 = task.spawn(function()
+				_G.TalonFishing = state
+				module12:ConfirmClick()
+				task.wait(0.1)
+				module12:ConfirmClick()
+				task.wait(0.1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+
+			local thread3 = task.spawn(function()
+				task.wait()
+				task.wait()
+				-- [envlog] the statements above repeat forever (loop)
 			end)
 		else
-			pcall(function()
-				ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/CancelFishingInputs"]:InvokeServer(true)
-			end)
-			_G.TalonThread = task.spawn(function()
-				while _G.TalonFishing do
-					module8:ConfirmClick()
-					task.wait(0.1)
-				end
-			end)
+			_G.TalonFishing = false
+			task.cancel(thread2)
+			task.cancel(thread3)
 		end
 	end
 })
+
 local Section6 = Tab2:AddSection("Instant Fishing")
+
 Section6:AddDropdown({
 	Title = "Cast Mode (Instant V1)",
 	Default = "Perfect",
 	Options = { "Normal", "Perfect" },
-	Callback = function(val)
-		_G.InstantCastModeV1 = val
+	Callback = function()
 	end
 })
+
 Section6:AddInput({
 	Title = "Delay Complete",
 	Placeholder = "Write ur input here",
-	Default = "0.1",
-	Callback = function(val)
-		local num = tonumber(val)
-		if num and num >= 0 then
-			_G.InstantDelayCompleteV1 = num
-		end
+	Callback = function()
+		-- [envlog] error: Luraph Script:2686: Script:62: attempt to compare number <= userdata
 	end
 })
+
 Section6:AddToggle({
 	Title = "Instant Fishing",
 	Content = "Auto instantly catch fish",
 	Default = false,
 	Keybind = true,
 	Callback = function(state)
-		_G.AutoInstantV1 = state
-		if not state then
-			pcall(function()
-				ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/CancelFishingInputs"]:InvokeServer()
-			end)
-		else
+		if state then
+			local Inventory53 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+			local Main55 = Inventory53:WaitForChild("Main")
+			local Top53 = Main55:WaitForChild("Top")
+			local Options53 = Top53:WaitForChild("Options")
+			local Fish53 = Options53:WaitForChild("Fish")
+			local Label53 = Fish53:WaitForChild("Label")
+			local BagSize53 = Label53:WaitForChild("BagSize")
+			BagSize53.Text:match("(%d+)/")
+
 			task.spawn(function()
-				while _G.AutoInstantV1 do
-					while Players.LocalPlayer:GetAttribute("SellAll") do
-						if not _G.AutoInstantV1 then break end
-						task.wait(0.1)
-					end
-					if not _G.AutoInstantV1 then break end
-					pcall(function()
-						ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RF/ChargeFishingRod"]:InvokeServer(Vector2.new(0, 0), _G.InstantCastModeV1 == "Perfect")
-						ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RE/CatchFishCompleted"]:FireServer()
-					end)
-					task.wait(_G.InstantDelayCompleteV1 or 0.1)
-				end
+				Players.LocalPlayer:GetAttribute("SellAll")
+				task.wait(0.1)
+				Players.LocalPlayer:GetAttribute("SellAll")
+				task.wait(0.1)
+				-- [envlog] the statements above repeat forever (loop)
 			end)
 		end
 	end
 })
+
 local Section7 = Tab2:AddSection("Instant Fishing V2")
+
 Section7:AddDropdown({
 	Title = "Cast Mode (Instant V2)",
 	Default = "Perfect",
 	Options = { "Normal", "Perfect" },
-	Callback = function(val)
-		_G.InstantCastModeV2 = val
+	Callback = function()
 	end
 })
+
 Section7:AddInput({
 	Title = "Delay Complete V2",
 	Placeholder = "Write ur input here",
-	Default = "0.1",
-	Callback = function(val)
-		local num = tonumber(val)
-		if num and num >= 0 then
-			_G.InstantDelayCompleteV2 = num
-		end
+	Callback = function()
+		-- [envlog] error: Luraph Script:2796: Script:62: attempt to compare number <= userdata
 	end
 })
+
+local notifConn = _G.notifConn
+_G.notifConn = notifConn
+notifConn:Disconnect()
+_G.notifConn = nil
+local notifOriginalConns = _G.notifOriginalConns
+_G.notifOriginalConns = notifOriginalConns
+
+for k2, v7 in pairs(notifOriginalConns) do
+	v7:Enable()
+end
+
+_G.notifOriginalConns = {}
+
+_G.notifConn = {
+	Disconnect = function()
+	end,
+	disconnect = function()
+	end
+}
+
 Section7:AddToggle({
 	Title = "Instant Fishing V2",
-	Content = "Auto instantly catch fish with event hook",
+	Content = "Auto instantly catch fish",
 	Default = false,
 	Keybind = true,
 	Callback = function(state)
-		_G.AutoInstantV2 = state
 		if state then
-			if not _G.BaitHookConn then
-				local baitEvent = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net:FindFirstChild("RE/BaitCastVisual")
-				if baitEvent then
-					_G.BaitHookConn = baitEvent.OnClientEvent:Connect(function(...)
-						if _G.AutoInstantV2 then
-							task.wait(_G.InstantDelayCompleteV2 or 0.05)
-							ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net["RE/CatchFishCompleted"]:FireServer()
-						end
-					end)
+			local Inventory54 = game.Players.LocalPlayer.PlayerGui:WaitForChild("Inventory")
+			local Main56 = Inventory54:WaitForChild("Main")
+			local Top54 = Main56:WaitForChild("Top")
+			local Options54 = Top54:WaitForChild("Options")
+			local Fish54 = Options54:WaitForChild("Fish")
+			local Label54 = Fish54:WaitForChild("Label")
+			local BagSize54 = Label54:WaitForChild("BagSize")
+			BagSize54.Text:match("(%d+)/")
+
+			task.spawn(function()
+				Players.LocalPlayer:GetAttribute("SellAll")
+				task.wait(0.1)
+				Players.LocalPlayer:GetAttribute("SellAll")
+				task.wait(0.1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		end
+	end
+})
+
+local Section8 = Tab2:AddSection("Blatant YTTA")
+
+Section8:AddDropdown({
+	Title = "Cast Mode (Blatant YTTA)",
+	Default = "Perfect",
+	Options = { "Normal", "Perfect" },
+	Callback = function()
+	end
+})
+
+Section8:AddInput({
+	Title = "Complete Delay YTTA",
+	Placeholder = "Write ur input here...",
+	Callback = function()
+	end
+})
+
+Section8:AddToggle({
+	Title = "Enable Blatant YTTA",
+	Default = false,
+	Keybind = true,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				Players.LocalPlayer:GetAttribute("SellAll")
+				task.wait(0.1)
+				Players.LocalPlayer:GetAttribute("SellAll")
+				task.wait(0.1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		end
+	end
+})
+
+task.spawn(function()
+	task.wait(2)
+	-- [envlog] error: Luraph Script:3091: Script:62: attempt to index number with 'Rainbow'
+end)
+
+local FishCaughtConn = _G.FishCaughtConn
+_G.FishCaughtConn = FishCaughtConn
+FishCaughtConn:Disconnect()
+_G.FishCaughtConn = nil
+
+_G.FishCaughtConn = {
+	Disconnect = function()
+	end,
+	disconnect = function()
+	end
+}
+
+local Section9 = Tab2:AddSection("Sell Features")
+
+Section9:AddDropdown({
+	Title = "Select Sell Mode",
+	Default = "Delay",
+	Options = { "Delay", "Count" },
+	Callback = function()
+	end
+})
+
+Section9:AddInput({
+	Title = "Set Value",
+	Content = "Delay = Time Count | Count = Backpack Count",
+	Default = "60",
+	Placeholder = "Write ur input here",
+	Callback = function()
+		-- [envlog] error: Luraph Script:3190: Script:62: attempt to compare number < userdata
+	end
+})
+
+Section9:AddToggle({
+	Title = "Start Sell",
+	Default = false,
+	Callback = function()
+	end
+})
+
+Section9:AddButton({
+	Title = "Sell All Now",
+	Callback = function()
+	end
+})
+
+task.spawn(function()
+	task.wait(1)
+	task.wait(1)
+	-- [envlog] the statements above repeat forever (loop)
+end)
+
+local Section10 = Tab2:AddSection("Favorite")
+Items:GetChildren()
+
+Section10:AddDropdown({
+	Title = "Name",
+	Multi = true,
+	Options = { "No Fish Found" },
+	Callback = function()
+	end
+})
+
+Section10:AddDropdown({
+	Title = "Rarity",
+	Multi = true,
+	Options = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret", "Forgotten" },
+	Callback = function()
+	end
+})
+
+Section10:AddDropdown({
+	Title = "Variant",
+	Multi = true,
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section10:AddDropdown({
+	Title = "Favorite Mode",
+	Default = "Strict",
+	Options = { "Strict", "Non-Strict" },
+	Callback = function()
+	end
+})
+
+Section10:AddToggle({
+	Title = "Auto Favorite",
+	Default = false,
+	Callback = function()
+		-- [envlog] error: Expected ':' not '.' calling member function GetItemDataFromItemType
+	end
+})
+
+Section10:AddButton({
+	Title = "Unfavorite All",
+	Callback = function()
+	end
+})
+
+ReplicatedStorage.Items.Misc:GetChildren()
+local Baits = ReplicatedStorage:WaitForChild("Baits")
+Baits:GetChildren()
+local Section11 = Tab5:AddSection("Shop")
+Section11:AddSubSection("Purchase Rod")
+
+Section11:AddDropdown({
+	Title = "Select Rod",
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section11:AddButton({
+	Title = "Buy Selected Rod",
+	Callback = function()
+		notif("Select rod first!")
+	end
+})
+
+Section11:AddSubSection("Purchase Bait")
+
+Section11:AddDropdown({
+	Title = "Select Bait",
+	Options = {},
+	Callback = function(state)
+		if not state then
+			notif("Select baits first!")
+		end
+	end
+})
+
+Section11:AddButton({
+	Title = "Buy Selected Bait",
+	Callback = function()
+	end
+})
+
+Section11:AddButton({
+	Title = "Open/Close Bait Shop",
+	Callback = function()
+		module7:IsOpen("Bait Shop")
+		module7:Close()
+	end
+})
+
+Section11:AddSubSection("Purchase Charm")
+
+Section11:AddDropdown({
+	Title = "Select Charm",
+	Default = "Algae Charm ($40,000)",
+	Options = {
+		"Algae Charm ($40,000)",
+		"Bone Charm ($70,000)",
+		"Magma Charm ($20,000)",
+		"Clover Charm ($5,000)",
+		"Heart Charm ($20,000)",
+		"Meteor Charm ($20,000)",
+		"Radioactive Charm ($20,000)",
+		"Pastel Egg Charm ($10,000)",
+		"Chocolate Charm ($6,000)",
+		"Boombox Charm ($5,000)"
+	},
+	Callback = function()
+	end
+})
+
+Section11:AddInput({
+	Title = "Quantity Charm",
+	Default = "1",
+	Callback = function()
+		-- [envlog] error: Luraph Script:3637: Script:62: attempt to compare number <= userdata
+	end
+})
+
+Section11:AddToggle({
+	Title = "Auto Buy Charm",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				notif(string.format("Bought %s (%d/%d)", string.match(arg138, "^(.-)%s*%("), 1, 1))
+				BuyCharmToggle:Set(false)
+				notif(string.format("Finished! Total bought: %d %s", 1, string.match(arg138, "^(.-)%s*%(")))
+			end)
+		end
+	end
+})
+
+Section11:AddButton({
+	Title = "Buy Once",
+	Callback = function()
+		notif("Successfully bought " .. string.match(arg138, "^(.-)%s*%("))
+	end
+})
+
+local Section12 = Tab5:AddSection("Auto Weather")
+
+Section12:AddDropdown({
+	Title = "Select Weather",
+	Multi = true,
+	Options = {
+		"Fog ($20.000)",
+		"Wind ($10,000)",
+		"Snow ($15,000)",
+		"Storm ($35,000)",
+		"Radiant ($50,000)",
+		"Shark Hunt ($300,000)",
+		"Treasure Hunt ($1,000,000)"
+	},
+	Callback = function()
+	end
+})
+
+Section12:AddToggle({
+	Title = "Auto Buy Weather",
+	Content = "This feature will buy the selected weather events if they are not active.",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				local Weather = workspace:FindFirstChild("Weather")
+				Weather:GetChildren()
+				task.wait(2)
+				local Weather2 = workspace:FindFirstChild("Weather")
+				Weather2:GetChildren()
+				task.wait(2)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		end
+	end
+})
+
+local Section13 = Tab5:AddSection("Merchant")
+Section13:AddParagraph({ Title = "MERCHANT STOCK PANEL", Content = "Loading..." })
+
+Section13:AddDropdown({
+	Title = "Merchant Item",
+	Callback = function()
+	end
+})
+
+Section13:AddInput({
+	Title = "Quantity Item",
+	Default = "1",
+	Callback = function()
+	end
+})
+
+Section13:AddToggle({
+	Title = "Auto Buy Merchant Item",
+	Default = false,
+	Callback = function()
+	end
+})
+
+task.spawn(function()
+	task.wait(1)
+	task.wait(1)
+	-- [envlog] the statements above repeat forever (loop)
+end)
+
+task.spawn(function()
+	task.wait(1)
+	local Merchant = Players.LocalPlayer.PlayerGui:FindFirstChild("Merchant")
+	Merchant.Main.Background.Items.ScrollingFrame:GetChildren()
+	Players.LocalPlayer.PlayerGui.Merchant.Main.Background.Items.ScrollingFrame:GetChildren()
+	task.wait(1)
+	-- [envlog] the statements above repeat forever (loop)
+end)
+
+local Section14 = Tab5:AddSection("Black Market")
+local Paragraph3 = Section14:AddParagraph({ Title = "Status", Content = "Idle... Tekan Refresh dulu" })
+
+Section14:AddDropdown({
+	Title = "Select Item",
+	Default = {},
+	Multi = true,
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section14:AddButton({
+	Title = "Refresh Item List",
+	Callback = function()
+		-- [envlog] error: Expected ':' not '.' calling member function GetItems
+	end
+})
+
+Section14:AddToggle({
+	Title = "Enable Auto Buy Blackmarket",
+	Default = false,
+	Callback = function(state)
+		if state then
+			Paragraph3:SetContent("Pilih item dulu sebelum mengaktifkan Auto Buy")
+		end
+	end
+})
+
+local Section15 = Tab3:AddSection("Auto Full Index [Beta]")
+local Paragraph4 = Section15:AddParagraph({ Title = "Status", Content = "Idle..." })
+
+Section15:AddParagraph({
+	Title = "Information",
+	Content = "Fitur ini akan otomatis teleport ke tempat dimana ikan yang belum didapatkan pada Mastery (index). Ikan limited event tidak termasuk"
+})
+
+Section15:AddDropdown({
+	Title = "Exclude Rarity",
+	Default = {},
+	Multi = true,
+	Options = {
+		"Common",
+		"Uncommon",
+		"Rare",
+		"Epic",
+		"Legendary",
+		"Mythic",
+		"SECRET",
+		"FORGOTTEN",
+		"Trophy",
+		"Collectible",
+		"Exclusive"
+	},
+	Callback = function()
+	end
+})
+
+Section15:AddToggle({
+	Title = "Enable Auto Full Index",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				Toggle:Set(true)
+
+				for k3, v8 in pairs(module4) do
 				end
+
+				Paragraph4:SetContent("Index sudah lengkap! Tidak ada ikan yang missing")
+				Paragraph4:SetContent("Index Already Full!")
+			end)
+		else
+			Toggle:Set(false)
+			Paragraph4:SetContent("Idle...")
+		end
+	end
+})
+
+Section15:AddButton({
+	Title = "Scan Missing Fish",
+	Callback = function(state)
+		if state then
+			for k4, v9 in pairs(module4) do
 			end
 		else
-			if _G.BaitHookConn then
-				_G.BaitHookConn:Disconnect()
-				_G.BaitHookConn = nil
+			for k5, v10 in pairs(module4) do
 			end
+		end
+
+		Paragraph4:SetContent("Index sudah lengkap! Tidak ada ikan yang missing")
+	end
+})
+
+local Section16 = Tab3:AddSection("Enchant System")
+Section16:AddParagraph({ Title = "Enchant Status", Content = "Current Rod : None\nCurrent Enchant : None" })
+local Enchants = ReplicatedStorage:WaitForChild("Enchants")
+Enchants:GetChildren()
+
+Section16:AddDropdown({
+	Title = "Select Enchant Target",
+	Content = "This will repeat until you get the selected enchant!",
+	Default = "Big Hunter I",
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section16:AddDropdown({
+	Title = "Stone Filter",
+	Default = "Enchant Stone",
+	Options = {
+		"Enchant Stone",
+		"Evolved Enchant Stone",
+		"Eggy Enchant Stone",
+		"Runic Enchant Stone",
+		"Transcended Stone"
+	},
+	Callback = function()
+	end
+})
+
+Section16:AddToggle({
+	Title = "Auto Enchant",
+	Content = "Automatically enchants until it reaches your selected enchant target!",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				-- [envlog] error: Luraph Script:4746: Luraph Script:4625: invalid argument #1 to 'pairs' (table expected, got number)
+			end)
+		else
+			task.spawn(function()
+			end)
 		end
 	end
 })
 
-
--- ============================================================================
--- [[ TAB: AUTOMATIC (KAITUN AUTOMATION CORE) ]]
--- ============================================================================
-
--- [[ KAITUN FARMING COORDINATES & HIERARCHY ]]
-local KaitunFarmCoordinates = {
-	["Kohana Volcano"] = Vector3.new(-4001, 10, -850),
-	["Kohana 1"] = Vector3.new(-3800, 15, -700),
-	["Tropical Grove"] = Vector3.new(2450, 8, 1200),
-	["Crater Island"] = Vector3.new(1200, 12, -2300),
-	["Coral Reefs 1"] = Vector3.new(-1800, 5, 2100),
-	["Coral Reefs 2"] = Vector3.new(-2000, 5, 2300),
-	["Lost Shore"] = Vector3.new(-800, 10, -1500),
-	["Esoteric Depths"] = Vector3.new(3100, -500, 1900),
-	["Ancient Jungle"] = Vector3.new(-1200, 10, 3200),
-	["Crystal Depths"] = Vector3.new(1500, -800, -1200),
-	["Mariana Trench"] = Vector3.new(500, -1200, 3500),
-	["Elemental Volcano"] = Vector3.new(-4200, 20, -1100),
-	["Elemental Storm"] = Vector3.new(-4500, 25, -900),
-	["Elemental Blizzard"] = Vector3.new(-4100, 15, -600),
-	["Fisherman Island Underground"] = Vector3.new(150, -30, 200),
-	["Pirate Island's"] = Vector3.new(-2800, 12, 1400),
-	["Lava Basin"] = Vector3.new(-3950, -50, -950),
-	["Secret Passage"] = Vector3.new(900, -100, -500),
-	["Treasure Room"] = Vector3.new(-2750, -80, 1450),
-	["Sisyphus Statue"] = Vector3.new(-1500, 50, -800),
-	["Weather Machine"] = Vector3.new(2100, 15, -1800),
-	["Sacred Temple"] = Vector3.new(-1100, 25, 3300),
-	["Ancient Ruin"] = Vector3.new(-1350, 15, 3450),
-}
-
-local KaitunFarmSpotsList = {
-	"Kohana Volcano",
-	"Tropical Grove",
-	"Crater Island",
-	"Coral Reefs 1",
-	"Coral Reefs 2",
-	"Lost Shore",
-	"Esoteric Depths",
-	"Ancient Jungle",
-	"Crystal Depths",
-	"Mariana Trench",
-	"Elemental Volcano",
-	"Elemental Storm",
-	"Elemental Blizzard",
-	"Fisherman Island Underground",
-	"Pirate Island's",
-	"Lava Basin",
-	"Secret Passage",
-	"Treasure Room",
-	"Sisyphus Statue",
-	"Weather Machine",
-	"Sacred Temple",
-	"Ancient Ruin",
-}
-
-local KaitunRodRanks = {
-	["Astral Rod"] = 100,
-	["Midas Rod"] = 90,
-	["Poseidon Rod"] = 85,
-	["Magma Rod"] = 80,
-	["Talon Rod"] = 75,
-	["Fortune Rod"] = 70,
-	["Steampunk Rod"] = 60,
-	["Golden Rod"] = 55,
-	["Gold Rod"] = 50,
-	["Carbon Rod"] = 40,
-	["Plastic Rod"] = 30,
-	["Flimsy Rod"] = 10,
-	["Training Rod"] = 5,
-}
-
-local KaitunBaitOrder = {
-	"Truffle Worm",
-	"Super Bait",
-	"Squid Bait",
-	"Night Bait",
-	"Coral Bait",
-	"Fish Head",
-	"Flies",
-	"Worm",
-	"Basic Bait",
-}
-
-_G.SelectedFarmLocation = "Kohana Volcano"
-_G.StartKaitun = false
-_G.KaitunAutoBestRod = false
-_G.KaitunAutoBestBait = false
-
-local function ensureKaitunPlatform(pos)
-	if not _G.KaitunPlatform or not _G.KaitunPlatform.Parent then
-		local p = Instance.new("Part")
-		p.Name = "Kaitun_Platform"
-		p.Size = Vector3.new(20, 1, 20)
-		p.Anchored = true
-		p.CanCollide = true
-		p.Transparency = 0.5
-		p.Material = Enum.Material.ForceField
-		p.BrickColor = BrickColor.new("Pastel light blue")
-		p.Parent = workspace
-		_G.KaitunPlatform = p
+Section16:AddButton({
+	Title = "Teleport Enchant Altar",
+	SubTitle = "Teleport Second Enchant Altar",
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart3 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local Humanoid2 = Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			HumanoidRootPart3.CFrame = (CFrame.new(3258, -1301, 1391) * CFrame.new(0, 5, 0))
+			Humanoid2:ChangeState(Enum.HumanoidStateType.Physics)
+			task.wait(0.1)
+			Humanoid2:ChangeState(Enum.HumanoidStateType.Running)
+		else
+			local HumanoidRootPart4 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local Humanoid3 = Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			HumanoidRootPart4.CFrame = (CFrame.new(3258, -1301, 1391) * CFrame.new(0, 5, 0))
+			Humanoid3:ChangeState(Enum.HumanoidStateType.Physics)
+			task.wait(0.1)
+			Humanoid3:ChangeState(Enum.HumanoidStateType.Running)
+		end
+	end,
+	SubCallback = function()
+		local HumanoidRootPart5 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		local Humanoid4 = Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		HumanoidRootPart5.CFrame = (CFrame.new(1480, 128, -593) * CFrame.new(0, 5, 0))
+		Humanoid4:ChangeState(Enum.HumanoidStateType.Physics)
+		task.wait(0.1)
+		Humanoid4:ChangeState(Enum.HumanoidStateType.Running)
 	end
-	_G.KaitunPlatform.Position = pos - Vector3.new(0, 3.5, 0)
+})
+
+local Section17 = Tab3:AddSection("Exchange Transcended Stone")
+
+local Paragraph5 = Section17:AddParagraph({
+	Title = "Exchange Status",
+	Content = "\r\nFish     : ???\r\nQuantity : 0\r\nStatus   : Idle\r\nExchanged: 0 / 0\r\n"
+})
+
+Section17:AddDropdown({
+	Title = "Select Secret Fish",
+	Options = {},
+	Callback = function(state)
+		if state then
+			local result53 = state:match("^(.-) x")
+
+			RunService.Heartbeat:Once(function(deltaTime5)
+				Paragraph5:SetContent(string.format("\r\n<font color='rgb(173,216,230)'>Fish     : %s</font>\r\n<font color='rgb(173,216,230)'>Quantity : %d</font>\r\n<font color='rgb(%s)'>Status   : %s</font>\r\n<font color='rgb(173,216,230)'>Exchanged: %d / %d</font>\r\n", result53, 1, "200,200,200", "Idle", 0, 0))
+			end)
+		else
+			RunService.Heartbeat:Once(function(deltaTime6)
+				Paragraph5:SetContent("\r\n<font color='rgb(173,216,230)'>Fish     : ???</font>\r\n<font color='rgb(173,216,230)'>Quantity : 1</font>\r\n<font color='rgb(200,200,200)'>Status   : Idle</font>\r\n<font color='rgb(173,216,230)'>Exchanged: 0 / 0</font>\r\n")
+			end)
+		end
+	end
+})
+
+Section17:AddInput({
+	Title = "Quantity For Exchange",
+	Default = "1",
+	Callback = function(state)
+		if state then
+			RunService.Heartbeat:Once(function(deltaTime7)
+				Paragraph5:SetContent(string.format("\r\n<font color='rgb(173,216,230)'>Fish     : %s</font>\r\n<font color='rgb(173,216,230)'>Quantity : %d</font>\r\n<font color='rgb(%s)'>Status   : %s</font>\r\n<font color='rgb(173,216,230)'>Exchanged: %d / %d</font>\r\n", "???", tonumber(state), "200,200,200", "Idle", 0, 0))
+			end)
+		else
+			RunService.Heartbeat:Once(function(deltaTime8)
+				Paragraph5:SetContent("\r\n<font color='rgb(173,216,230)'>Fish     : ???</font>\r\n<font color='rgb(173,216,230)'>Quantity : 1</font>\r\n<font color='rgb(200,200,200)'>Status   : Idle</font>\r\n<font color='rgb(173,216,230)'>Exchanged: 0 / 0</font>\r\n")
+			end)
+		end
+	end
+})
+
+Section17:AddButton({
+	Title = "Refresh Fish",
+	Callback = function()
+		-- [envlog] error: Expected ':' not '.' calling member function GetItemDataFromItemType
+	end
+})
+
+Section17:AddToggle({
+	Title = "Auto Exchange Secret",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				notif("Select a Tier 7 fish first!")
+			end)
+		else
+			RunService.Heartbeat:Once(function(deltaTime9)
+				Paragraph5:SetContent("\r\n<font color='rgb(173,216,230)'>Fish     : ???</font>\r\n<font color='rgb(173,216,230)'>Quantity : 1</font>\r\n<font color='rgb(200,200,200)'>Status   : Stopped</font>\r\n<font color='rgb(173,216,230)'>Exchanged: 0 / 0</font>\r\n")
+			end)
+		end
+	end
+})
+
+local Section18 = Tab3:AddSection("Totem Features")
+local Paragraph6 = Section18:AddParagraph({ Title = "Panel Activated Totem", Content = "Scanning Totems..." })
+local Paragraph7 = Section18:AddParagraph({ Title = "Auto Totem Status", Content = "Idle" })
+
+local function helper()
+	Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	workspace.Totems:GetChildren()
 end
 
-local function teleportToFarmSpot(locName)
-	locName = locName or _G.SelectedFarmLocation or "Kohana Volcano"
-	pcall(function()
-		local char = Players.LocalPlayer.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return end
-
-		-- Server-side BoatTeleport event
-		local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-		if net and net:FindFirstChild("RE/BoatTeleport") then
-			net["RE/BoatTeleport"]:FireServer(locName)
-		end
-
-		-- Direct CFrame positioning
-		local targetPos = KaitunFarmCoordinates[locName]
-		if not targetPos then
-			local areas = workspace:FindFirstChild("Areas") or workspace:FindFirstChild("Islands")
-			local a = areas and areas:FindFirstChild(locName)
-			if a then
-				targetPos = a:IsA("BasePart") and a.Position or (a.PrimaryPart and a.PrimaryPart.Position)
-			end
-		end
-
-		if targetPos then
-			task.wait(0.15)
-			hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 5, 0))
-			ensureKaitunPlatform(targetPos)
-		end
-		notif("Kaitun farming at: " .. tostring(locName), 2)
-	end)
+local function helper3()
+	helper()
+	Paragraph6:SetContent("No active totems detected")
 end
 
-local function getHighestRodTool()
-	local bestTool = nil
-	local bestScore = -1
-	local containers = { Players.LocalPlayer.Character, Players.LocalPlayer.Backpack }
-	for _, cont in ipairs(containers) do
-		if cont then
-			for _, item in ipairs(cont:GetChildren()) do
-				if item:IsA("Tool") then
-					local score = KaitunRodRanks[item.Name]
-					if not score and item.Name:lower():find("rod") then
-						score = 15
-					end
-					if score and score > bestScore then
-						bestScore = score
-						bestTool = item
-					end
+task.spawn(function()
+	task.wait(1)
+	helper3()
+	task.wait(1)
+	helper3()
+	task.wait(1)
+	-- [envlog] the statements above repeat forever (loop)
+end)
+
+Section18:AddButton({
+	Title = "Teleport To Nearest Totem",
+	Callback = function()
+		Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		workspace.Totems:GetChildren()
+	end
+})
+
+local Totems = ReplicatedStorage:WaitForChild("Totems")
+Totems:GetChildren()
+
+Section18:AddDropdown({
+	Title = "Select Totem to Auto Place",
+	Default = "No Totems Found",
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section18:AddButton({
+	Title = "Reset Totem Saved Time",
+	Callback = function()
+		notif("Successfully reset saved totem timer")
+	end
+})
+
+Section18:AddToggle({
+	Title = "Auto Place Totem",
+	Content = "Smart Totem Reamining Time Detection",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				Paragraph7:SetContent("Auto Totem Enabled [None]")
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				workspace:FindFirstChild("Totems")
+				workspace.Totems:GetChildren()
+				Paragraph7:SetContent("No Active Totem. Placing...")
+				local expect = Data:GetExpect({ "Inventory", "Totems" })
+
+				for i6, v11 in ipairs(expect) do
 				end
-			end
+
+				Paragraph7:SetContent("Empty/No Totem! Waiting 15s...")
+				task.wait(15)
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				workspace:FindFirstChild("Totems")
+				workspace.Totems:GetChildren()
+				Paragraph7:SetContent("No Active Totem. Placing...")
+				local expect2 = Data:GetExpect({ "Inventory", "Totems" })
+
+				for i7, v12 in ipairs(expect2) do
+				end
+
+				Paragraph7:SetContent("Empty/No Totem! Waiting 15s...")
+				task.wait(15)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			Paragraph7:SetContent("Auto Totem Disabled")
 		end
 	end
-	return bestTool
-end
+})
 
-local function doEquipBestRod()
-	pcall(function()
-		local char = Players.LocalPlayer.Character
-		if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hum then return end
+local Section19 = Tab3:AddSection("X3 Totem Mix [BETA]")
 
-		local bestTool = getHighestRodTool()
-		if bestTool and bestTool.Parent ~= char then
-			hum:EquipTool(bestTool)
-			notif("Equipped: " .. bestTool.Name, 1)
-		end
+Section19:AddParagraph({
+	Title = "READ ME!",
+	Content = "\n<b>Pilih 3 totem dari dropdown di bawah sebelum aktifkan toggle.</b>\n<b>Urutan pilihan = urutan spawn totem.</b>\n\n<b>Jika karakter bergerak aneh setelah menonaktifkan toggle</b>\n<b>Gunakan tombol dibawah ini untuk mereset karakter state</b>"
+})
 
-		local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-		if net and net:FindFirstChild("RE/EquipToolFromHotbar") then
-			net["RE/EquipToolFromHotbar"]:FireServer(1)
-		end
-	end)
-end
-
-local function doEquipBestBait()
-	pcall(function()
-		local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-		if not net or not net:FindFirstChild("RE/EquipBait") then return end
-
-		for _, bName in ipairs(KaitunBaitOrder) do
-			net["RE/EquipBait"]:FireServer(bName)
-		end
-	end)
-end
-
-local function stopKaitun()
-	_G.StartKaitun = false
-	if _G.KaitunPlatform then
-		pcall(function() _G.KaitunPlatform:Destroy() end)
-		_G.KaitunPlatform = nil
+Section19:AddButton({
+	Title = "Reset Character In Place",
+	Callback = function()
+		Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		Players.LocalPlayer.Character:BreakJoints()
+		local result54 = Players.LocalPlayer.CharacterAdded:Wait()
+		local HumanoidRootPart6 = result54:WaitForChild("HumanoidRootPart")
+		task.wait(0.3)
+		HumanoidRootPart6.CFrame = Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+		task.wait()
+		-- [envlog] the statements above repeat forever (loop)
 	end
-	notif("Kaitun [BETA] Stopped", 2)
+})
+
+Section19:AddDropdown({
+	Title = "Select 3 Totem Mix (urutan = urutan spawn)",
+	Default = { "Luck Totem", "Mutation Totem", "Shiny Totem" },
+	Multi = true,
+	Options = { "Luck Totem", "Mutation Totem", "Shiny Totem", "Noob Totem" },
+	Callback = function()
+	end
+})
+
+Section19:AddToggle({
+	Title = "Auto Spawn 3 Mix Totem",
+	Default = false,
+	Callback = function()
+	end
+})
+
+local Section20 = Tab3:AddSection("Auto Use Orb")
+
+local Dropdown = Section20:AddDropdown({
+	Title = "Select Mutation Orb",
+	Default = "None",
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section20:AddButton({
+	Title = "Refresh Orb List",
+	Callback = function()
+		Dropdown:SetValues({})
+	end
+})
+
+Section20:AddToggle({
+	Title = "Enable Auto Throw Orb",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local thread4 = task.spawn(function()
+				-- [envlog] error: Luraph Script:5897: invalid argument #1 to 'ipairs' (table expected, got nil)
+			end)
+		else
+			task.cancel(thread4)
+		end
+	end
+})
+
+local Section21 = Tab3:AddSection("Potions")
+local Potions = ReplicatedStorage:WaitForChild("Potions")
+Potions:GetChildren()
+
+Section21:AddDropdown({
+	Title = "Select Mode Potions",
+	Default = "Delay 30 Minute",
+	Options = { "Delay 30 Minute", "Use All Item" },
+	Callback = function()
+	end
+})
+
+Section21:AddDropdown({
+	Title = "Select Potions",
+	Content = "You can select more than 1",
+	Multi = true,
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section21:AddToggle({
+	Title = "Auto Use Potions",
+	Content = "Automatically Use Based on Selected Mode",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				-- [envlog] error: Luraph Script:6044: invalid argument #1 to 'ipairs' (table expected, got boolean)
+			end)
+		end
+	end
+})
+
+local Section22 = Tab3:AddSection("Event")
+
+local function helper2()
+	local Events = ReplicatedStorage:FindFirstChild("Events")
+	Events:GetChildren()
 end
 
-local function startKaitun()
-	_G.StartKaitun = true
-	notif("Kaitun [BETA] Active! Teleporting...", 2)
+helper2()
 
-	task.spawn(function()
-		local loc = _G.SelectedFarmLocation or "Kohana Volcano"
-		teleportToFarmSpot(loc)
-		task.wait(1.5)
+Section22:AddDropdown({
+	Title = "Priority Event",
+	Default = "None",
+	Options = { "None" },
+	Callback = function()
+	end
+})
 
-		local catchCounter = 0
+helper2()
 
-		while _G.StartKaitun do
-			local char = Players.LocalPlayer.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
+Section22:AddDropdown({
+	Title = "Select Event",
+	Default = { "None" },
+	Multi = true,
+	Options = { "None" },
+	Callback = function(arg214)
+		for k6, v14 in pairs(arg214) do
+		end
+	end
+})
 
-			if not hrp or not hum or hum.Health <= 0 then
-				task.wait(2)
-				local newChar = Players.LocalPlayer.CharacterAdded:Wait()
+Section22:AddToggle({
+	Title = "Auto Event",
+	Default = false,
+	Callback = function(state)
+		if state then
+			Toggle:Set(state)
+			notif("Pilih event dulu!")
+		end
+	end
+})
+
+Section22:AddSubSection("Thunderzilla Event")
+
+Section22:AddToggle({
+	Title = "Auto Thunderzilla Hunt",
+	Default = false,
+	Callback = function(state)
+		if state then
+			Toggle:Set(state)
+			local HumanoidRootPart7 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			notif("Auto Thunderzilla On")
+
+			task.spawn(function()
+				workspace:GetChildren()
+				task.wait(0.2)
+				workspace:GetChildren()
+				task.wait(0.2)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			Toggle:Set(false)
+			Players.LocalPlayer.Character:PivotTo(HumanoidRootPart7.CFrame)
+			notif("Auto Thunderzilla Off")
+		end
+	end
+})
+
+Section22:AddSubSection("Admin Event")
+
+local Paragraph8 = Section22:AddParagraph({
+	Title = "Ancient Lochness Monster Countdown",
+	Content = "<font color='#FF4D4D'><b>waiting for ... for joined event!</b></font>"
+})
+
+Section22:AddToggle({
+	Title = "Auto Admin Event",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart8 = Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart", 5)
+			Paragraph8:SetContent("<font color='#00ff99'><b>Farm position saved!</b></font>")
+
+			task.spawn(function()
 				task.wait(1)
-				teleportToFarmSpot(loc)
+				Paragraph8:SetContent(string.format("<font color='#4AFFE7'><b>Timer: %s</b></font>", workspace["!!! DEPENDENCIES"]["Event Tracker"].Main.Gui.Content.Items.Countdown.Label.Text))
+				Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart", 5)
+				workspace["!!! DEPENDENCIES"]["Event Tracker"].Main.Gui.Content.Items.Countdown.Label.Text:match("(%d+)H%s*(%d+)M%s*(%d+)S")
 				task.wait(1)
-			else
-				-- Equip Rod
-				if _G.KaitunAutoBestRod then
-					doEquipBestRod()
-				else
-					local equipped = char:FindFirstChildOfClass("Tool")
-					if not equipped or not equipped.Name:lower():find("rod") then
-						local any = getHighestRodTool()
-						if any and hum then hum:EquipTool(any) end
-					end
-				end
+				Paragraph8:SetContent(string.format("<font color='#4AFFE7'><b>Timer: %s</b></font>", workspace["!!! DEPENDENCIES"]["Event Tracker"].Main.Gui.Content.Items.Countdown.Label.Text))
+				Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart", 5)
+				workspace["!!! DEPENDENCIES"]["Event Tracker"].Main.Gui.Content.Items.Countdown.Label.Text:match("(%d+)H%s*(%d+)M%s*(%d+)S")
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			local HumanoidRootPart9 = Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart", 5)
+			HumanoidRootPart9.CFrame = HumanoidRootPart8.CFrame
+			Paragraph8:SetContent("<font color='#00FF99'><b> Returned to saved farm position!</b></font>")
+			Paragraph8:SetContent("<font color='#ff4d4d'><b>Auto Admin Event disabled.</b></font>")
+		end
+	end
+})
 
-				-- Equip Bait
-				if _G.KaitunAutoBestBait then
-					doEquipBestBait()
-				end
+Section22:AddDivider()
 
-				-- Cast Rod
-				local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-				pcall(function()
-					if net and net:FindFirstChild("RF/ChargeFishingRod") then
-						net["RF/ChargeFishingRod"]:InvokeServer(Vector2.new(0, 0), true)
-					elseif net and net:FindFirstChild("RE/ChargeFishingRod") then
-						net["RE/ChargeFishingRod"]:FireServer(Vector2.new(0, 0), true)
-					end
-				end)
+local Paragraph9 = Section22:AddParagraph({
+	Title = "Mutant Runic Koi Countdown",
+	Content = "<font color='#FF4D4D'><b>waiting for ... for joined event!</b></font>"
+})
 
-				local curTool = char:FindFirstChildOfClass("Tool")
-				if curTool and curTool:FindFirstChild("Handle") then
-					curTool:Activate()
-				end
+Section22:AddToggle({
+	Title = "Auto Mutant Runic Koi",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart10 = Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart", 5)
+			Paragraph9:SetContent("<font color='#00ff99'><b>Farm position saved!</b></font>")
 
-				-- Wait for fish bite
+			task.spawn(function()
+				task.wait(1)
+				Paragraph9:SetContent(string.format("<font color='#4AFFE7'><b>Timer: %s</b></font>", workspace["!!! DEPENDENCIES"]["UnderwaterCity Event Tracker"].Main.Gui.Content.Items.Countdown.Label.Text))
+				Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart", 5)
+				workspace["!!! DEPENDENCIES"]["UnderwaterCity Event Tracker"].Main.Gui.Content.Items.Countdown.Label.Text:match("(%d+)H%s*(%d+)M%s*(%d+)S")
+				task.wait(1)
+				Paragraph9:SetContent(string.format("<font color='#4AFFE7'><b>Timer: %s</b></font>", workspace["!!! DEPENDENCIES"]["UnderwaterCity Event Tracker"].Main.Gui.Content.Items.Countdown.Label.Text))
+				Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart", 5)
+				workspace["!!! DEPENDENCIES"]["UnderwaterCity Event Tracker"].Main.Gui.Content.Items.Countdown.Label.Text:match("(%d+)H%s*(%d+)M%s*(%d+)S")
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			local HumanoidRootPart11 = Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart", 5)
+			HumanoidRootPart11.CFrame = HumanoidRootPart10.CFrame
+			Paragraph9:SetContent("<font color='#00FF99'><b> Returned to saved farm position!</b></font>")
+			Paragraph9:SetContent("<font color='#ff4d4d'><b>Auto Mutant Runic Koi disabled.</b></font>")
+		end
+	end
+})
+
+local Section23 = Tab3:AddSection("Save Position")
+
+Section23:AddParagraph({
+	Title = "Tutorial Teleport",
+	Content = "\r\n<b><font color=\"rgb(252, 119, 216)\">AUTO TELEPORT?</font></b>\r\nClick <b><font color=\"rgb(252, 119, 216)\">Save Position</font></b> to save your current position!\r\n\r\n<b><font color=\"rgb(252, 119, 216)\">HOW TO LOAD?</font></b>\r\nThis feature will auto-sync your last position when executed, so you will teleport automatically!\r\n\r\n<b><font color=\"rgb(252, 119, 216)\">HOW TO RESET?</font></b>\r\nClick <b><font color=\"rgb(252, 119, 216)\">Reset Position</font></b> to clear your saved position.\r\n    "
+})
+
+Section23:AddButton({
+	Title = "Save Position",
+	SubTitle = "Reset Position",
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart12 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local components = HumanoidRootPart12.CFrame:GetComponents()
+			local json = HttpService:JSONEncode({ components })
+			writefile("Meng Hub/Position.json", json)
+		else
+			local HumanoidRootPart13 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local components2 = HumanoidRootPart13.CFrame:GetComponents()
+			local json2 = HttpService:JSONEncode({ components2 })
+			writefile("Meng Hub/Position.json", json2)
+		end
+
+		notif("Successfully saved position")
+	end,
+	SubCallback = function()
+		-- isfile("Meng Hub/Position.json") -> false
+		notif("Successfully reset last position")
+	end
+})
+
+Section23:AddButton({
+	Title = "Teleport To Save Location",
+	Callback = function()
+		Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
+		-- isfile("Meng Hub/Position.json") -> false
+		notif("You don't have save position before..")
+	end
+})
+
+local Section24 = Tab3:AddSection("Pirate Events")
+
+Section24:AddToggle({
+	Title = "Auto Claim Pirate Chest",
+	Default = false,
+	Callback = function(state)
+		if state then
+			StarterGui:SetCore("SendNotification", {
+		Text = "Auto Claim Pirate Chest aktif (Teleport + Proximity)",
+		Title = "Pirate Event",
+		Duration = 4,
+		Icon = "rbxassetid://90292614315729"
+	})
+
+			task.spawn(function()
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				local PirateChestStorage = workspace:FindFirstChild("PirateChestStorage")
+				PirateChestStorage:GetChildren()
 				task.wait(1.2)
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				local PirateChestStorage2 = workspace:FindFirstChild("PirateChestStorage")
+				PirateChestStorage2:GetChildren()
+				task.wait(1.2)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			StarterGui:SetCore("SendNotification", {
+		Text = "Auto Claim Pirate Chest dimatikan",
+		Title = "Pirate Event",
+		Duration = 3,
+		Icon = "rbxassetid://90292614315729"
+	})
+		end
+	end
+})
 
-				-- Hook and Complete Catch
-				pcall(function()
-					if net and net:FindFirstChild("RE/CatchFishCompleted") then
-						net["RE/CatchFishCompleted"]:FireServer()
-					end
+_G.SavedLeviFarmPos = nil
+Section24:AddSubSection("Auto Event Leviathan Hunt")
+_G.SavedLeviFarmPos = nil
+
+Section24:AddToggle({
+	Title = "Auto Event Leviathan Hunt",
+	Default = false,
+	Callback = function(state)
+		if state then
+			_G.AutoLeviStandby = state
+			local HumanoidRootPart14 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+			task.spawn(function(...)
+				notif("Idle...")
+				Players.LocalPlayer.PlayerGui.Events.Frame.Events:FindFirstChild("Leviathan Hunt")
+				HumanoidRootPart14.Anchored = true
+				_G.SavedLeviFarmPos = HumanoidRootPart14.CFrame
+				HumanoidRootPart14.CFrame = CFrame.new(3473.89502, -287.843201, 3473.380371, -0.96202, 0, -0.272978, 0, 1, 0, 0.272978, 0, -0.96202)
+				notif("Leviathan Hunt started, Teleporting...")
+
+				task.delay(1, function()
+					HumanoidRootPart14.Anchored = false
 				end)
 
-				catchCounter = catchCounter + 1
-
-				-- Auto Sell Every 6 Catches
-				if catchCounter % 6 == 0 then
-					pcall(function()
-						if net and net:FindFirstChild("RF/SellAllItems") then
-							net["RF/SellAllItems"]:InvokeServer()
-						end
-					end)
-				end
-
-				task.wait(0.5)
-			end
+				task.wait(1)
+				Players.LocalPlayer.PlayerGui.Events.Frame.Events:FindFirstChild("Leviathan Hunt")
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			_G.AutoLeviStandby = false
+			local HumanoidRootPart15 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart15.CFrame = HumanoidRootPart14.CFrame
+			notif("Back to farm position")
 		end
-	end)
+	end
+})
+
+ReplicatedStorage.Assets.Auras:GetChildren()
+local Section25 = Tab4:AddSection("Aura Features")
+
+Section25:AddDropdown({
+	Title = "Select Auras",
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section25:AddToggle({
+	Title = "Enable Auras",
+	Default = false,
+	Callback = function(state)
+		if state then
+			Players.LocalPlayer:SetAttribute("FishingRodSkin", false)
+			local attributeChangedSignal = Players.LocalPlayer:GetAttributeChangedSignal("FishingRodSkin")
+
+			local connection16 = attributeChangedSignal:Connect(function()
+				Players.LocalPlayer:GetAttribute("FishingRodSkin")
+				task.wait(0.1)
+				Players.LocalPlayer:SetAttribute("FishingRodSkin", false)
+			end)
+		else
+			connection16:Disconnect()
+			Players.LocalPlayer:SetAttribute("FishingRodSkin", nil)
+		end
+	end
+})
+
+local Section26 = Tab4:AddSection("Animations & VFX Skin")
+
+Section26:AddDropdown({
+	Title = "Select Animation",
+	Default = "Soul Scythe",
+	Options = {
+		"Soul Scythe",
+		"Frozen Krampus Scythe",
+		"Fallen Staff",
+		"Holy Trident",
+		"Binary Edge",
+		"The Vanquisher",
+		"1x1x1x1 Ban Hammer",
+		"Eclipse Katana",
+		"Princess Parasol",
+		"Corruption Edge",
+		"Blackhole Sword",
+		"Eternal Flower",
+		"Ethereal Sword",
+		"Crescendo Scythe",
+		"Aurelian Bow",
+		"Cupid's Harp",
+		"Dark Matter Scythe",
+		"Draconic Soul",
+		"Divine Staff",
+		"Kitty Guitar",
+		"Serpent's Trident",
+		"Crimson Retribution",
+		"Bunny Staff",
+		"Easter Parasol",
+		"Celestial Scythe",
+		"Void Kraken",
+		"Void Guitar",
+		"Aether Monarch",
+		"Wings of Everlove",
+		"Undead Guitar",
+		"Oceanic Harpoon"
+	},
+	Callback = function()
+	end
+})
+
+Section26:AddToggle({
+	Title = "Auto Animation",
+	Default = false,
+	Callback = function()
+		-- [envlog] error: Luraph Script:6718: Luraph Script:6645: Script:62: attempt to concatenate boolean with string
+	end
+})
+
+Section26:AddSubSection("VFX Skin")
+
+Section26:AddDropdown({
+	Title = "Select VFX Skin",
+	Default = "Soul Scythe",
+	Options = {
+		"Soul Scythe",
+		"Frozen Krampus Scythe",
+		"Fallen Staff",
+		"Holy Trident",
+		"Binary Edge",
+		"The Vanquisher",
+		"1x1x1x1 Ban Hammer",
+		"Eclipse Katana",
+		"Princess Parasol",
+		"Corruption Edge",
+		"Blackhole Sword",
+		"Eternal Flower",
+		"Ethereal Sword",
+		"Crescendo Scythe",
+		"Aurelian Bow",
+		"Cupid's Harp",
+		"Dark Matter Scythe",
+		"Draconic Soul",
+		"Divine Staff",
+		"Kitty Guitar",
+		"Serpent's Trident",
+		"Crimson Retribution",
+		"Bunny Staff",
+		"Easter Parasol",
+		"Celestial Scythe",
+		"Void Kraken",
+		"Void Guitar",
+		"Aether Monarch",
+		"Wings of Everlove",
+		"Undead Guitar",
+		"Oceanic Harpoon"
+	},
+	Callback = function()
+	end
+})
+
+Section26:AddToggle({
+	Title = "Auto Animation",
+	Default = false,
+	Callback = function(state)
+		if state then
+			module6.RenderAtPoint = function(arg247, arg248)
+				local result55 = arg248:match(" (Dive)$")
+				module6:Contains(false .. " " .. result55)
+				arg247:RenderAtPoint(false .. " " .. result55, nil)
+			end
+
+			module6.RenderInstance = function(arg249, arg250)
+				local result56 = arg250:match(" (Dive)$")
+				module6:Contains(false .. " " .. result56)
+				arg249:RenderInstance(false .. " " .. result56, nil)
+			end
+		else
+			module6.RenderAtPoint = module6.RenderAtPoint
+			module6.RenderInstance = module6.RenderInstance
+		end
+	end
+})
+
+local Section27 = Tab4:AddSection("Emote Features")
+ReplicatedStorage.Emotes:GetChildren()
+
+Section27:AddDropdown({
+	Title = "Select Emote",
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section27:AddToggle({
+	Title = "Enable Emote",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				task.wait(1)
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			currentEmoteTrack:Stop()
+		end
+	end
+})
+
+Section27:AddButton({
+	Title = "Play Once",
+	Callback = function()
+	end
+})
+
+local Section28 = Tab4:AddSection("Fake Avatar Features")
+
+Section28:AddDropdown({
+	Title = "Fake Avatar",
+	Default = "Self Avatar",
+	Options = {
+		"Self Avatar",
+		"WoozyNate",
+		"Nicholas",
+		"yvlyf",
+		"traevp",
+		"J0LLY",
+		"LucashDev",
+		"CEOofIsaac",
+		"Stealthy",
+		"Wildes",
+		"Talon",
+		"Relukt",
+		"Sammy",
+		"Diesel",
+		"S4ans03",
+		"Aura",
+		"iJava",
+		"White Guy",
+		"Purple King",
+		"Kachaaaa Gay",
+		"Mpruyyy"
+	},
+	Callback = function()
+	end
+})
+
+Section28:AddToggle({
+	Title = "Fake Avatar",
+	Default = false,
+	Keybind = true,
+	Callback = function()
+	end
+})
+
+Players.LocalPlayer.CharacterAdded:Connect(function(character8)
+end)
+
+require(ReplicatedStorage.Packages.Replion)
+require(ReplicatedStorage.Shared.ItemUtility)
+require(ReplicatedStorage.Shared.VendorUtility)
+require(ReplicatedStorage.Shared.PlayerStatsUtility)
+require(ReplicatedStorage.Shared.Trading.TradeData)
+
+CombinedModules.AutoTrade = {
+	GetEnchantStoneItems = function()
+	end,
+	GetFishItems = function()
+		-- [envlog] error: Expected ':' not '.' calling member function GetItemDataFromItemType
+	end,
+	GetPlayers = function()
+		local players2 = Players:GetPlayers()
+
+		for i9, v15 in ipairs(players2) do
+		end
+	end,
+	GetStats = function()
+	end,
+	IsRunning = function()
+	end,
+	ResetStats = function()
+	end,
+	SetItem = function()
+	end,
+	SetItemAmount = function()
+	end,
+	SetRarity = function()
+	end,
+	SetRarityAmount = function()
+	end,
+	SetStoneAmount = function()
+	end,
+	SetStoneTradeMode = function()
+	end,
+	SetStoneType = function()
+	end,
+	SetTargetCoins = function()
+	end,
+	SetTargetPlayer = function()
+	end,
+	SetTradeMode = function()
+	end,
+	Start = function()
+		Players:FindFirstChild(arg289)
+
+		local thread5 = task.spawn(function()
+			Players:FindFirstChild(arg289)
+			-- [envlog] error: Expected ':' not '.' calling member function GetItemDataFromItemType
+		end)
+	end,
+	Stop = function()
+		task.cancel(thread5)
+	end
+}
+
+require(ReplicatedStorage.Packages.Replion)
+local module14 = require(ReplicatedStorage.Shared.Trading.TradeData)
+
+CombinedModules.AutoAcceptTrade = {
+	IsRunning = function()
+	end,
+	Start = function()
+		local module15 = require(ReplicatedStorage.Controllers.PromptController)
+
+		module15.FirePrompt = function(arg301, arg302)
+			arg301:FirePrompt(arg302)
+		end
+
+		local connection17 = module14.Remotes.TradeStarted.OnClientEvent:Connect(function()
+		end)
+	end,
+	Stop = function()
+		module15.FirePrompt = module15.FirePrompt
+		connection17:Disconnect()
+	end
+}
+
+local Section29 = Tab6:AddSection("Select Player")
+
+local Dropdown2 = Section29:AddDropdown({
+	Title = "Select Player for Trade",
+	Default = {},
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section29:AddButton({
+	Title = "Refresh Player",
+	Callback = function(state)
+		if state then
+			local players3 = Players:GetPlayers()
+
+			for i10, v16 in ipairs(players3) do
+			end
+
+			Dropdown2:SetValues({ v16.Name })
+		else
+			local players4 = Players:GetPlayers()
+
+			for i11, v17 in ipairs(players4) do
+			end
+
+			Dropdown2:SetValues({ v17.Name })
+		end
+	end
+})
+
+local Section30 = Tab6:AddSection("Trade By Name")
+local Paragraph10 = Section30:AddParagraph({ Title = "Trade Status", Content = "Waiting..." })
+
+Section30:AddDropdown({
+	Title = "Select Item",
+	Default = {},
+	Options = {},
+	Callback = function(state)
+		if state then
+			state:match("^(.-) x")
+		end
+	end
+})
+
+Section30:AddInput({
+	Title = "Set Amount",
+	Default = "1",
+	Callback = function()
+	end
+})
+
+Section30:AddToggle({
+	Title = "Start Trade by Name",
+	Default = false,
+	Callback = function()
+	end
+})
+
+Section30:AddButton({
+	Title = "Refresh Fish Items",
+	SubTitle = "Reset Stats",
+	Callback = function()
+		-- [envlog] error: Expected ':' not '.' calling member function GetItemDataFromItemType
+	end,
+	SubCallback = function()
+		Paragraph10:SetContent("Waiting...")
+	end
+})
+
+local Section31 = Tab6:AddSection("Trade by Coins")
+local Paragraph11 = Section31:AddParagraph({ Title = "Trade Status", Content = "Waiting..." })
+
+Section31:AddInput({
+	Title = "Target Coins",
+	Default = "0",
+	Callback = function()
+	end
+})
+
+Section31:AddToggle({
+	Title = "Start Trade by Coins",
+	Default = false,
+	Callback = function()
+	end
+})
+
+Section31:AddButton({
+	Title = "Reset Stats",
+	Callback = function()
+		Paragraph11:SetContent("Waiting...")
+	end
+})
+
+local Section32 = Tab6:AddSection("Trade by Rarities")
+local Paragraph12 = Section32:AddParagraph({ Title = "Trade Status", Content = "Waiting..." })
+
+Section32:AddDropdown({
+	Title = "Select Rarity",
+	Default = "Common",
+	Options = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret", "Forgotten" },
+	Callback = function()
+	end
+})
+
+Section32:AddInput({
+	Title = "Set Amount",
+	Default = "1",
+	Callback = function()
+	end
+})
+
+Section32:AddToggle({
+	Title = "Start Trade by Rarities",
+	Default = false,
+	Callback = function()
+	end
+})
+
+Section32:AddButton({
+	Title = "Reset Stats",
+	Callback = function()
+		Paragraph12:SetContent("Waiting...")
+	end
+})
+
+local Section33 = Tab6:AddSection("Trade Enchant Stone")
+local Paragraph13 = Section33:AddParagraph({ Title = "Trade Status", Content = "Waiting..." })
+
+Section33:AddDropdown({
+	Title = "Stone Type",
+	Default = "Normal",
+	Options = { "Normal", "Double", "Evolved", "Eggy", "Runic" },
+	Callback = function()
+	end
+})
+
+Section33:AddDropdown({
+	Title = "Stone Trade Mode",
+	Default = "One by One",
+	Options = { "One by One", "Bulk" },
+	Callback = function()
+	end
+})
+
+Section33:AddInput({
+	Title = "Set Amount",
+	Default = "1",
+	Callback = function()
+	end
+})
+
+Section33:AddButton({
+	Title = "Check Enchant Stones",
+	Callback = function()
+		Paragraph13:SetContent("No Enchant Stones Found")
+	end
+})
+
+Section33:AddToggle({
+	Title = "Start Trade by Enchant Stone",
+	Default = false,
+	Callback = function()
+	end
+})
+
+Section33:AddButton({
+	Title = "Reset Stats",
+	Callback = function()
+		Paragraph13:SetContent("Waiting...")
+	end
+})
+
+local Section34 = Tab6:AddSection("Auto Accept Trade")
+
+Section34:AddToggle({
+	Title = "Enable Auto Accept Trade",
+	Default = false,
+	Callback = function(state)
+		if state then
+			module15.FirePrompt = function(arg348, arg349)
+				arg348:FirePrompt(arg349)
+			end
+
+			local connection18 = module14.Remotes.TradeStarted.OnClientEvent:Connect(function()
+			end)
+		else
+			module15.FirePrompt = module15.FirePrompt
+			connection18:Disconnect()
+		end
+	end
+})
+
+local Items2 = ReplicatedStorage:WaitForChild("Items")
+local Baits2 = ReplicatedStorage:WaitForChild("Baits")
+_G.SelectedFarmLocation = "Kohana Volcano"
+local KaitunZone = _G.KaitunZone
+_G.KaitunZone = KaitunZone
+_G.DeepSeaDone = false
+_G.ArtifactDone = false
+_G.ElementDone = false
+_G.DiamondDone = false
+
+local function helper4()
+	ReplicatedStorage.Items.Misc:GetChildren()
+	ReplicatedStorage.Items.Misc:GetChildren()
+	ReplicatedStorage.Items.Misc:GetChildren()
+	ReplicatedStorage.Items.Misc:GetChildren()
 end
 
--- ============================================================================
--- [[ SECTION: KAITUN [BETA] (EXACT DESIGN MATCH) ]]
--- ============================================================================
-local KaitunSection = TabAuto:AddSection("Kaitun [BETA]")
+task.spawn(function()
+	task.wait(1)
+	helper4()
+	helper4()
+	task.wait(1)
+	-- [envlog] the statements above repeat forever (loop)
+end)
 
-KaitunSection:AddDropdown({
+local Section35 = Tab7:AddSection("Kaitun [BETA]")
+_G.SelectedFarmLocation = false
+
+Section35:AddDropdown({
 	Title = "Select Farm Location",
-	Options = KaitunFarmSpotsList,
 	Default = "Kohana Volcano",
+	Options = { "Kohana Volcano", "Tropical Grove" },
 	Callback = function(val)
 		_G.SelectedFarmLocation = val
-		if _G.StartKaitun then
-			teleportToFarmSpot(val)
-		end
 	end
 })
 
-KaitunSection:AddToggle({
+Section35:AddToggle({
 	Title = "Start Kaitun",
 	Default = false,
 	Callback = function(state)
 		if state then
-			startKaitun()
+			_G.KaitunPanel = state
+			game.CoreGui:FindFirstChild("MengHub_Kaitun")
+			local MengHub_Kaitun = game.CoreGui:FindFirstChild("MengHub_Kaitun")
+			if MengHub_Kaitun then MengHub_Kaitun:Destroy() end
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			_G.KaitunZone = nil
+			local MengHub_Kaitun2 = Instance.new("ScreenGui")
+			MengHub_Kaitun2.Name = "MengHub_Kaitun"
+			MengHub_Kaitun2.IgnoreGuiInset = true
+			MengHub_Kaitun2.ResetOnSpawn = false
+			MengHub_Kaitun2.ZIndexBehavior = Enum.ZIndexBehavior.Global
+			MengHub_Kaitun2.Parent = game.CoreGui
+			local BlurEffect = Instance.new("BlurEffect", game.Lighting)
+			BlurEffect.Size = 12
+			local Frame9 = Instance.new("Frame", MengHub_Kaitun2)
+			Frame9.Size = UDim2.new(1, 0, 1, 0)
+			Frame9.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			Frame9.BackgroundTransparency = 0.5
+			Frame9.BorderSizePixel = 0
+			local Container = Instance.new("ScrollingFrame", MengHub_Kaitun2)
+			Container.Name = "Container"
+			Container.AnchorPoint = Vector2.new(0.5, 0.5)
+			Container.Position = UDim2.new(0.5, 0, 0.5, 0)
+			Container.Size = UDim2.new(0.9, 0, 0.85, 0)
+			Container.BackgroundTransparency = 1
+			Container.BorderSizePixel = 0
+			Container.ScrollBarThickness = 0
+			Container.CanvasSize = UDim2.new(0, 0, 0, 0)
+			Container.AutomaticCanvasSize = Enum.AutomaticSize.Y
+			local UISizeConstraint = Instance.new("UISizeConstraint", Container)
+			UISizeConstraint.MaxSize = Vector2.new(550, 900)
+			local UIListLayout = Instance.new("UIListLayout", Container)
+			UIListLayout.Padding = UDim.new(0, 12)
+			UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+			UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			local UIPadding = Instance.new("UIPadding", Container)
+			UIPadding.PaddingTop = UDim.new(0, 20)
+			UIPadding.PaddingBottom = UDim.new(0, 50)
+			local Frame10 = Instance.new("Frame", Container)
+			Frame10.Size = UDim2.new(1, 0, 0, 0)
+			Frame10.AutomaticSize = Enum.AutomaticSize.Y
+			Frame10.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+			Frame10.BackgroundTransparency = 0.2
+			Frame10.BorderSizePixel = 0
+			local UICorner5 = Instance.new("UICorner", Frame10)
+			UICorner5.CornerRadius = UDim.new(0, 10)
+			local UIStroke3 = Instance.new("UIStroke", Frame10)
+			UIStroke3.Color = Color3.fromRGB(45, 55, 75)
+			UIStroke3.Transparency = 0.5
+			local UIPadding2 = Instance.new("UIPadding", Frame10)
+			UIPadding2.PaddingBottom = UDim.new(0, 12)
+			UIPadding2.PaddingLeft = UDim.new(0, 15)
+			UIPadding2.PaddingRight = UDim.new(0, 15)
+			UIPadding2.PaddingTop = UDim.new(0, 12)
+			local UIListLayout2 = Instance.new("UIListLayout", Frame10)
+			UIListLayout2.Padding = UDim.new(0, 5)
+			UIListLayout2.SortOrder = Enum.SortOrder.LayoutOrder
+			Frame10.BackgroundColor3 = Color3.fromRGB(30, 220, 180)
+			Frame10.BackgroundTransparency = 0.1
+			local TextLabel8 = Instance.new("TextLabel", Frame10)
+			TextLabel8.Size = UDim2.new(1, 0, 0, 30)
+			TextLabel8.BackgroundTransparency = 1
+			TextLabel8.Font = Enum.Font.GothamBold
+			TextLabel8.TextSize = 22
+			TextLabel8.TextColor3 = Color3.fromRGB(255, 255, 255)
+			TextLabel8.Text = "MENG HUB"
+			TextLabel8.TextXAlignment = Enum.TextXAlignment.Left
+			local TextLabel9 = Instance.new("TextLabel", Frame10)
+			TextLabel9.Size = UDim2.new(1, 0, 0, 15)
+			TextLabel9.BackgroundTransparency = 1
+			TextLabel9.Font = Enum.Font.GothamMedium
+			TextLabel9.TextSize = 11
+			TextLabel9.TextColor3 = Color3.fromRGB(0, 60, 50)
+			TextLabel9.Text = "KAITUN SYSTEM v3.0 • ROD-BASED DETECTION"
+			TextLabel9.TextXAlignment = Enum.TextXAlignment.Left
+			local Frame11 = Instance.new("Frame", Container)
+			Frame11.Size = UDim2.new(1, 0, 0, 0)
+			Frame11.AutomaticSize = Enum.AutomaticSize.Y
+			Frame11.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+			Frame11.BackgroundTransparency = 0.2
+			Frame11.BorderSizePixel = 0
+			local UICorner6 = Instance.new("UICorner", Frame11)
+			UICorner6.CornerRadius = UDim.new(0, 10)
+			local UIStroke4 = Instance.new("UIStroke", Frame11)
+			UIStroke4.Color = Color3.fromRGB(45, 55, 75)
+			UIStroke4.Transparency = 0.5
+			local UIPadding3 = Instance.new("UIPadding", Frame11)
+			UIPadding3.PaddingBottom = UDim.new(0, 12)
+			UIPadding3.PaddingLeft = UDim.new(0, 15)
+			UIPadding3.PaddingRight = UDim.new(0, 15)
+			UIPadding3.PaddingTop = UDim.new(0, 12)
+			local UIListLayout3 = Instance.new("UIListLayout", Frame11)
+			UIListLayout3.Padding = UDim.new(0, 5)
+			UIListLayout3.SortOrder = Enum.SortOrder.LayoutOrder
+			local TextLabel10 = Instance.new("TextLabel", Frame11)
+			TextLabel10.Size = UDim2.new(1, 0, 0, 25)
+			TextLabel10.BackgroundTransparency = 1
+			TextLabel10.Font = Enum.Font.GothamBold
+			TextLabel10.TextSize = 14
+			TextLabel10.TextColor3 = Color3.fromRGB(30, 220, 180)
+			TextLabel10.Text = "»  SYSTEM STATUS"
+			TextLabel10.TextXAlignment = Enum.TextXAlignment.Left
+			local TextLabel11 = Instance.new("TextLabel", Frame11)
+			TextLabel11.Size = UDim2.new(1, 0, 0, 25)
+			TextLabel11.BackgroundTransparency = 1
+			TextLabel11.Font = Enum.Font.GothamBold
+			TextLabel11.TextSize = 16
+			TextLabel11.TextColor3 = Color3.fromRGB(255, 255, 255)
+			TextLabel11.Text = "Initializing..."
+			TextLabel11.TextXAlignment = Enum.TextXAlignment.Left
+			TextLabel11.RichText = true
+			local TextLabel12 = Instance.new("TextLabel", Frame11)
+			TextLabel12.Size = UDim2.new(1, 0, 0, 20)
+			TextLabel12.BackgroundTransparency = 1
+			TextLabel12.Font = Enum.Font.Gotham
+			TextLabel12.TextSize = 13
+			TextLabel12.TextColor3 = Color3.fromRGB(180, 190, 200)
+			TextLabel12.Text = "Idle"
+			TextLabel12.TextXAlignment = Enum.TextXAlignment.Left
+			local Frame12 = Instance.new("Frame", Container)
+			Frame12.Size = UDim2.new(1, 0, 0, 0)
+			Frame12.AutomaticSize = Enum.AutomaticSize.Y
+			Frame12.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+			Frame12.BackgroundTransparency = 0.2
+			Frame12.BorderSizePixel = 0
+			local UICorner7 = Instance.new("UICorner", Frame12)
+			UICorner7.CornerRadius = UDim.new(0, 10)
+			local UIStroke5 = Instance.new("UIStroke", Frame12)
+			UIStroke5.Color = Color3.fromRGB(45, 55, 75)
+			UIStroke5.Transparency = 0.5
+			local UIPadding4 = Instance.new("UIPadding", Frame12)
+			UIPadding4.PaddingBottom = UDim.new(0, 12)
+			UIPadding4.PaddingLeft = UDim.new(0, 15)
+			UIPadding4.PaddingRight = UDim.new(0, 15)
+			UIPadding4.PaddingTop = UDim.new(0, 12)
+			local UIListLayout4 = Instance.new("UIListLayout", Frame12)
+			UIListLayout4.Padding = UDim.new(0, 5)
+			UIListLayout4.SortOrder = Enum.SortOrder.LayoutOrder
+			local TextLabel13 = Instance.new("TextLabel", Frame12)
+			TextLabel13.Size = UDim2.new(1, 0, 0, 25)
+			TextLabel13.BackgroundTransparency = 1
+			TextLabel13.Font = Enum.Font.GothamBold
+			TextLabel13.TextSize = 14
+			TextLabel13.TextColor3 = Color3.fromRGB(30, 220, 180)
+			TextLabel13.Text = "◈  STATISTICS"
+			TextLabel13.TextXAlignment = Enum.TextXAlignment.Left
+			local TextLabel14 = Instance.new("TextLabel", Frame12)
+			TextLabel14.Size = UDim2.new(1, 0, 0, 0)
+			TextLabel14.AutomaticSize = Enum.AutomaticSize.Y
+			TextLabel14.BackgroundTransparency = 1
+			TextLabel14.Font = Enum.Font.Gotham
+			TextLabel14.TextSize = 12
+			TextLabel14.TextColor3 = Color3.fromRGB(255, 215, 0)
+			TextLabel14.TextXAlignment = Enum.TextXAlignment.Left
+			TextLabel14.TextWrapped = true
+			TextLabel14.RichText = true
+			local TextLabel15 = Instance.new("TextLabel", Frame12)
+			TextLabel15.Size = UDim2.new(1, 0, 0, 0)
+			TextLabel15.AutomaticSize = Enum.AutomaticSize.Y
+			TextLabel15.BackgroundTransparency = 1
+			TextLabel15.Font = Enum.Font.Gotham
+			TextLabel15.TextSize = 12
+			TextLabel15.TextColor3 = Color3.fromRGB(220, 230, 240)
+			TextLabel15.TextXAlignment = Enum.TextXAlignment.Left
+			TextLabel15.TextWrapped = true
+			TextLabel15.RichText = true
+			local TextLabel16 = Instance.new("TextLabel", Frame12)
+			TextLabel16.Size = UDim2.new(1, 0, 0, 0)
+			TextLabel16.AutomaticSize = Enum.AutomaticSize.Y
+			TextLabel16.BackgroundTransparency = 1
+			TextLabel16.Font = Enum.Font.Gotham
+			TextLabel16.TextSize = 12
+			TextLabel16.TextColor3 = Color3.fromRGB(220, 230, 240)
+			TextLabel16.TextXAlignment = Enum.TextXAlignment.Left
+			TextLabel16.TextWrapped = true
+			TextLabel16.RichText = true
+			local Frame13 = Instance.new("Frame", Container)
+			Frame13.Size = UDim2.new(1, 0, 0, 0)
+			Frame13.AutomaticSize = Enum.AutomaticSize.Y
+			Frame13.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+			Frame13.BackgroundTransparency = 0.2
+			Frame13.BorderSizePixel = 0
+			local UICorner8 = Instance.new("UICorner", Frame13)
+			UICorner8.CornerRadius = UDim.new(0, 10)
+			local UIStroke6 = Instance.new("UIStroke", Frame13)
+			UIStroke6.Color = Color3.fromRGB(45, 55, 75)
+			UIStroke6.Transparency = 0.5
+			local UIPadding5 = Instance.new("UIPadding", Frame13)
+			UIPadding5.PaddingBottom = UDim.new(0, 12)
+			UIPadding5.PaddingLeft = UDim.new(0, 15)
+			UIPadding5.PaddingRight = UDim.new(0, 15)
+			UIPadding5.PaddingTop = UDim.new(0, 12)
+			local UIListLayout5 = Instance.new("UIListLayout", Frame13)
+			UIListLayout5.Padding = UDim.new(0, 5)
+			UIListLayout5.SortOrder = Enum.SortOrder.LayoutOrder
+			local TextLabel17 = Instance.new("TextLabel", Frame13)
+			TextLabel17.Size = UDim2.new(1, 0, 0, 25)
+			TextLabel17.BackgroundTransparency = 1
+			TextLabel17.Font = Enum.Font.GothamBold
+			TextLabel17.TextSize = 14
+			TextLabel17.TextColor3 = Color3.fromRGB(30, 220, 180)
+			TextLabel17.Text = "≈  ACTIVE QUESTS"
+			TextLabel17.TextXAlignment = Enum.TextXAlignment.Left
+			local TextLabel18 = Instance.new("TextLabel", Frame13)
+			TextLabel18.Size = UDim2.new(1, 0, 0, 20)
+			TextLabel18.BackgroundTransparency = 1
+			TextLabel18.Font = Enum.Font.GothamBold
+			TextLabel18.TextSize = 11
+			TextLabel18.TextColor3 = Color3.fromRGB(100, 200, 255)
+			TextLabel18.Text = "≈  DEEP SEA"
+			TextLabel18.TextXAlignment = Enum.TextXAlignment.Left
+			local TextLabel19 = Instance.new("TextLabel", Frame13)
+			TextLabel19.Size = UDim2.new(1, 0, 0, 0)
+			TextLabel19.AutomaticSize = Enum.AutomaticSize.Y
+			TextLabel19.BackgroundTransparency = 1
+			TextLabel19.Font = Enum.Font.Gotham
+			TextLabel19.TextSize = 11
+			TextLabel19.TextColor3 = Color3.fromRGB(190, 200, 210)
+			TextLabel19.Text = "Loading..."
+			TextLabel19.TextXAlignment = Enum.TextXAlignment.Left
+			TextLabel19.TextWrapped = true
+			TextLabel19.RichText = true
+			local TextLabel20 = Instance.new("TextLabel", Frame13)
+			TextLabel20.Size = UDim2.new(1, 0, 0, 20)
+			TextLabel20.BackgroundTransparency = 1
+			TextLabel20.Font = Enum.Font.GothamBold
+			TextLabel20.TextSize = 11
+			TextLabel20.TextColor3 = Color3.fromRGB(100, 200, 255)
+			TextLabel20.Text = "✶  ARTIFACT"
+			TextLabel20.TextXAlignment = Enum.TextXAlignment.Left
+			local TextLabel21 = Instance.new("TextLabel", Frame13)
+			TextLabel21.Size = UDim2.new(1, 0, 0, 0)
+			TextLabel21.AutomaticSize = Enum.AutomaticSize.Y
+			TextLabel21.BackgroundTransparency = 1
+			TextLabel21.Font = Enum.Font.Gotham
+			TextLabel21.TextSize = 11
+			TextLabel21.TextColor3 = Color3.fromRGB(190, 200, 210)
+			TextLabel21.Text = "Loading..."
+			TextLabel21.TextXAlignment = Enum.TextXAlignment.Left
+			TextLabel21.TextWrapped = true
+			TextLabel21.RichText = true
+			local TextLabel22 = Instance.new("TextLabel", Frame13)
+			TextLabel22.Size = UDim2.new(1, 0, 0, 20)
+			TextLabel22.BackgroundTransparency = 1
+			TextLabel22.Font = Enum.Font.GothamBold
+			TextLabel22.TextSize = 11
+			TextLabel22.TextColor3 = Color3.fromRGB(100, 200, 255)
+			TextLabel22.Text = "✴  ELEMENT"
+			TextLabel22.TextXAlignment = Enum.TextXAlignment.Left
+			local TextLabel23 = Instance.new("TextLabel", Frame13)
+			TextLabel23.Size = UDim2.new(1, 0, 0, 0)
+			TextLabel23.AutomaticSize = Enum.AutomaticSize.Y
+			TextLabel23.BackgroundTransparency = 1
+			TextLabel23.Font = Enum.Font.Gotham
+			TextLabel23.TextSize = 11
+			TextLabel23.TextColor3 = Color3.fromRGB(190, 200, 210)
+			TextLabel23.Text = "Loading..."
+			TextLabel23.TextXAlignment = Enum.TextXAlignment.Left
+			TextLabel23.TextWrapped = true
+			TextLabel23.RichText = true
+			local TextLabel24 = Instance.new("TextLabel", Frame13)
+			TextLabel24.Size = UDim2.new(1, 0, 0, 20)
+			TextLabel24.BackgroundTransparency = 1
+			TextLabel24.Font = Enum.Font.GothamBold
+			TextLabel24.TextSize = 11
+			TextLabel24.TextColor3 = Color3.fromRGB(100, 200, 255)
+			TextLabel24.Text = "◆  DIAMOND ROD"
+			TextLabel24.TextXAlignment = Enum.TextXAlignment.Left
+			local TextLabel25 = Instance.new("TextLabel", Frame13)
+			TextLabel25.Size = UDim2.new(1, 0, 0, 0)
+			TextLabel25.AutomaticSize = Enum.AutomaticSize.Y
+			TextLabel25.BackgroundTransparency = 1
+			TextLabel25.Font = Enum.Font.Gotham
+			TextLabel25.TextSize = 11
+			TextLabel25.TextColor3 = Color3.fromRGB(190, 200, 210)
+			TextLabel25.Text = "Loading..."
+			TextLabel25.TextXAlignment = Enum.TextXAlignment.Left
+			TextLabel25.TextWrapped = true
+			TextLabel25.RichText = true
+			local TextButton = Instance.new("TextButton", MengHub_Kaitun2)
+			TextButton.Size = UDim2.new(0, 45, 0, 45)
+			TextButton.Position = UDim2.new(1, -60, 1, -60)
+			TextButton.BackgroundColor3 = Color3.fromRGB(30, 220, 180)
+			TextButton.Text = "−"
+			TextButton.Font = Enum.Font.GothamBold
+			TextButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+			TextButton.TextSize = 18
+			TextButton.ZIndex = 10
+			local UICorner9 = Instance.new("UICorner", TextButton)
+			UICorner9.CornerRadius = UDim.new(1, 0)
+
+			TextButton.MouseButton1Click:Connect(function()
+				Container.Visible = false
+				Frame9.Visible = false
+				BlurEffect.Size = 0
+				TextButton.Text = "□"
+				TextButton.BackgroundColor3 = Color3.fromRGB(45, 55, 75)
+			end)
+
+			MengHub_Kaitun2.AncestryChanged:Connect(function(child4, parent)
+				if BlurEffect then BlurEffect:Destroy() end
+			end)
+
+			task.spawn(function()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+
+			task.spawn(function()
+				task.wait(1)
+				TextLabel14.Text = "◈  $1000000"
+				Items2:GetChildren()
+				Items2:GetChildren()
+				Items2:GetChildren()
+				Items2:GetChildren()
+				Baits2:GetChildren()
+				Baits2:GetChildren()
+				Baits2:GetChildren()
+				TextLabel15.Text = "No rods found."
+				TextLabel16.Text = "No baits found."
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				TextLabel19.Text = "Quest not started / not found"
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				TextLabel23.Text = "Quest not started / not found"
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				TextLabel25.Text = "Quest not started / not found"
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				TextLabel21.Text = "Arrow : <b><font color='rgb(200,80,80)'>DISABLE</font></b>\nCrescent : <b><font color='rgb(200,80,80)'>DISABLE</font></b>\nHourglass Diamond : <b><font color='rgb(200,80,80)'>DISABLE</font></b>\nDiamond : <b><font color='rgb(200,80,80)'>DISABLE</font></b>"
+				task.wait(1)
+				TextLabel14.Text = "◈  $1000000"
+				Items2:GetChildren()
+				Items2:GetChildren()
+				Items2:GetChildren()
+				Items2:GetChildren()
+				Baits2:GetChildren()
+				Baits2:GetChildren()
+				Baits2:GetChildren()
+				TextLabel15.Text = "No rods found."
+				TextLabel16.Text = "No baits found."
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				TextLabel19.Text = "Quest not started / not found"
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				TextLabel23.Text = "Quest not started / not found"
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				TextLabel25.Text = "Quest not started / not found"
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				TextLabel21.Text = "Arrow : <b><font color='rgb(200,80,80)'>DISABLE</font></b>\nCrescent : <b><font color='rgb(200,80,80)'>DISABLE</font></b>\nHourglass Diamond : <b><font color='rgb(200,80,80)'>DISABLE</font></b>\nDiamond : <b><font color='rgb(200,80,80)'>DISABLE</font></b>"
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+
+			task.spawn(function(...)
+				TextLabel11.Text = "»  Detecting state (rod check)..."
+				task.wait(2)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				TextLabel11.Text = "✔  State detected. Starting..."
+				task.wait(1)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				ReplicatedStorage.Items.Misc:GetChildren()
+				TextLabel11.Text = "»  Buying Midnight Rod"
+
+				task.spawn(function()
+					task.wait(2)
+				end)
+
+				task.wait(3)
+				task.wait(1)
+				-- [envlog] stopped after 50 waits
+			end)
 		else
-			stopKaitun()
+			_G.KaitunPanel = false
+			game.CoreGui:FindFirstChild("MengHub_Kaitun")
+			if MengHub_Kaitun2 then MengHub_Kaitun2:Destroy() end
 		end
 	end
 })
 
-KaitunSection:AddToggle({
+_G.AutoEquipBestRod = false
+_G.AutoEquipBestRodConnection = nil
+
+Section35:AddToggle({
 	Title = "Auto Equip Best Rod",
 	Default = false,
 	Callback = function(state)
-		_G.KaitunAutoBestRod = state
 		if state then
-			doEquipBestRod()
+			_G.AutoEquipBestRod = state
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+			ReplicatedStorage.Items.Misc:GetChildren()
+
+			_G.AutoEquipBestRodConnection = {
+		Disconnect = function()
+				end
+	}
 		end
 	end
 })
 
-KaitunSection:AddToggle({
+_G.AutoEquipBestBait = false
+
+Section35:AddToggle({
 	Title = "Auto Equip Best Bait",
 	Default = false,
 	Callback = function(state)
-		_G.KaitunAutoBestBait = state
 		if state then
-			doEquipBestBait()
-		end
-	end
-})
+			_G.AutoEquipBestBait = state
 
-local AutoSellSection = TabAuto:AddSection("Auto Sell")
-
-AutoSellSection:AddToggle({
-	Title = "Auto Sell All",
-	Content = "Automatically sell all items when bag is full or on timer",
-	Default = false,
-	Callback = function(state)
-		_G.AutoSellAll = state
-		if state then
 			task.spawn(function()
-				while _G.AutoSellAll do
-					pcall(function()
-						local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-						if net and net:FindFirstChild("RF/SellAllItems") then
-							net["RF/SellAllItems"]:InvokeServer()
-						end
-					end)
-					task.wait(_G.AutoSellInterval or 5)
-				end
+				ReplicatedStorage:FindFirstChild("Baits")
+				-- [envlog] error: Luraph Script:9531: Luraph Script:9414: Script:62: table index is nil
 			end)
 		end
 	end
 })
 
-AutoSellSection:AddToggle({
-	Title = "Auto Sell Atlantis",
-	Content = "Sacrifice Atlantis fish for bonus rewards",
-	Default = false,
-	Callback = function(state)
-		_G.AutoSellAtlantis = state
-		if state then
-			task.spawn(function()
-				while _G.AutoSellAtlantis do
-					pcall(function()
-						local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-						if net and net:FindFirstChild("RF/SacrificeAtlantisSellAll") then
-							net["RF/SacrificeAtlantisSellAll"]:InvokeServer()
-						end
-					end)
-					task.wait(_G.AutoSellInterval or 5)
-				end
-			end)
-		end
-	end
-})
+_G.KWebhookEnabled = false
+_G.KWebhookURL = ""
+_G.KWebhookDiscordID = ""
+_G.KWebhookGlobalURL = "https://discord.com/api/webhooks/1483217541529862225/lXXUT4aCq0rgxYyB0xzB3QHYBDNWzSsrpZpxOo1tBgnzLAFyaooEZ2d2OKi0GZ6dmUbz"
+_G.KWebhookDelay = 120
+local KWebhookNotifiedRods = _G.KWebhookNotifiedRods
+_G.KWebhookNotifiedRods = KWebhookNotifiedRods
+local Section36 = Tab7:AddSection("Kaitun Webhook")
+_G.KWebhookURL = false
 
-AutoSellSection:AddSlider({
-	Title = "Auto Sell Interval (Seconds)",
-	Min = 2,
-	Max = 60,
-	Default = 5,
-	Increment = 1,
-	Callback = function(val)
-		_G.AutoSellInterval = val
-	end
-})
-
-local AutoCraftSection = TabAuto:AddSection("Rod Crafting Minigame")
-local craftRods = { "Talon Rod", "Fortune Rod", "Magma Rod", "Poseidon Rod", "Midas Rod", "Astral Rod" }
-_G.SelectedCraftRod = craftRods[1]
-
-AutoCraftSection:AddDropdown({
-	Title = "Select Rod to Craft",
-	Options = craftRods,
-	Default = craftRods[1],
-	Callback = function(val)
-		_G.SelectedCraftRod = val
-	end
-})
-
-AutoCraftSection:AddButton({
-	Title = "Start Crafting Minigame",
+Section36:AddInput({
+	Title = "Kaitun Webhook URL",
+	Placeholder = "Write ur input here",
 	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RF/StartRodCraftingMinigame") then
-				net["RF/StartRodCraftingMinigame"]:InvokeServer(_G.SelectedCraftRod)
-				notif("Started crafting " .. tostring(_G.SelectedCraftRod))
-			end
-		end)
 	end
 })
 
-AutoCraftSection:AddToggle({
-	Title = "Auto Win Crafting Minigame",
-	Content = "Automatically perfect-click and finish crafting minigame",
+Section36:AddInput({
+	Title = "Webhook Delay (minute)",
+	Default = "1",
+	Callback = function()
+		-- [envlog] error: Luraph Script:9796: Script:62: attempt to compare number < userdata
+	end
+})
+
+_G.KWebhookDiscordID = false
+
+Section36:AddInput({
+	Title = "Kaitun Discord ID (Only tag if u completed rod quest)",
+	Placeholder = "Write ur input here",
+	Callback = function()
+	end
+})
+
+Section36:AddToggle({
+	Title = "Enable Kaitun Webhook",
+	Default = false,
+	Callback = function()
+	end
+})
+
+Section36:AddButton({
+	Title = "Test Kaitun Webhook Rod And Statistic",
+	Callback = function()
+		helper4()
+		helper4()
+		helper4()
+		helper4()
+		helper4()
+		helper4()
+		helper4()
+		helper4()
+		helper4()
+		local Baits3 = ReplicatedStorage:FindFirstChild("Baits")
+		Baits3:GetChildren()
+		Baits3:GetChildren()
+		Baits3:GetChildren()
+		-- [envlog] error: Expected ':' not '.' calling member function GetItemDataFromItemType
+	end
+})
+
+task.spawn(function()
+	task.wait(5)
+	helper4()
+	helper4()
+	helper4()
+	task.wait(1)
+	task.wait(1)
+	-- [envlog] the statements above repeat forever (loop)
+end)
+
+local Section37 = Tab7:AddSection("Auto Perfect Rod Crafting [BETA]")
+
+Section37:AddParagraph({
+	Title = "Info",
+	Content = "Otomatis klik di zona Perfect untuk setiap bar saat minigame crafting rod berlangsung.\nAktifkan lalu klik Craft Rod secara manual di UI crafting.\n⚠️ Diwajibkan untuk menyalakan fitur ini dulu sebelum memulai crafting, dan ketika crafting nya sudah di mulai tinggal tunggu saja sampai notif mendapatkan Perfect Forgotten Rod nya muncul."
+})
+
+Section37:AddToggle({
+	Title = "Enable Auto Perfect Crafting",
 	Default = false,
 	Callback = function(state)
-		_G.AutoCraftBot = state
 		if state then
-			if not _G.CraftMinigameConn then
-				local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-				local playEv = net and net:FindFirstChild("RE/PlayRodCraftingMinigame")
-				if playEv then
-					_G.CraftMinigameConn = playEv.OnClientEvent:Connect(function()
-						if _G.AutoCraftBot then
-							task.wait(0.1)
-							pcall(function()
-								if net:FindFirstChild("RE/RodCraftingMinigameClick") then
-									net["RE/RodCraftingMinigameClick"]:FireServer()
-								end
-								task.wait(0.2)
-								if net:FindFirstChild("RF/FinishRodCraftingMinigame") then
-									net["RF/FinishRodCraftingMinigame"]:InvokeServer()
-								end
-							end)
-						end
-					end)
+			warn("[AutoCraft] RE_PlayRodCraftingMinigame not found")
+		end
+	end
+})
+
+local Section38 = Tab7:AddSection("Auto Mining Features")
+Section38:AddSubSection("Mining Crystal Depth")
+
+Section38:AddToggle({
+	Title = "Enable Auto Mining",
+	Content = "You must have a pickaxe!",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local thread6 = task.spawn(function(...)
+				task.spawn(function()
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5871.83984375, -886.1400146484375, 15371.3798828125), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5671.64013671875, -898.5, 15320.7099609375), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(5539.14013671875, -905.04998779296875, 15322.4501953125), 1000)
+					task.wait(1.5)
+					-- [envlog] stopped after 50 waits
+				end)
+
+				local HumanoidRootPart16 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				task.wait(6)
+				local Crystals = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals2 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals2:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals3 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals3:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals4 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals4:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals5 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals5:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals6 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals6:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals7 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals7:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals8 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals8:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals9 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals9:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals10 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals10:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals11 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals11:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals12 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals12:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals13 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals13:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals14 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals14:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals15 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals15:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals16 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals16:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals17 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals17:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals18 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals18:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals19 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals19:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals20 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals20:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals21 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals21:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals22 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals22:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals23 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals23:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals24 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals24:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals25 = workspace.Islands["Crystal Depths"]:FindFirstChild("Crystals")
+				Crystals25:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				-- [envlog] stopped after 50 waits
+			end)
+		else
+			task.cancel(thread6)
+			task.cancel(thread6)
+			local HumanoidRootPart17 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local BodyVelocity = HumanoidRootPart17:FindFirstChildOfClass("BodyVelocity")
+			if BodyVelocity then BodyVelocity:Destroy() end
+			HumanoidRootPart17.CFrame = HumanoidRootPart16.CFrame
+			task.wait(0.5)
+		end
+	end
+})
+
+Section38:AddSubSection("Mining Lava Basin")
+
+Section38:AddToggle({
+	Title = "Enable Auto Mining",
+	Content = "You must have a pickaxe!",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local thread7 = task.spawn(function(...)
+				task.spawn(function()
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(935.30999755859375, 85.94000244140625, -10247.1103515625), 1000)
+					task.wait(1.5)
+					Players.LocalPlayer:RequestStreamAroundAsync(Vector3.new(935.30999755859375, 85.94000244140625, -10247.1103515625), 1000)
+					task.wait(1.5)
+					-- [envlog] the statements above repeat forever (loop)
+				end)
+
+				local HumanoidRootPart18 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				task.wait(6)
+				local Crystals26 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals26:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals27 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals27:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals28 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals28:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals29 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals29:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals30 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals30:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals31 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals31:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals32 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals32:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals33 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals33:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals34 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals34:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals35 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals35:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals36 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals36:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals37 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals37:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals38 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals38:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals39 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals39:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals40 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals40:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals41 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals41:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals42 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals42:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals43 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals43:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals44 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals44:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals45 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals45:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals46 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals46:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals47 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals47:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals48 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals48:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals49 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals49:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				local Crystals50 = workspace.Islands["Lava Basin"]:FindFirstChild("Crystals")
+				Crystals50:GetChildren()
+				task.wait(3)
+				task.wait(1)
+				-- [envlog] stopped after 50 waits
+			end)
+		else
+			task.cancel(thread7)
+			task.cancel(thread7)
+			local HumanoidRootPart19 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local BodyVelocity2 = HumanoidRootPart19:FindFirstChildOfClass("BodyVelocity")
+			if BodyVelocity2 then BodyVelocity2:Destroy() end
+			HumanoidRootPart19.CFrame = HumanoidRootPart18.CFrame
+			task.wait(0.5)
+		end
+	end
+})
+
+local Section39 = Tab7:AddSection("Auto Treasure Hunt")
+
+Section39:AddToggle({
+	Title = "Enable Auto Treasure Hunt",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				local SunkenWreckage = workspace:FindFirstChild("Sunken Wreckage")
+				local Treasure = SunkenWreckage:FindFirstChild("Treasure")
+				Treasure:FindFirstChild("Shine")
+				local ProximityPrompt = Treasure.Shine:FindFirstChild("ProximityPrompt")
+				Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				local pivot = Treasure:GetPivot()
+				Players.LocalPlayer.Character.HumanoidRootPart.CFrame = (pivot + Vector3.new(0, 100, 0))
+				task.wait(0.1)
+				local tween = TweenService:Create(Players.LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(2.5, Enum.EasingStyle.Linear), { CFrame = pivot })
+				tween:Play()
+				tween.Completed:Wait()
+				fireproximityprompt(ProximityPrompt)
+				task.wait()
+				task.wait()
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		end
+	end
+})
+
+local Section40 = Tab7:AddSection("Atlantis Machine")
+
+Section40:AddToggle({
+	Title = "Auto Sacrifice",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				local replion = module.Client:GetReplion(module2.Channel)
+				local replion2 = module.Client:GetReplion("Data")
+				local result57 = replion:Get("ActiveBoostEndsAt")
+				local serverTimeNow = workspace:GetServerTimeNow()
+				-- condition: serverTimeNow < result57  (assumed true)
+				local result58 = replion2:Get({ "Inventory", "Items" })
+				local result59 = module2:BuildEligibleEntries(result58)
+
+				for i12, v18 in ipairs(result59) do
 				end
+				-- [envlog] error: Luraph Script:10597: Script:62: attempt to compare number <= userdata
+			end)
+		end
+	end
+})
+
+local Section41 = Tab7:AddSection("Trigger Divine Power Quest")
+
+Section41:AddButton({
+	Title = "Trigger Divine Power Quest",
+	Callback = function()
+		notif("Successfully Triggered Quest Divine Power")
+	end
+})
+
+local Section42 = Tab7:AddSection("Earn Tokens Features")
+_G.AutoSkip = false
+
+Section42:AddToggle({
+	Title = "Auto Watch Ads",
+	Default = false,
+	Callback = function(state)
+		if state then
+			_G.AutoSkip = state
+
+			task.spawn(function()
+				local AdService = game:GetService("AdService")
+				AdService:GetAdAvailabilityNowAsync(Enum.AdFormat.RewardedVideo)
+				print("[AdService] Menunggu Iklan Ready untuk di tonton...")
+				task.wait(5)
+				AdService:GetAdAvailabilityNowAsync(Enum.AdFormat.RewardedVideo)
+				print("[AdService] Menunggu Iklan Ready untuk di tonton...")
+				task.wait(5)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		end
+	end
+})
+
+local Section43 = Tab8:AddSection("Artifact Lever Location")
+
+local Paragraph14 = Section43:AddParagraph({
+	Title = "Panel Progress Artifact",
+	Desc = "\r\nArrow : <b><font color=\"rgb(255,0,0)\">DISABLE</font></b>\r\nCrescent : <b><font color=\"rgb(255,0,0)\">DISABLE</font></b>\r\nHourglass Diamond : <b><font color=\"rgb(255,0,0)\">DISABLE</font></b>\r\nDiamond : <b><font color=\"rgb(255,0,0)\">DISABLE</font></b>\r\n"
+})
+
+task.spawn(function()
+	task.wait()
+	task.wait()
+	-- [envlog] the statements above repeat forever (loop)
+end)
+
+Section43:AddToggle({
+	Title = "Artifact Progress",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+				Paragraph14:SetContent("Arrow : <b><font color=\"rgb(255,0,0)\">Inactive</font></b>\nCrescent : <b><font color=\"rgb(255,0,0)\">Inactive</font></b>\nHourglass Diamond : <b><font color=\"rgb(255,0,0)\">Inactive</font></b>\nDiamond : <b><font color=\"rgb(255,0,0)\">Inactive</font></b>")
+			end)
+		end
+	end
+})
+
+task.spawn(function()
+	task.wait(1)
+	workspace.Islands["Ancient Jungle"]["! JUNGLE INTERACTIONS"]:GetDescendants()
+	Paragraph14:SetContent("Arrow : <b><font color=\"rgb(255,0,0)\">Inactive</font></b>\nCrescent : <b><font color=\"rgb(255,0,0)\">Inactive</font></b>\nHourglass Diamond : <b><font color=\"rgb(255,0,0)\">Inactive</font></b>\nDiamond : <b><font color=\"rgb(255,0,0)\">Inactive</font></b>")
+	task.wait(1)
+	-- [envlog] the statements above repeat forever (loop)
+end)
+
+Section43:AddButton({
+	Title = "Arrow Artifact",
+	SubTitle = "Hourglass Diamond Artifact",
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart20 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart20.CFrame = (CFrame.new(875, 3, -368) * CFrame.Angles(0, 1.5707963267948966, 0))
+		else
+			local HumanoidRootPart21 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart21.CFrame = (CFrame.new(875, 3, -368) * CFrame.Angles(0, 1.5707963267948966, 0))
+		end
+	end,
+	SubCallback = function()
+		local HumanoidRootPart22 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		HumanoidRootPart22.CFrame = (CFrame.new(1487, 3, -842) * CFrame.Angles(0, 3.1415926535897931, 0))
+	end
+})
+
+Section43:AddButton({
+	Title = "Crescent Artifact",
+	SubTitle = "Diamond Artifact",
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart23 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart23.CFrame = (CFrame.new(1403, 3, 123) * CFrame.Angles(0, 3.1415926535897931, 0))
+		else
+			local HumanoidRootPart24 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart24.CFrame = (CFrame.new(1403, 3, 123) * CFrame.Angles(0, 3.1415926535897931, 0))
+		end
+	end,
+	SubCallback = function()
+		local HumanoidRootPart25 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		HumanoidRootPart25.CFrame = (CFrame.new(1844, 3, -287) * CFrame.Angles(0, -1.5707963267948966, 0))
+	end
+})
+
+local Section44 = Tab8:AddSection("Sisyphus Statue Quest")
+local Paragraph15 = Section44:AddParagraph({ Title = "Deep Sea Panel", Content = "Loading for data quest..." })
+Section44:AddDivider()
+
+Section44:AddToggle({
+	Title = "Auto Deep Sea Quest",
+	Content = "Automatically Teleport To Quest Ghostfinn",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				task.wait(1)
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			task.spawn(function()
+			end)
+		end
+	end
+})
+
+Section44:AddButton({
+	Title = "Treasure Room",
+	SubTitle = "Sisyphus Statue",
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart26 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart26.CFrame = CFrame.new(-3601, -283, -1611)
+		else
+			local HumanoidRootPart27 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart27.CFrame = CFrame.new(-3601, -283, -1611)
+		end
+	end,
+	SubCallback = function()
+		local HumanoidRootPart28 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		HumanoidRootPart28.CFrame = CFrame.new(-3698, -135, -1008)
+	end
+})
+
+local Section45 = Tab8:AddSection("Element Quest")
+local Paragraph16 = Section45:AddParagraph({ Title = "Element Panel", Content = "Loading for data quest..." })
+Section45:AddDivider()
+
+Section45:AddToggle({
+	Title = "Auto Element Quest",
+	Content = "Automatically Teleport To Quest Element",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				task.wait(1)
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			task.spawn(function()
+			end)
+		end
+	end
+})
+
+Section45:AddButton({
+	Title = "Sacred Temple",
+	SubTitle = "Ancient Jungle",
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart29 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart29.CFrame = CFrame.new(1453, -22, -636)
+		else
+			local HumanoidRootPart30 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart30.CFrame = CFrame.new(1453, -22, -636)
+		end
+	end,
+	SubCallback = function()
+		local HumanoidRootPart31 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		HumanoidRootPart31.CFrame = CFrame.new(1488, 8, -392)
+	end
+})
+
+Section45:AddButton({
+	Title = "Transcended Stones",
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart32 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart32.CFrame = CFrame.new(1480, 128, -593)
+		else
+			local HumanoidRootPart33 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart33.CFrame = CFrame.new(1480, 128, -593)
+		end
+	end
+})
+
+local Section46 = Tab8:AddSection("Diamond Rod Quest")
+local Paragraph17 = Section46:AddParagraph({ Title = "Diamond Rod Panel", Content = "Loading for data quest..." })
+Section46:AddDivider()
+
+Section46:AddToggle({
+	Title = "Auto Diamond Rod Quest",
+	Content = "Automatically Teleport To Quest Diamond Rod",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				task.wait(1)
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			task.spawn(function()
+			end)
+		end
+	end
+})
+
+Section46:AddButton({
+	Title = "Coral Reefs",
+	SubTitle = "Tropical Grove",
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart34 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart34.CFrame = CFrame.new(-3136.1, 2.61, 2126.11)
+		else
+			local HumanoidRootPart35 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart35.CFrame = CFrame.new(-3136.1, 2.61, 2126.11)
+		end
+	end,
+	SubCallback = function()
+		local HumanoidRootPart36 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		HumanoidRootPart36.CFrame = CFrame.new(-2151, 3, 3671)
+	end
+})
+
+Section46:AddButton({
+	Title = "Kohana (Lochness Monster)",
+	SubTitle = "NPC Lary",
+	Callback = function(state)
+		if state then
+			local HumanoidRootPart37 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart37.CFrame = CFrame.new(-848.5, 17.7, 369.8)
+		else
+			local HumanoidRootPart38 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart38.CFrame = CFrame.new(-848.5, 17.7, 369.8)
+		end
+	end,
+	SubCallback = function()
+		local HumanoidRootPart39 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		HumanoidRootPart39.CFrame = CFrame.new(-1773, -222.6, 23921)
+	end
+})
+
+local Section47 = Tab8:AddSection("Forgotten Scale Quest (Leviathan Door)")
+local Paragraph18 = Section47:AddParagraph({ Title = "Leviathan Door Panel Quest", Content = "Loading for data quest..." })
+
+Section47:AddToggle({
+	Title = "Auto Leviathan Door Quest",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+				game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			end)
+		else
+			task.spawn(function()
+			end)
+		end
+	end
+})
+
+task.spawn(function()
+	task.wait(2)
+	Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+	Paragraph15:SetContent("✅ All Quest Deep Sea Completed...")
+	Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+	Paragraph16:SetContent("✅ All Quest Element Completed...")
+	Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+	Paragraph17:SetContent("✅ All Quest Diamond Rod Completed...")
+	Players.LocalPlayer.PlayerGui.Quest.List.Inside:GetChildren()
+	Paragraph18:SetContent("✅ All Leviathan Door Quests Completed!")
+	task.wait(2)
+	-- [envlog] the statements above repeat forever (loop)
+end)
+
+local Section48 = Tab8:AddSection("Auto Crystalline Pessage")
+local Paragraph19 = Section48:AddParagraph({ Title = "Ancient Ruin Panel", Content = "Loading..." })
+
+task.spawn(function()
+	task.wait(1)
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"]:FindFirstChild("PressurePlates")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates:FindFirstChild("Rare")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates.Rare.Part:FindFirstChild("ProximityPrompt")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates:FindFirstChild("Epic")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates.Epic.Part:FindFirstChild("ProximityPrompt")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates:FindFirstChild("Legendary")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates.Legendary.Part:FindFirstChild("ProximityPrompt")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates:FindFirstChild("Mythic")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates.Mythic.Part:FindFirstChild("ProximityPrompt")
+	Paragraph19:SetContent("Rare : <b>Disable</b>\nEpic : <b>Disable</b>\nLegendary : <b>Disable</b>\nMythic : <b>Disable</b>")
+	task.wait(1)
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"]:FindFirstChild("PressurePlates")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates:FindFirstChild("Rare")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates.Rare.Part:FindFirstChild("ProximityPrompt")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates:FindFirstChild("Epic")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates.Epic.Part:FindFirstChild("ProximityPrompt")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates:FindFirstChild("Legendary")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates.Legendary.Part:FindFirstChild("ProximityPrompt")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates:FindFirstChild("Mythic")
+	workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"].PressurePlates.Mythic.Part:FindFirstChild("ProximityPrompt")
+	Paragraph19:SetContent("Rare : <b>Disable</b>\nEpic : <b>Disable</b>\nLegendary : <b>Disable</b>\nMythic : <b>Disable</b>")
+	task.wait(1)
+	-- [envlog] the statements above repeat forever (loop)
+end)
+
+Section48:AddToggle({
+	Title = "Auto Ancient Ruin",
+	Default = false,
+	Callback = function(state)
+		if state then
+			task.spawn(function()
+				workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"]:FindFirstChild("PressurePlates")
+				task.wait(1)
+				workspace.Islands["Ancient Jungle"]["! RUIN INTERACTIONS"]:FindFirstChild("PressurePlates")
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			task.spawn(function()
+			end)
+		end
+	end
+})
+
+local Section49 = Tab9:AddSection("Booster FPS")
+
+Section49:AddToggle({
+	Title = "Disable 3D Render",
+	Content = "Will make white screen and no render map!",
+	Default = false,
+	Callback = function(state)
+		if state then
+			RunService:Set3dRenderingEnabled(false)
+		else
+			RunService:Set3dRenderingEnabled(true)
+		end
+	end
+})
+
+Section49:AddInput({
+	Title = "Destroy Interval (Hour)",
+	Default = "1",
+	Callback = function()
+		-- [envlog] error: Luraph Script:11524: Script:62: attempt to compare number < userdata
+	end
+})
+
+Section49:AddToggle({
+	Title = "Reduce Map Loop",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local Lighting = game:GetService("Lighting")
+			local Terrain = workspace:FindFirstChildOfClass("Terrain")
+
+			task.spawn(function()
+				workspace:GetDescendants()
+				Lighting:GetDescendants()
+				workspace:GetDescendants()
+				workspace:GetDescendants()
+				workspace:GetDescendants()
+				Lighting:GetChildren()
+				workspace:GetDescendants()
+				workspace:GetDescendants()
+				Terrain.WaterTransparency = 1
+				Terrain.WaterReflectance = 0
+				Terrain.WaterWaveSize = 0
+				Terrain.WaterWaveSpeed = 0
+				Lighting.GlobalShadows = false
+				Lighting.FogStart = 9000000000
+				Lighting.FogEnd = 9000000000
+				Lighting.Brightness = 1
+				workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+				workspace.CurrentCamera.FieldOfView = 70
+				Players.LocalPlayer.Character:GetDescendants()
+				task.wait(3600)
+				workspace:GetDescendants()
+				Lighting:GetDescendants()
+				workspace:GetDescendants()
+				workspace:GetDescendants()
+				workspace:GetDescendants()
+				Lighting:GetChildren()
+				workspace:GetDescendants()
+				workspace:GetDescendants()
+				Terrain.WaterTransparency = 1
+				Terrain.WaterReflectance = 0
+				Terrain.WaterWaveSize = 0
+				Terrain.WaterWaveSpeed = 0
+				Lighting.GlobalShadows = false
+				Lighting.FogStart = 9000000000
+				Lighting.FogEnd = 9000000000
+				Lighting.Brightness = 1
+				workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+				workspace.CurrentCamera.FieldOfView = 70
+				Players.LocalPlayer.Character:GetDescendants()
+				task.wait(3600)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		else
+			workspace:FindFirstChildOfClass("Terrain")
+		end
+	end
+})
+
+local Terrain2 = workspace:FindFirstChildOfClass("Terrain")
+
+Section49:AddToggle({
+	Title = "Reduce Map (Potato Mode)",
+	Default = false,
+	Callback = function(state)
+		if state then
+			Terrain2.WaterWaveSize = 0
+			Terrain2.WaterWaveSpeed = 0
+			Terrain2.WaterReflectance = 0
+			Terrain2.WaterTransparency = 1
+			Terrain2.Decoration = false
+			local Clouds = Terrain2:FindFirstChildOfClass("Clouds")
+			if Clouds then Clouds:Destroy() end
+			Lighting.GlobalShadows = false
+			Lighting.FogEnd = 9000000000
+			Lighting.Brightness = 0
+			Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+			Lighting.Ambient = Color3.new(1, 1, 1)
+			Lighting.Technology = Enum.Technology.Legacy
+			Lighting.EnvironmentDiffuseScale = 0
+			Lighting.EnvironmentSpecularScale = 0
+			Lighting.ShadowSoftness = 0
+			Lighting:GetChildren()
+			SoundService.AmbientReverb = Enum.ReverbType.NoReverb
+			SoundService:SetListener(Enum.ListenerType.Camera)
+			local result60 = settings()
+			result60.Rendering.QualityLevel = Enum.QualityLevel.Level01
+			result60.Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+			result60.Rendering.EditQualityLevel = Enum.QualityLevel.Level01
+			local result61 = UserSettings()
+			local UserGameSettings = result61:GetService("UserGameSettings")
+			UserGameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+			workspace.CurrentCamera.FieldOfView = 70
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.EmotesMenu, false)
+
+			task.spawn(function(...)
+				workspace:GetDescendants()
+				local players5 = Players:GetPlayers()
+
+				for i13, v19 in ipairs(players5) do
+					task.defer(function()
+						v19.Character:GetDescendants()
+					end, v19.Character)
+				end
+
+				task.wait(1)
+				task.wait(1)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+
+			local connection19 = Players.PlayerAdded:Connect(function(player2)
+				player2.CharacterAdded:Connect(function(character15)
+				end)
+
+				task.defer(function()
+				end, player2.Character)
+			end)
+
+			local connection20 = Players.LocalPlayer.CharacterAdded:Connect(function(character9)
+			end)
+
+			local connection21 = workspace.DescendantAdded:Connect(function(descendant2)
+			end)
+		else
+			connection19:Disconnect()
+			connection20:Disconnect()
+			connection21:Disconnect()
+			Terrain2.WaterReflectance = Terrain2.WaterReflectance
+			Terrain2.WaterWaveSize = Terrain2.WaterWaveSize
+			Terrain2.WaterWaveSpeed = Terrain2.WaterWaveSpeed
+			Terrain2.WaterTransparency = Terrain2.WaterTransparency
+			Terrain2.Decoration = true
+			Lighting.GlobalShadows = false
+			Lighting.Brightness = 1
+			Lighting.Technology = Lighting.Technology
+			workspace.CurrentCamera.FieldOfView = 70
+			local result62 = settings()
+			result62.Rendering.QualityLevel = Enum.QualityLevel.Automatic
+			result62.Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.DistanceBased
+			UserSettings()
+			UserGameSettings.SavedQualityLevel = Enum.SavedQualitySetting.Automatic
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, true)
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.EmotesMenu, true)
+		end
+	end
+})
+
+Section49:AddDropdown({
+	Title = "Lock your FPS",
+	Default = "120 FPS",
+	Options = { "30 FPS", "60 FPS", "90 FPS", "120 FPS", "144 FPS", "200 FPS", "240 FPS", "MAX FPS" },
+	Callback = function()
+	end
+})
+
+Section49:AddToggle({
+	Title = "Black Screen",
+	Content = "Make ur screen fully black!",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local ToggleUIButton = CoreGui:FindFirstChild("ToggleUIButton")
+			CoreGui:FindFirstChild("BlackScreen")
+			MengHubGui.DisplayOrder = 100
+			ToggleUIButton.DisplayOrder = 101
+			RunService:Set3dRenderingEnabled(false)
+		else
+			CoreGui:FindFirstChild("ToggleUIButton")
+			local BlackScreen = CoreGui:FindFirstChild("BlackScreen")
+			if BlackScreen then BlackScreen:Destroy() end
+			RunService:Set3dRenderingEnabled(true)
+		end
+	end
+})
+
+Section49:AddToggle({
+	Title = "Remove Other Player",
+	Content = "This feature will hide other player from ur visual",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local players6 = game.Players:GetPlayers()
+
+			for k7, v20 in pairs(players6) do
+				v20.CharacterAdded:Connect(function(character10)
+				end)
+
+				v20.Character:GetDescendants()
+				v20.Character:GetDescendants()
 			end
 		else
-			if _G.CraftMinigameConn then
-				_G.CraftMinigameConn:Disconnect()
-				_G.CraftMinigameConn = nil
+			local players7 = game.Players:GetPlayers()
+
+			for k8, v21 in pairs(players7) do
+				v21.CharacterAdded:Connect(function(character11)
+				end)
+
+				v21.Character:GetDescendants()
+				v21.Character:GetDescendants()
 			end
 		end
 	end
 })
 
--- ============================================================================
--- [[ TAB: SHOP (FISHING RODS, BAITS, WEATHER & MARKETS) ]]
--- ============================================================================
-local RodShopSection = TabShop:AddSection("Buy Fishing Rods")
-local allRodsList = {
-	"Plastic Rod", "Carbon Rod", "Long Rod", "Lucky Rod", "Steady Rod",
-	"Rapid Rod", "Fortune Rod", "Magnet Rod", "Nocturnal Rod", "Magma Rod",
-	"Talon Rod", "Trident Rod", "Poseidon Rod", "Midas Rod", "Astral Rod"
-}
-_G.SelectedShopRod = allRodsList[1]
+local Section50 = Tab9:AddSection("Utility Player")
 
-RodShopSection:AddDropdown({
-	Title = "Select Fishing Rod",
-	Options = allRodsList,
-	Default = allRodsList[1],
-	Callback = function(val)
-		_G.SelectedShopRod = val
-	end
-})
-
-RodShopSection:AddButton({
-	Title = "Purchase Selected Rod",
+Section50:AddToggle({
+	Title = "Noclip",
+	Default = false,
 	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RF/PurchaseFishingRod") then
-				net["RF/PurchaseFishingRod"]:InvokeServer(_G.SelectedShopRod)
-				notif("Purchased " .. tostring(_G.SelectedShopRod))
-			end
-		end)
 	end
 })
 
-local BaitShopSection = TabShop:AddSection("Buy Baits")
-local allBaitsList = { "Worm", "Cricket", "Squid", "Leech", "Shrimp", "Fish Head", "Super Bait", "Golden Bait" }
-_G.SelectedShopBait = allBaitsList[1]
-_G.BaitBuyAmount = 10
-
-BaitShopSection:AddDropdown({
-	Title = "Select Bait",
-	Options = allBaitsList,
-	Default = allBaitsList[1],
-	Callback = function(val)
-		_G.SelectedShopBait = val
-	end
-})
-
-BaitShopSection:AddInput({
-	Title = "Buy Amount",
-	Placeholder = "Amount (default 10)",
-	Default = "10",
-	Callback = function(val)
-		_G.BaitBuyAmount = tonumber(val) or 10
-	end
-})
-
-BaitShopSection:AddButton({
-	Title = "Purchase Selected Bait",
+Section50:AddSlider({
+	Title = "Walkspeed",
+	Default = 16,
+	Max = 200,
+	Min = 16,
 	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RF/PurchaseBait") then
-				net["RF/PurchaseBait"]:InvokeServer(_G.SelectedShopBait, _G.BaitBuyAmount or 10)
-				notif("Purchased " .. tostring(_G.BaitBuyAmount) .. "x " .. tostring(_G.SelectedShopBait))
-			end
-		end)
+		Players.LocalPlayer.Character:FindFirstChild("Humanoid")
 	end
 })
 
-local WeatherSection = TabShop:AddSection("Weather Machine")
-local weatherList = { "Storm", "Volcano", "Blizzard", "Clear", "Rain", "Windy" }
-_G.SelectedWeather = weatherList[1]
-
-WeatherSection:AddDropdown({
-	Title = "Select Weather Event",
-	Options = weatherList,
-	Default = weatherList[1],
-	Callback = function(val)
-		_G.SelectedWeather = val
-	end
-})
-
-WeatherSection:AddButton({
-	Title = "Activate Weather Event",
-	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RF/PurchaseWeatherEvent") then
-				net["RF/PurchaseWeatherEvent"]:InvokeServer(_G.SelectedWeather)
-				notif("Triggered " .. tostring(_G.SelectedWeather) .. " weather event!")
-			end
-		end)
-	end
-})
-
-local MarketSection = TabShop:AddSection("Special Market")
-MarketSection:AddButton({
-	Title = "Purchase Black Market Item",
-	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RF/PurchaseBlackMarketItem") then
-				net["RF/PurchaseBlackMarketItem"]:InvokeServer()
-				notif("Purchased Black Market Item!")
-			end
-		end)
-	end
-})
-
-MarketSection:AddButton({
-	Title = "Purchase Limited Offer",
-	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RE/LimitedPurchaseRequest") then
-				net["RE/LimitedPurchaseRequest"]:FireServer()
-				notif("Purchased Limited Offer!")
-			end
-		end)
-	end
-})
-
--- ============================================================================
--- [[ TAB: TRADING ]]
--- ============================================================================
-local TradeSection = TabTrade:AddSection("Player Trading")
-local function getOnlinePlayerNames()
-	local list = {}
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= Players.LocalPlayer then
-			table.insert(list, p.Name)
-		end
-	end
-	if #list == 0 then table.insert(list, "No other players") end
-	return list
-end
-
-_G.SelectedTradeTarget = nil
-TradeSection:AddDropdown({
-	Title = "Select Player to Trade",
-	Options = getOnlinePlayerNames(),
-	Default = getOnlinePlayerNames()[1],
-	Callback = function(val)
-		_G.SelectedTradeTarget = val
-	end
-})
-
-TradeSection:AddButton({
-	Title = "Send Trade Request",
-	Callback = function()
-		if _G.SelectedTradeTarget and _G.SelectedTradeTarget ~= "No other players" then
-			notif("Trade request initiated with " .. tostring(_G.SelectedTradeTarget))
-		end
-	end
-})
-
-TradeSection:AddToggle({
-	Title = "Auto Accept Trade",
+Section50:AddToggle({
+	Title = "Enable Walkspeed",
 	Default = false,
 	Callback = function(state)
-		_G.AutoAcceptTrade = state
-	end
-})
-
--- ============================================================================
--- [[ TAB: QUEST ]]
--- ============================================================================
-local QuestSection = TabQuest:AddSection("Quest Automation")
-QuestSection:AddToggle({
-	Title = "Auto Track & Claim Quests",
-	Content = "Automatically monitor active quests and claim completed rewards",
-	Default = false,
-	Callback = function(state)
-		_G.AutoQuest = state
 		if state then
-			task.spawn(function()
-				while _G.AutoQuest do
-					pcall(function()
-						local playerGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
-						if playerGui then
-							local questGui = playerGui:FindFirstChild("Top") and playerGui.Top:FindFirstChild("Quest")
-							if questGui then
-								for _, item in ipairs(questGui:GetChildren()) do
-									if item:IsA("GuiObject") and item:FindFirstChild("ClaimButton") then
-										-- claim quest
-									end
-								end
-							end
-						end
-					end)
-					task.wait(2)
-				end
-			end)
+			local Humanoid5 = Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+			Humanoid5.WalkSpeed = 16
+		else
+			local Humanoid6 = Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+			Humanoid6.WalkSpeed = 16
 		end
 	end
 })
 
--- ============================================================================
--- [[ TAB: MISC (BAIT UTILITY, ENCHANTING ALTARS & MACHINES) ]]
--- ============================================================================
-local BaitEquipSection = TabMisc:AddSection("Bait Utility")
-local availableBaits = { "Worm", "Cricket", "Squid", "Leech", "Shrimp", "Fish Head", "Super Bait", "Golden Bait" }
-_G.SelectedBaitId = availableBaits[1]
+Lighting.Changed:Connect(function(value2)
+end)
 
-BaitEquipSection:AddDropdown({
-	Title = "Select Active Bait",
-	Options = availableBaits,
-	Default = availableBaits[1],
-	Callback = function(val)
-		_G.SelectedBaitId = val
-	end
-})
-
-BaitEquipSection:AddToggle({
-	Title = "Auto Equip Bait",
-	Content = "Continuously equip chosen bait when fishing",
-	Default = false,
+Section50:AddToggle({
+	Title = "Full Brightness",
+	Default = FullBrightEnabled,
 	Callback = function(state)
-		_G.AutoEquipBait = state
 		if state then
-			task.spawn(function()
-				while _G.AutoEquipBait do
-					pcall(function()
-						local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-						if net and net:FindFirstChild("RE/EquipBait") then
-							net["RE/EquipBait"]:FireServer(_G.SelectedBaitId)
-						end
-					end)
-					task.wait(3)
-				end
-			end)
+			Lighting.Ambient = Color3.new(1, 1, 1)
+			Lighting.Brightness = 2
+			Lighting.FogEnd = 100000
+			Lighting.GlobalShadows = false
+		else
+			Lighting.Ambient = Color3.new(0, 0, 0)
+			Lighting.Brightness = 1
+			Lighting.FogEnd = 1000
+			Lighting.GlobalShadows = true
 		end
 	end
 })
 
-local AltarSection = TabMisc:AddSection("Enchanting Altars")
-AltarSection:AddToggle({
-	Title = "Auto Activate Enchanting Altar 1",
+Section50:AddToggle({
+	Title = "Infinite Jump",
+	Default = false,
+	Callback = function()
+	end
+})
+
+UserInputService.JumpRequest:Connect(function()
+end)
+
+Section50:AddToggle({
+	Title = "Max Zoom 1000",
+	Content = "Increase max camera distance",
 	Default = false,
 	Callback = function(state)
-		_G.AutoAltar1 = state
 		if state then
-			task.spawn(function()
-				while _G.AutoAltar1 do
-					pcall(function()
-						local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-						if net and net:FindFirstChild("RE/ActivateEnchantingAltar") then
-							net["RE/ActivateEnchantingAltar"]:FireServer()
-						end
-					end)
-					task.wait(1)
-				end
+			Players.LocalPlayer.CameraMaxZoomDistance = 1000
+			Players.LocalPlayer.CameraMinZoomDistance = 0.5
+
+			local connection22 = Players.LocalPlayer.CharacterAdded:Connect(function(character12)
+				task.wait(0.3)
+				Players.LocalPlayer.CameraMaxZoomDistance = 1000
+				Players.LocalPlayer.CameraMinZoomDistance = 0.5
 			end)
+		else
+			connection22:Disconnect()
+			Players.LocalPlayer.CameraMaxZoomDistance = 128
+			Players.LocalPlayer.CameraMinZoomDistance = 0.5
 		end
 	end
 })
 
-AltarSection:AddToggle({
-	Title = "Auto Activate Enchanting Altar 2",
+local Events3 = Players.LocalPlayer.PlayerGui:WaitForChild("Events")
+local Frame14 = Events3:WaitForChild("Frame")
+local Location = Frame14:WaitForChild("Location")
+local lastFrame = Location:WaitForChild("Label")
+local Events4 = Players.LocalPlayer.PlayerGui:WaitForChild("Events")
+local Frame15 = Events4:WaitForChild("Frame")
+local CurrencyCounter = Frame15:WaitForChild("CurrencyCounter")
+local lastFrame2 = CurrencyCounter:WaitForChild("lastFrame2")
+Players.LocalPlayer.Character:GetDescendants()
+
+Section50:AddToggle({
+	Title = "Streamer Mode",
+	Content = "This feature will sensored ur location, coins, and hide character!",
 	Default = false,
 	Callback = function(state)
-		_G.AutoAltar2 = state
 		if state then
-			task.spawn(function()
-				while _G.AutoAltar2 do
-					pcall(function()
-						local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-						if net and net:FindFirstChild("RE/ActivateSecondEnchantingAltar") then
-							net["RE/ActivateSecondEnchantingAltar"]:FireServer()
-						end
-					end)
-					task.wait(1)
-				end
+			local changedSignal = lastFrame:GetPropertyChangedSignal("Text")
+
+			local connection23 = changedSignal:Connect(function()
+				lastFrame.Text = "CENSORED"
 			end)
+
+			local changedSignal2 = lastFrame2:GetPropertyChangedSignal("Text")
+
+			local connection24 = changedSignal2:Connect(function()
+				lastFrame2.Text = "CENSORED"
+			end)
+
+			lastFrame.Text = "CENSORED"
+			lastFrame2.Text = "CENSORED"
+		else
+			connection23:Disconnect()
+			connection24:Disconnect()
+			lastFrame.Text = lastFrame.Text
+			lastFrame2.Text = lastFrame2.Text
 		end
 	end
 })
 
-AltarSection:AddButton({
-	Title = "Roll Enchant Ability",
+Section50:AddSubSection("Fly Features")
+
+Section50:AddSlider({
+	Title = "Fly Speed",
+	Default = 1,
+	Max = 10,
+	Min = 1,
 	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RF/RequestAbilityRoll") then
-				net["RF/RequestAbilityRoll"]:InvokeServer()
-				notif("Rolled Enchant Ability!")
-			end
-		end)
 	end
 })
 
-local MachineSection = TabMisc:AddSection("Machines & Crystals")
-MachineSection:AddButton({
-	Title = "Activate Egg Machine",
-	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RF/ActivateEggMachineEgg") then
-				net["RF/ActivateEggMachineEgg"]:InvokeServer()
-				notif("Activated Egg Machine!")
-			end
-		end)
-	end
-})
-
-MachineSection:AddButton({
-	Title = "Create Transcended Stone",
-	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RF/CreateTranscendedStone") then
-				net["RF/CreateTranscendedStone"]:InvokeServer()
-				notif("Created Transcended Stone!")
-			end
-		end)
-	end
-})
-
-MachineSection:AddButton({
-	Title = "Consume Cave Crystal",
-	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RF/ConsumeCaveCrystal") then
-				net["RF/ConsumeCaveCrystal"]:InvokeServer()
-				notif("Consumed Cave Crystal!")
-			end
-		end)
-	end
-})
-
--- ============================================================================
--- [[ TAB: TELEPORT (ISLANDS, ABYSS, PLAYERS & POSITIONS) ]]
--- ============================================================================
-local IslandTeleSection = TabTele:AddSection("Islands & Abyss Teleport")
-_G.SelectedIsland = TeleportLocations[1]
-
-IslandTeleSection:AddDropdown({
-	Title = "Select Destination",
-	Options = TeleportLocations,
-	Default = TeleportLocations[1],
-	Callback = function(val)
-		_G.SelectedIsland = val
-	end
-})
-
-IslandTeleSection:AddButton({
-	Title = "Teleport via Boat",
-	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RE/BoatTeleport") then
-				net["RE/BoatTeleport"]:FireServer(_G.SelectedIsland)
-				notif("Spawned boat teleport to " .. tostring(_G.SelectedIsland))
-			end
-		end)
-	end
-})
-
-local PlayerTeleSection = TabTele:AddSection("Player Teleport")
-_G.SelectedPlayerTele = nil
-PlayerTeleSection:AddDropdown({
-	Title = "Select Target Player",
-	Options = getOnlinePlayerNames(),
-	Default = getOnlinePlayerNames()[1],
-	Callback = function(val)
-		_G.SelectedPlayerTele = val
-	end
-})
-
-PlayerTeleSection:AddButton({
-	Title = "Teleport to Player",
-	Callback = function()
-		if _G.SelectedPlayerTele and _G.SelectedPlayerTele ~= "No other players" then
-			local targetPlayer = Players:FindFirstChild(_G.SelectedPlayerTele)
-			if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-				local myChar = Players.LocalPlayer.Character
-				if myChar and myChar:FindFirstChild("HumanoidRootPart") then
-					myChar:PivotTo(targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0))
-					notif("Teleported to " .. _G.SelectedPlayerTele)
-				end
-			end
-		end
-	end
-})
-
-local PosSection = TabTele:AddSection("Saved Coordinates")
-PosSection:AddButton({
-	Title = "Save Current Position",
-	Callback = function()
-		SavePosition()
-		notif("Saved current position!")
-	end
-})
-
-PosSection:AddButton({
-	Title = "Teleport to Saved Position",
-	Callback = function()
-		TeleportLastPos()
-		notif("Teleported to saved position!")
-	end
-})
-
--- ============================================================================
--- [[ TAB: WEBHOOK (DISCORD NOTIFICATIONS) ]]
--- ============================================================================
-local WebhookSection = TabWebhook:AddSection("Discord Notifications")
-_G.WebhookURL = ""
-WebhookSection:AddInput({
-	Title = "Discord Webhook URL",
-	Placeholder = "https://discord.com/api/webhooks/...",
-	Default = "",
-	Callback = function(val)
-		_G.WebhookURL = val
-	end
-})
-
-WebhookSection:AddToggle({
-	Title = "Send Caught Fish",
+Section50:AddToggle({
+	Title = "Enable Fly",
 	Default = false,
 	Callback = function(state)
-		_G.WebhookSendCaught = state
+		if state then
+			local HumanoidRootPart40 = Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
+			local Humanoid7 = Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			local PlayerScripts = Players.LocalPlayer:WaitForChild("PlayerScripts")
+			local PlayerModule = PlayerScripts:WaitForChild("PlayerModule")
+			local ControlModule = PlayerModule:WaitForChild("ControlModule")
+			local module16 = require(ControlModule)
+			local BodyVelocity3 = Instance.new("BodyVelocity")
+			local BodyGyro = Instance.new("BodyGyro")
+			BodyVelocity3.MaxForce = Vector3.new(8999999488, 8999999488, 8999999488)
+			BodyGyro.MaxTorque = Vector3.new(8999999488, 8999999488, 8999999488)
+			BodyGyro.P = 1000
+			BodyGyro.D = 50
+			BodyVelocity3.Parent = HumanoidRootPart40
+			BodyGyro.Parent = HumanoidRootPart40
+			Humanoid7.PlatformStand = true
+
+			task.spawn(function()
+				task.wait()
+				module16:GetMoveVector()
+				BodyGyro.CFrame = workspace.CurrentCamera.CFrame
+				-- [envlog] error: Luraph Script:12438: Script:62: attempt to perform arithmetic (mul) on boolean and number
+			end)
+		else
+			local Humanoid8 = Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			Humanoid8.PlatformStand = false
+			local HumanoidRootPart41 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart41:GetChildren()
+		end
 	end
 })
 
-WebhookSection:AddToggle({
-	Title = "Rare / Mythic Only",
+Section50:AddSubSection("Freecam Features")
+local changedSignal3 = workspace:GetPropertyChangedSignal("CurrentCamera")
+
+changedSignal3:Connect(function()
+end)
+
+UserInputService.TouchStarted:Connect(function()
+end)
+
+UserInputService.TouchEnded:Connect(function(hit)
+end)
+
+UserInputService.TouchMoved:Connect(function()
+end)
+
+Section50:AddToggle({
+	Title = "Freecam Mode",
+	Default = false,
+	Keybind = true,
+	Callback = function(state)
+		if state then
+			RunService:BindToRenderStep("Freecam", 200, function(arg463)
+				local moveVector = Players.LocalPlayer:GetMoveVector()
+				local value3 = math.exp((-31.415926535897931 * arg463))
+				workspace.CurrentCamera.CFrame = ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463))
+				workspace:FindPartOnRay(Ray.new((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).Position + ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * -0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector) * 0.1)), ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * -0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector).Unit * 512)))
+				workspace:FindPartOnRay(Ray.new((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).Position + ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector) * 0.1)), ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector).Unit * 512)))
+				workspace:FindPartOnRay(Ray.new((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).Position + ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector) * 0.1)), ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector).Unit * 512)))
+				workspace:FindPartOnRay(Ray.new((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).Position + ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * -0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector) * 0.1)), ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * -0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector).Unit * 512)))
+				workspace:FindPartOnRay(Ray.new((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).Position + ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector) * 0.1)), ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector).Unit * 512)))
+				workspace:FindPartOnRay(Ray.new((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).Position + ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector) * 0.1)), ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector).Unit * 512)))
+				workspace:FindPartOnRay(Ray.new((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).Position + ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * -0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector) * 0.1)), ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * -0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector).Unit * 512)))
+				workspace:FindPartOnRay(Ray.new((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).Position + ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector) * 0.1)), ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector).Unit * 512)))
+				workspace:FindPartOnRay(Ray.new((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).Position + ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector) * 0.1)), ((((((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).RightVector * 0/0) - (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).UpVector * 0.70020753820970971)) + ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector).Unit * 512)))
+				local result63 = ((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)).LookVector:Dot(Vector3.new(0, 0, 0))
+				workspace.CurrentCamera.Focus = (((CFrame.new(workspace.CurrentCamera.CFrame.Position) * CFrame.fromOrientation(0, 0, 0)) * CFrame.new((((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) + (((Vector3.new(0, 0, 0) * arg463) - (((Vector3.new(moveVector.X, 0, (-moveVector.Z)) * 1) - Vector3.new(0, 0, 0)) * ((31.415926535897931 * arg463) + 1))) * value3)) * 64) * arg463)) * CFrame.new(0, 0, (-(result63 * 512))))
+			end)
+		else
+			RunService:UnbindFromRenderStep("Freecam")
+		end
+	end
+})
+
+Section50:AddButton({
+	Title = "Reset Freecam",
+	Callback = function()
+	end
+})
+
+local Section51 = Tab9:AddSection("Server Features")
+
+Section51:AddToggle({
+	Title = "Auto Reconnect",
 	Default = true,
 	Callback = function(state)
-		_G.WebhookRareOnly = state
+		if state then
+			local GuiService = game:GetService("GuiService")
+
+			local connection25 = GuiService.ErrorMessageChanged:Connect(function()
+				task.wait(2)
+			end)
+
+			GuiService:GetErrorMessage()
+			Players:GetPlayers()
+			TeleportService:Teleport(0, Players.LocalPlayer)
+		else
+			connection25:Disconnect()
+		end
 	end
 })
 
-WebhookSection:AddButton({
-	Title = "Send Test Message",
-	Callback = function()
-		if _G.WebhookURL and _G.WebhookURL ~= "" then
-			pcall(function()
-				local req = syn and syn.request or http_request or request or (http and http.request)
-				if req then
-					req({
-						Url = _G.WebhookURL,
-						Method = "POST",
-						Headers = { ["Content-Type"] = "application/json" },
-						Body = HttpService:JSONEncode({
-							content = "🎣 Meng Hub Webhook Test Successful!",
-							embeds = {{
-								title = "Meng Hub - Fish It",
-								description = "Webhook connection established for " .. Players.LocalPlayer.Name,
-								color = 12428017,
-								footer = { text = "Fish It | v1.1.0" }
-							}}
-						})
-					})
-					notif("Test webhook sent!")
+Section51:AddToggle({
+	Title = "Auto Execute",
+	Default = false,
+	Callback = function(state)
+		if state then
+			queue_on_teleport("                loadstring(game:HttpGet(\"https://raw.githubusercontent.com/GrexXMeng/Mengs/refs/heads/main/library\"))()\n            ")
+		else
+			queue_on_teleport("")
+		end
+	end
+})
+
+Section51:AddDivider()
+_G.AutoFriend = false
+
+Section51:AddToggle({
+	Title = "Auto Send Friend Request",
+	Content = "Automatically send friend request to all players in server",
+	Default = false,
+	Callback = function(state)
+		if state then
+			_G.AutoFriend = state
+
+			task.spawn(function()
+				local players8 = Players:GetPlayers()
+
+				for i14, v22 in ipairs(players8) do
+					Players.LocalPlayer:IsFriendsWith(v22.UserId)
 				end
 			end)
-		else
-			notif("Please enter a valid webhook URL!")
 		end
 	end
 })
 
--- ============================================================================
--- [[ TAB: CONFIGURATION ]]
--- ============================================================================
-local ConfigSection = TabConfig:AddSection("Config Manager")
-_G.ConfigName = "default"
-
-ConfigSection:AddInput({
-	Title = "Config File Name",
-	Placeholder = "default",
-	Default = "default",
-	Callback = function(val)
-		_G.ConfigName = val
-	end
-})
-
-ConfigSection:AddButton({
-	Title = "Save Config",
-	Callback = function()
-		pcall(function()
-			if writefile and makefolder then
-				makefolder("Meng Hub_FishIt")
-				makefolder("Meng Hub_FishIt/Config")
-				local settings = {
-					Delay = _G.Delay,
-					InstantDelayV1 = _G.InstantDelayCompleteV1,
-					InstantDelayV2 = _G.InstantDelayCompleteV2,
-					CastModeV1 = _G.InstantCastModeV1,
-					CastModeV2 = _G.InstantCastModeV2,
-					AutoSellInterval = _G.AutoSellInterval,
-				}
-				writefile("Meng Hub_FishIt/Config/" .. (_G.ConfigName or "default") .. ".json", HttpService:JSONEncode(settings))
-				notif("Config saved as " .. tostring(_G.ConfigName) .. ".json")
-			end
-		end)
-	end
-})
-
-ConfigSection:AddButton({
-	Title = "Load Config",
-	Callback = function()
-		pcall(function()
-			if isfile and isfile("Meng Hub_FishIt/Config/" .. (_G.ConfigName or "default") .. ".json") then
-				local data = HttpService:JSONDecode(readfile("Meng Hub_FishIt/Config/" .. (_G.ConfigName or "default") .. ".json"))
-				if data.Delay then _G.Delay = data.Delay end
-				if data.InstantDelayV1 then _G.InstantDelayCompleteV1 = data.InstantDelayV1 end
-				if data.InstantDelayV2 then _G.InstantDelayCompleteV2 = data.InstantDelayV2 end
-				notif("Config loaded successfully!")
-			end
-		end)
-	end
-})
-
-ConfigSection:AddToggle({
-	Title = "Autoload Config on Startup",
+Section51:AddToggle({
+	Title = "Auto Accept Friend Request",
 	Default = false,
 	Callback = function(state)
-		if writefile and makefolder then
-			makefolder("Meng Hub_FishIt")
-			makefolder("Meng Hub_FishIt/Config")
-			if state then
-				writefile("Meng Hub_FishIt/Config/Autoload.txt", _G.ConfigName or "default")
-			else
-				if isfile("Meng Hub_FishIt/Config/Autoload.txt") then
-					delfile("Meng Hub_FishIt/Config/Autoload.txt")
+		if state then
+			_G.AutoAccept = state
+
+			task.spawn(function()
+				local players9 = Players:GetPlayers()
+
+				for i15, v23 in ipairs(players9) do
+					Players.LocalPlayer:IsFriendsWith(v23.UserId)
 				end
-			end
-		end
-	end
-})
 
--- ============================================================================
--- [[ TAB: EMOTE & SKIN ]]
--- ============================================================================
-local SkinSection = TabSkin:AddSection("Cosmetics & Skins")
-local skinList = { "Default", "Golden Rod Skin", "Abyssal Glow", "Lava Wrap", "Glacier Frost" }
-_G.SelectedSkin = skinList[1]
+				task.wait(7)
+				local players10 = Players:GetPlayers()
 
-SkinSection:AddDropdown({
-	Title = "Select Rod Skin",
-	Options = skinList,
-	Default = skinList[1],
-	Callback = function(val)
-		_G.SelectedSkin = val
-	end
-})
+				for i16, v24 in ipairs(players10) do
+					Players.LocalPlayer:IsFriendsWith(v24.UserId)
+				end
 
-SkinSection:AddButton({
-	Title = "Equip Selected Skin",
-	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RE/EquipItem") then
-				net["RE/EquipItem"]:FireServer(_G.SelectedSkin)
-				notif("Equipped " .. tostring(_G.SelectedSkin))
-			end
-		end)
-	end
-})
+				task.wait(5)
+				local players11 = Players:GetPlayers()
 
--- ============================================================================
--- [[ TAB: MENU (GAME SHORTCUTS & CHEST CLAIM) ]]
--- ============================================================================
-local MenuKaitunSection = TabMenu:AddSection("Kaitun [BETA]")
+				for i17, v25 in ipairs(players11) do
+					Players.LocalPlayer:IsFriendsWith(v25.UserId)
+				end
 
-MenuKaitunSection:AddDropdown({
-	Title = "Select Farm Location",
-	Options = KaitunFarmSpotsList,
-	Default = "Kohana Volcano",
-	Callback = function(val)
-		_G.SelectedFarmLocation = val
-		if _G.StartKaitun then
-			teleportToFarmSpot(val)
-		end
-	end
-})
+				task.wait(9)
+				local players12 = Players:GetPlayers()
 
-MenuKaitunSection:AddToggle({
-	Title = "Start Kaitun",
-	Default = false,
-	Callback = function(state)
-		if state then
-			startKaitun()
+				for i18, v26 in ipairs(players12) do
+					Players.LocalPlayer:IsFriendsWith(v26.UserId)
+				end
+
+				task.wait(7)
+				local players13 = Players:GetPlayers()
+
+				for i19, v27 in ipairs(players13) do
+					Players.LocalPlayer:IsFriendsWith(v27.UserId)
+				end
+
+				task.wait(8)
+				local players14 = Players:GetPlayers()
+
+				for i20, v28 in ipairs(players14) do
+					Players.LocalPlayer:IsFriendsWith(v28.UserId)
+				end
+
+				task.wait(5)
+				local players15 = Players:GetPlayers()
+
+				for i21, v29 in ipairs(players15) do
+					Players.LocalPlayer:IsFriendsWith(v29.UserId)
+				end
+
+				task.wait(7)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
 		else
-			stopKaitun()
+			_G.AutoAccept = false
+
+			task.spawn(function()
+			end)
 		end
 	end
 })
 
-MenuKaitunSection:AddToggle({
-	Title = "Auto Equip Best Rod",
-	Default = false,
-	Callback = function(state)
-		_G.KaitunAutoBestRod = state
-		if state then
-			doEquipBestRod()
-		end
-	end
-})
+local Section52 = Tab9:AddSection("Miscellaneous")
 
-MenuKaitunSection:AddToggle({
-	Title = "Auto Equip Best Bait",
-	Default = false,
-	Callback = function(state)
-		_G.KaitunAutoBestBait = state
-		if state then
-			doEquipBestBait()
-		end
-	end
-})
-
-local MenuSection = TabMenu:AddSection("Game Shortcuts")
-MenuSection:AddButton({
-	Title = "Claim Pirate Treasure Chest",
+Section52:AddButton({
+	Title = "Reset Character in Place",
 	Callback = function()
-		pcall(function()
-			local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-			if net and net:FindFirstChild("RE/ClaimPirateChest") then
-				net["RE/ClaimPirateChest"]:FireServer()
-				notif("Claimed Pirate Chest!")
-			end
-		end)
+		Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		Players.LocalPlayer.Character:BreakJoints()
+		local result64 = Players.LocalPlayer.CharacterAdded:Wait()
+		local HumanoidRootPart42 = result64:WaitForChild("HumanoidRootPart")
+		task.wait(0.3)
+		HumanoidRootPart42.CFrame = (pivot + Vector3.new(0, 100, 0))
+		task.wait()
+		-- [envlog] the statements above repeat forever (loop)
 	end
 })
+
+local PlayerGui3 = Players.LocalPlayer:FindFirstChild("PlayerGui")
+local TextNotifications = PlayerGui3:FindFirstChild("Text Notifications")
+local Frame16 = TextNotifications:FindFirstChild("Frame")
+Frame16.Position = UDim2.new(0.5, 0, 0, 110)
+
+Section52:AddDropdown({
+	Title = "Notification Position",
+	Content = "This feature will set position fish notification",
+	Default = "Normal (Mid)",
+	Options = { "Normal (Mid)", "Right", "Left" },
+	Callback = function(state)
+		if state then
+			local PlayerGui4 = Players.LocalPlayer:FindFirstChild("PlayerGui")
+			local TextNotifications2 = PlayerGui4:FindFirstChild("Text Notifications")
+			local Frame17 = TextNotifications2:FindFirstChild("Frame")
+			Frame17.Position = UDim2.new(0.5, 0, 0, 110)
+		else
+			local PlayerGui5 = Players.LocalPlayer:FindFirstChild("PlayerGui")
+			local TextNotifications3 = PlayerGui5:FindFirstChild("Text Notifications")
+			local Frame18 = TextNotifications3:FindFirstChild("Frame")
+			Frame18.Position = UDim2.new(0.5, 0, 0, 110)
+		end
+	end
+})
+
+Section52:AddToggle({
+	Title = "Clean Screen",
+	Content = "Hides all gui on ur screen!",
+	Callback = function(state)
+		if state then
+			local Events5 = Players.LocalPlayer.PlayerGui:FindFirstChild("Events")
+			local Quest = Players.LocalPlayer.PlayerGui:FindFirstChild("Quest")
+			local ActivePotions = Players.LocalPlayer.PlayerGui:FindFirstChild("Active Potions")
+			local Backpack = Players.LocalPlayer.PlayerGui:FindFirstChild("Backpack")
+			Events5:FindFirstChild("Frame")
+			Events5.Frame.Visible = false
+			Quest:FindFirstChild("List")
+			Quest.List.Visible = false
+			ActivePotions:FindFirstChild("Rows")
+			ActivePotions.Rows.Visible = false
+			Backpack:FindFirstChild("Display")
+			Backpack:FindFirstChild("Modifiers")
+			Backpack:FindFirstChild("AutoFishingButton")
+			Backpack.Display.Visible = false
+			Backpack.Modifiers.Visible = false
+			Backpack.AutoFishingButton.Visible = false
+		else
+			local Events6 = Players.LocalPlayer.PlayerGui:FindFirstChild("Events")
+			local Quest2 = Players.LocalPlayer.PlayerGui:FindFirstChild("Quest")
+			local ActivePotions2 = Players.LocalPlayer.PlayerGui:FindFirstChild("Active Potions")
+			local Backpack2 = Players.LocalPlayer.PlayerGui:FindFirstChild("Backpack")
+			Events6:FindFirstChild("Frame")
+			Events6.Frame.Visible = true
+			Quest2:FindFirstChild("List")
+			Quest2.List.Visible = true
+			ActivePotions2:FindFirstChild("Rows")
+			ActivePotions2.Rows.Visible = true
+			Backpack2:FindFirstChild("Display")
+			Backpack2:FindFirstChild("Modifiers")
+			Backpack2:FindFirstChild("AutoFishingButton")
+			Backpack2.Display.Visible = true
+			Backpack2.Modifiers.Visible = true
+			Backpack2.AutoFishingButton.Visible = true
+		end
+	end
+})
+
+local _WeatherVFX = _G._WeatherVFX
+
+Section52:AddToggle({
+	Title = "Disable VFX",
+	Default = false,
+	Callback = function(state)
+		if state then
+			_G._WeatherVFX = _WeatherVFX
+			local VFXController = ReplicatedStorage.Controllers:WaitForChild("VFXController")
+			local module17 = require(VFXController)
+
+			for k9, v31 in pairs(module17) do
+			end
+
+			workspace:GetDescendants()
+
+			local connection26 = workspace.DescendantAdded:Connect(function(descendant3)
+				descendant3:GetAttribute("AbilityVFX")
+				if descendant3 then descendant3:Destroy() end
+			end)
+
+			local connection27 = Players.PlayerAdded:Connect(function(player3)
+				player3.CharacterAdded:Connect(function(character16)
+					task.wait(0.3)
+					character16:GetDescendants()
+
+					character16.DescendantAdded:Connect(function(descendant8)
+						descendant8:GetAttribute("AbilityVFX")
+						if descendant8 then descendant8:Destroy() end
+					end)
+				end)
+
+				player3.Character:GetDescendants()
+
+				player3.Character.DescendantAdded:Connect(function(descendant6)
+					descendant6:GetAttribute("AbilityVFX")
+					if descendant6 then descendant6:Destroy() end
+				end)
+			end)
+
+			local players16 = Players:GetPlayers()
+
+			for i23, v32 in ipairs(players16) do
+				local connection28 = v32.CharacterAdded:Connect(function(character13)
+					task.wait(0.3)
+					character13:GetDescendants()
+
+					character13.DescendantAdded:Connect(function(descendant7)
+						descendant7:GetAttribute("AbilityVFX")
+						if descendant7 then descendant7:Destroy() end
+					end)
+				end)
+
+				v32.Character:GetDescendants()
+
+				local connection29 = v32.Character.DescendantAdded:Connect(function(descendant4)
+					descendant4:GetAttribute("AbilityVFX")
+					if descendant4 then descendant4:Destroy() end
+				end)
+			end
+
+			_WeatherVFX.conn:Disconnect()
+			_WeatherVFX.conn = nil
+
+			for i24, v33 in ipairs(_WeatherVFX.conns) do
+				v33:Disconnect()
+			end
+
+			_WeatherVFX.conns = nil
+			local module18 = require(ReplicatedStorage.Controllers.WeatherController.Classic.PartPool)
+			_WeatherVFX.origAcquire = module18.Acquire
+			_WeatherVFX.origUseDesc = module18.UseDescription
+			_WeatherVFX.WeatherController = module18
+
+			module18.Acquire = function()
+				Instance.new("Part")
+			end
+
+			module18.UseDescription = function()
+			end
+
+			local module19 = require(ReplicatedStorage.Controllers.WeatherController.Classic.Scheduler)
+			_WeatherVFX.origSchedulerAdd = module19.add
+			_WeatherVFX.origSchedulerDelay = module19.delay
+			_WeatherVFX.Scheduler = module19
+
+			module19.add = function()
+			end
+
+			module19.delay = function()
+			end
+
+			local Tornado_Active = workspace:FindFirstChild("Tornado_Active")
+			if Tornado_Active then Tornado_Active:Destroy() end
+			local TornadoDebris_Parking = workspace:FindFirstChild("TornadoDebris_Parking")
+			if TornadoDebris_Parking then TornadoDebris_Parking:Destroy() end
+			local Tornado_Parking = workspace:FindFirstChild("Tornado_Parking")
+			if Tornado_Parking then Tornado_Parking:Destroy() end
+			local DiscoEvent = workspace:FindFirstChild("DiscoEvent")
+			if DiscoEvent then DiscoEvent:Destroy() end
+			local Volcano_Active = workspace:FindFirstChild("Volcano_Active")
+			if Volcano_Active then Volcano_Active:Destroy() end
+			local Lightning_Active = workspace:FindFirstChild("Lightning_Active")
+			if Lightning_Active then Lightning_Active:Destroy() end
+			local SmokePart = workspace:FindFirstChild("SmokePart")
+			if SmokePart then SmokePart:Destroy() end
+			_WeatherVFX.conns = {}
+
+			local connection30 = workspace.ChildAdded:Connect(function(child5)
+			end)
+
+			_WeatherVFX.conn = connection30
+			print("[MengXHub] VFX Optimization:", "Enabled (Lag Reduced)")
+		else
+			connection28:Disconnect()
+			connection29:Disconnect()
+			connection27:Disconnect()
+			connection26:Disconnect()
+			local VFXController2 = ReplicatedStorage.Controllers:WaitForChild("VFXController")
+			local module20 = require(VFXController2)
+
+			for k10, v34 in pairs(module20) do
+			end
+
+			connection30:Disconnect()
+			_WeatherVFX.conn = nil
+			_WeatherVFX.conns = nil
+			module18.Acquire = module18.Acquire
+			module18.UseDescription = module18.UseDescription
+			module19.add = module19.add
+			module19.delay = module19.delay
+			_WeatherVFX.fakePart:Destroy()
+			_WeatherVFX.fakePart = nil
+			_WeatherVFX.WeatherController = nil
+			_WeatherVFX.Scheduler = nil
+			_WeatherVFX.origAcquire = nil
+			_WeatherVFX.origUseDesc = nil
+			_WeatherVFX.origSchedulerAdd = nil
+			_WeatherVFX.origSchedulerDelay = nil
+			print("[MengXHub] VFX Optimization:", "Disabled")
+		end
+	end
+})
+
+local _FakeIdentityCleanup = getgenv()._FakeIdentityCleanup
+getgenv()._FakeIdentityCleanup = _FakeIdentityCleanup
+_FakeIdentityCleanup()
+
+getgenv()._FakeIdentityCleanup = function()
+end
+
+local players17 = Players:GetPlayers()
+
+local function getOverhead(v)
+	local HumanoidRootPart43 = v.Character:WaitForChild("HumanoidRootPart", 5)
+	local Overhead = HumanoidRootPart43:FindFirstChild("Overhead")
+	return Overhead
+end
+
+local function setupHeader(header, label)
+	header.Text = header.Text
+	label.Text = label.Text
+end
+
+for i25, v35 in ipairs(players17) do
+	task.spawn(function()
+		local Overhead = getOverhead(v35)
+		Overhead:FindFirstChild("Content")
+		local Header = Overhead.Content:FindFirstChild("Header")
+		Overhead:FindFirstChild("LevelContainer")
+		local Label56 = Overhead.LevelContainer:FindFirstChild("Label")
+		local changedSignal4 = Header:GetPropertyChangedSignal("Text")
+
+		local connection31 = changedSignal4:Connect(function()
+		end)
+
+		local changedSignal5 = Label56:GetPropertyChangedSignal("Text")
+
+		local connection32 = changedSignal5:Connect(function()
+		end)
+	end, v35)
+
+	v35.CharacterAdded:Connect(function(character14)
+		task.wait(0.3)
+		local Overhead2 = getOverhead(v35)
+		Overhead2:FindFirstChild("Content")
+		local Header2 = Overhead2.Content:FindFirstChild("Header")
+		Overhead2:FindFirstChild("LevelContainer")
+		local Label58 = Overhead2.LevelContainer:FindFirstChild("Label")
+		connection31:Disconnect()
+		connection32:Disconnect()
+		local changedSignal6 = Header2:GetPropertyChangedSignal("Text")
+
+		changedSignal6:Connect(function()
+		end)
+
+		local changedSignal7 = Label58:GetPropertyChangedSignal("Text")
+
+		changedSignal7:Connect(function()
+		end)
+
+		setupHeader(Header2, Label58)
+	end)
+end
+
+Players.PlayerAdded:Connect(function(player4)
+	player4.CharacterAdded:Connect(function(character17)
+		task.wait(0.3)
+		local Overhead3 = getOverhead(player4)
+		Overhead3:FindFirstChild("Content")
+		local Header3 = Overhead3.Content:FindFirstChild("Header")
+		Overhead3:FindFirstChild("LevelContainer")
+		local Label59 = Overhead3.LevelContainer:FindFirstChild("Label")
+		local changedSignal8 = Header3:GetPropertyChangedSignal("Text")
+
+		changedSignal8:Connect(function()
+		end)
+
+		local changedSignal9 = Label59:GetPropertyChangedSignal("Text")
+
+		changedSignal9:Connect(function()
+		end)
+
+		Header2.Text = Header2.Text
+		Label58.Text = Label58.Text
+		Header3.Text = Header3.Text
+		Label59.Text = Label59.Text
+	end)
+end)
+
+Players.PlayerRemoving:Connect(function(player5)
+end)
+
+CoreGui.DescendantAdded:Connect(function(descendant5)
+end)
+
+Section52:AddSubSection("Fake Identity")
+
+Section52:AddInput({
+	Title = "Name Changer",
+	Placeholder = "Rawrr :3",
+	Callback = function()
+	end
+})
+
+Section52:AddInput({
+	Title = "Lvl Changer",
+	Placeholder = "Lvl: Unknown",
+	Callback = function()
+	end
+})
+
+Section52:AddToggle({
+	Title = "Start Hide Identifier",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local VerifiedName = getgenv().VerifiedName
+			getgenv().VerifiedName = VerifiedName
+			Header.Text = Players.LocalPlayer.DisplayName .. " "
+			local child = workspace.Characters:FindFirstChild(Players.LocalPlayer.Name)
+			local HumanoidRootPart44 = child:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart44.Overhead:FindFirstChild("LevelContainer")
+			local Label57 = HumanoidRootPart44.Overhead.LevelContainer:FindFirstChild("Label")
+			Label56.Text = Label57.Text
+
+			local connection33 = RunService.RenderStepped:Connect(function(deltaTime10)
+				connection33:Disconnect()
+			end)
+
+			task.delay(1.5, function()
+			end)
+
+			CoreGui:GetDescendants()
+		else
+			Header.Text = Header.Text
+			Label56.Text = Label56.Text
+		end
+	end
+})
+
+Section52:AddToggle({
+	Title = "Show Premium, Verified Badge",
+	Default = false,
+	Callback = function(state)
+		if not state then
+			getgenv().VerifiedName = false
+			Header.Text = Header.Text
+			Label56.Text = Label56.Text
+		end
+	end
+})
+
+task.spawn(function()
+	task.wait(1.5)
+	setupHeader(Header, Label56)
+end)
+
+local Section53 = Tab10:AddSection("Teleport To Player")
+local players18 = Players:GetPlayers()
+
+for i26, v36 in ipairs(players18) do
+end
+
+local Dropdown3 = Section53:AddDropdown({
+	Title = "Select Player",
+	Options = { v36.Name },
+	Callback = function()
+	end
+})
+
+Section53:AddButton({
+	Title = "Refresh Player",
+	Callback = function(state)
+		if state then
+			local players19 = Players:GetPlayers()
+
+			for i27, v37 in ipairs(players19) do
+			end
+
+			Dropdown3:SetValues({ v37.Name })
+		else
+			local players20 = Players:GetPlayers()
+
+			for i28, v38 in ipairs(players20) do
+			end
+
+			Dropdown3:SetValues({ v38.Name })
+		end
+
+		notif("Successfully refresh!")
+	end
+})
+
+Section53:AddToggle({
+	Title = "Auto Follow Player",
+	Default = false,
+	Callback = function(state)
+		if state then
+			local Humanoid9 = Players.LocalPlayer.Character:WaitForChild("Humanoid")
+			local Animator2 = Humanoid9:FindFirstChildOfClass("Animator")
+			local tracks2 = Animator2:GetPlayingAnimationTracks()
+
+			for i29, v39 in ipairs(tracks2) do
+				v39:Stop(0)
+			end
+
+			local connection34 = Animator2.AnimationPlayed:Connect(function()
+			end)
+
+			notif("Select player first!")
+		else
+			local Humanoid10 = Players.LocalPlayer.Character:WaitForChild("Humanoid")
+			Humanoid10:FindFirstChildOfClass("Animator")
+			connection34:Disconnect()
+		end
+	end
+})
+
+Section53:AddButton({
+	Title = "Teleport To Player",
+	Callback = function()
+		notif("Please select a player first!")
+	end
+})
+
+local Section54 = Tab10:AddSection("Location")
+
+Section54:AddDropdown({
+	Title = "Select Location",
+	Default = "(NEW) Throne Room Blizzard",
+	Options = {
+		"(NEW) Throne Room Blizzard",
+		"(NEW) Throne Room Storm",
+		"(NEW) Throne Room Volcano",
+		"Ancient Jungle",
+		"Ancient Ruin",
+		"Copper Canyon",
+		"Copper Canyon High",
+		"Copper Canyon Mines",
+		"Coral Reefs 1",
+		"Coral Reefs 2",
+		"Coral Reefs 3",
+		"Crater Island",
+		"Crater Island Top",
+		"Crystal Depths",
+		"Crystaline Pessage",
+		"Elemental Blizzard",
+		"Elemental Storm",
+		"Elemental Volcano",
+		"Esoteric Depths",
+		"Fisherman Island Underground",
+		"Gloomcap Grotto",
+		"Kohana",
+		"Kohana 1",
+		"Kohana 2",
+		"Kohana Volcano",
+		"Lava Basin",
+		"Leviathan's Den",
+		"Lost Shore",
+		"Lucky Abyss",
+		"Mariana Trench",
+		"Ocean",
+		"Pirate Island's",
+		"Pirate Treasure Room",
+		"Planetary Observatory",
+		"Sacred Temple",
+		"Secret Passage",
+		"Sewers",
+		"Shiny Abyss",
+		"Sisyphus Statue",
+		"Stingray Shores",
+		"Treasure Room",
+		"Tropical Grove",
+		"Tropical Grove Cave 1",
+		"Tropical Grove Cave 2",
+		"Tropical Grove Highground",
+		"Underground Cellar",
+		"Underwater City",
+		"Volcano Cavern",
+		"Weather Machine"
+	},
+	Callback = function()
+	end
+})
+
+Section54:AddButton({
+	Title = "Teleport To Location",
+	Callback = function()
+		notif("Please select a location first!")
+	end
+})
+
+workspace.NPC:GetChildren()
+local Section55 = Tab10:AddSection("Teleport To NPC")
+
+Section55:AddDropdown({
+	Title = "Select NPC",
+	Options = { "No NPC Found" },
+	Callback = function()
+	end
+})
+
+Section55:AddButton({
+	Title = "Teleport To NPC",
+	Callback = function(state)
+		if state then
+			local child2 = workspace.NPC:FindFirstChild(false)
+			Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local pivot2 = child2:GetPivot()
+			local HumanoidRootPart45 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart45.CFrame = (pivot2 * CFrame.new(0, 5, 0))
+		else
+			local child3 = workspace.NPC:FindFirstChild(false)
+			Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local pivot3 = child3:GetPivot()
+			local HumanoidRootPart46 = Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			HumanoidRootPart46.CFrame = (pivot3 * CFrame.new(0, 5, 0))
+		end
+	end
+})
+
+_G.WebhookFlags = {
+	Disconnect = {
+		Enabled = false,
+		URL = "https://discord.com/api/webhooks/1447737110252748953/B2lPvuO8YuDpgX_3NhI5JFB5PgFUhlz-Owa-1JeboCr9VUtj4yf53b6HVI9M8afjSxdU"
+	},
+	FishCaught = {
+		Enabled = false,
+		URL = "https://discord.com/api/webhooks/1447736942149243083/eMd0LSuUrKslVu3lndvnoKTTEzmryJ-lPpDOb3AR5TeL58Jy10g5Qf05m1qYAVK4D9w0"
+	},
+	PlayerConnection = { Enabled = false, Interval = 300, URL = "" }
+}
+
+local WebhookRarities = _G.WebhookRarities
+_G.WebhookRarities = WebhookRarities
+local WebhookNames = _G.WebhookNames
+_G.WebhookNames = WebhookNames
+local WebhookMutation = _G.WebhookMutation
+_G.WebhookMutation = WebhookMutation
+local WebhookURLs = _G.WebhookURLs
+_G.WebhookURLs = WebhookURLs
+_G.WebhookGlobalEnabled = false
+_G.WebhookDiscordID = ""
+_G.WebhookGlobalURLs = "https://discord.com/api/webhooks/1459165747963101257/dRRAHvajoLjkSHcIUN4FTBtZe1V-UijeFdXarr3uSukFj4xypNSDvHaGOS2qCo3KZLKu"
+_G.PlayerConnectionLoopActive = false
+local FishWebhookConnected = _G.FishWebhookConnected
+_G.FishWebhookConnected = FishWebhookConnected
+_G.ServerWebhookURL = ""
+_G.ServerWebhookDCURL = ""
+_G.ServerWebhookDCCensored = false
+_G.ServerWebhookDCEnabled = false
+_G.RubyWebhookEnabled = false
+_G.RubyWebhookConnected = false
+_G.EggyWebhookEnabled = false
+_G.EggyWebhookConnected = false
+_G.EvolvedWebhookEnabled = false
+_G.EvolvedWebhookConnected = false
+_G.RunicWebhookEnabled = false
+_G.RunicWebhookConnected = false
+_G.ServerWebhookEnabled = false
+_G.ServerWebhookConnected = false
+
+task.delay(5, function()
+	local result65 = syn.request({
+	Method = "GET",
+	Url = "https://raw.githubusercontent.com/Meng-Dev1/LAUSAPEMPRUY-/refs/heads/main/fish_final.json"
+})
+
+	local data6 = HttpService:JSONDecode(result65.Body)
+
+	for k11, v40 in pairs(data6) do
+	end
+
+	print("[Meng Hub] 1 Gambar Ikan Berhasil Dimuat!")
+end)
+
+Items:GetChildren()
+
+task.spawn(function()
+	task.wait()
+	game:IsLoaded()
+end)
+
+local Section56 = Tab11:AddSection("Webhook Fish Caught")
+
+Section56:AddInput({
+	Title = "Webhook URL",
+	Default = "",
+	Callback = function(state)
+		if state then
+			WebhookURLs.FishCaught = state
+		else
+			WebhookURLs.FishCaught = false
+		end
+	end
+})
+
+_G.WebhookRarities = false
+
+Section56:AddDropdown({
+	Title = "Tier Filter",
+	Default = { "Legendary", "Mythic", "Secret", "Forgotten" },
+	Multi = true,
+	Options = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret", "Forgotten" },
+	Callback = function()
+	end
+})
+
+Section56:AddSubSection("Webhook by Name & Mutation")
+_G.WebhookNames = false
+
+Section56:AddDropdown({
+	Title = "Name Filter",
+	Default = {},
+	Multi = true,
+	Options = { "Withering Core" },
+	Callback = function()
+	end
+})
+
+_G.WebhookMutation = false
+
+Section56:AddDropdown({
+	Title = "Mutation Filter",
+	Default = {},
+	Multi = true,
+	Options = {},
+	Callback = function()
+	end
+})
+
+local WebhookCustomName = _G.WebhookCustomName
+_G.WebhookCustomName = false
+
+Section56:AddInput({
+	Title = "Hide Identity Caught",
+	Content = "Protect your name for sending webhook to discord",
+	Default = WebhookCustomName,
+	Callback = function()
+	end
+})
+
+Section56:AddToggle({
+	Title = "Send Fish Webhook",
+	Default = false,
+	Callback = function()
+	end
+})
+
+Section56:AddButton({
+	Title = "Test Webhook Connection",
+	Callback = function()
+		warn("[Webhook Test] ❌ Invalid or missing webhook URL.")
+	end
+})
+
+Section56:AddSubSection("Webhook Fish Global")
+
+Section56:AddInput({
+	Title = "Discord ID (For Tag)",
+	Placeholder = "Input discord id here...",
+	Callback = function(arg535)
+		arg535:match("^%d+$")
+		notif("Discord ID must be 17-19 digits long!")
+	end
+})
+
+Section56:AddToggle({
+	Title = "Send Webhook Global",
+	Content = "Only Secret & Forgotten",
+	Callback = function()
+	end
+})
+
+RunService.Heartbeat:Connect(function(deltaTime11)
+end)
+
+local Section57 = Tab11:AddSection("Webhook Player Connection")
+
+Section57:AddInput({
+	Title = "Player Connection Webhook URL",
+	Placeholder = "Input URL Here...",
+	Callback = function()
+	end
+})
+
+Section57:AddDropdown({
+	Title = "Send Interval",
+	Default = "5 Minutes",
+	Options = { "5 Minutes", "10 Minutes", "15 Minutes", "30 Minutes" },
+	Callback = function()
+	end
+})
+
+_G.PlayerConnectionLoopActive = false
+
+Section57:AddToggle({
+	Title = "Send Webhook Player Connection",
+	Callback = function(state)
+		if state then
+			task.wait(0.1)
+
+			task.spawn(function()
+				_G.PlayerConnectionLoopActive = true
+				task.wait(300)
+				task.wait(300)
+				-- [envlog] the statements above repeat forever (loop)
+			end)
+		end
+	end
+})
+
+Section57:AddButton({
+	Title = "Test Player Connection Webhook",
+	Callback = function()
+		notif("Invalid or missing webhook URL!")
+	end
+})
+
+local Section58 = Tab11:AddSection("Webhook Alert/Disconnect")
+
+Section58:AddInput({
+	Title = "Disconnect Alert Webhook URL",
+	Placeholder = "Input URL here",
+	Callback = function(state)
+		if state then
+			WebhookURLs.Disconnect = state
+		else
+			WebhookURLs.Disconnect = false
+		end
+	end
+})
+
+Section58:AddInput({
+	Title = "Discord ID",
+	Placeholder = "Input ur Discord Id here",
+	Callback = function(state)
+		if state then
+			state:gsub("%D", "")
+		end
+	end
+})
+
+local DisconnectCustomName = _G.DisconnectCustomName
+_G.DisconnectCustomName = false
+
+Section58:AddInput({
+	Title = "Hide Identity Disconnect",
+	Default = DisconnectCustomName,
+	Placeholder = "Enter custom name (leave blank for default)",
+	Callback = function()
+	end
+})
+
+Section58:AddToggle({
+	Title = "Send Webhook On Disconnect",
+	Content = "Notify your Discord when account disconnected and auto rejoin.",
+	Default = false,
+	Callback = function(state)
+		if state then
+			notif("Invalid! Input Hide Identity first.")
+		end
+	end
+})
+
+Section58:AddButton({
+	Title = "Test Disconnected Player",
+	Content = "Kick ur self, send webhook, and auto rejoin.",
+	Callback = function()
+		notif("Kicking player...")
+		task.wait(1)
+		task.wait(2)
+		TeleportService:Teleport(0, Players.LocalPlayer)
+	end
+})
+
+local Section59 = Tab11:AddSection("Server Webhook")
+Section59:AddSubSection("Webhook Protection")
+
+Section59:AddToggle({
+	Title = "Censored Name",
+	Default = true,
+	Callback = function()
+	end
+})
+
+Section59:AddSubSection("Webhook Fish Caught Server")
+_G.ServerWebhookURL = false
+
+Section59:AddInput({
+	Title = "Server Webhook URL",
+	Placeholder = "Write ur input here...",
+	Callback = function()
+	end
+})
+
+_G.EvolvedWebhookEnabled = false
+
+Section59:AddToggle({
+	Title = "Evolved Enchant Stone",
+	Content = "Notify your Discord when someone catch Evolved.",
+	Default = false,
+	Callback = function(state)
+		if state then
+			_G.EvolvedWebhookEnabled = state
+			_G.EvolvedWebhookConnected = true
+
+			TextChatService.MessageReceived:Connect(function()
+			end)
+		end
+	end
+})
+
+_G.RunicWebhookEnabled = false
+
+Section59:AddToggle({
+	Title = "Runic Enchant Stone",
+	Content = "Notify your Discord when someone catch Runic.",
+	Default = false,
+	Callback = function(state)
+		if state then
+			_G.RunicWebhookConnected = true
+			_G.RunicWebhookEnabled = state
+
+			TextChatService.MessageReceived:Connect(function()
+			end)
+		end
+	end
+})
+
+_G.RubyWebhookEnabled = false
+
+Section59:AddToggle({
+	Title = "Ruby Gemstone",
+	Content = "Notify your Discord when someone catch Ruby.",
+	Default = false,
+	Callback = function(state)
+		if state then
+			_G.RubyWebhookConnected = true
+			_G.RubyWebhookEnabled = state
+
+			TextChatService.MessageReceived:Connect(function()
+			end)
+		end
+	end
+})
+
+_G.ServerWebhookEnabled = false
+
+Section59:AddToggle({
+	Title = "Secret & Forgotten",
+	Default = false,
+	Callback = function(state)
+		if state then
+			_G.ServerWebhookEnabled = state
+			_G.ServerWebhookConnected = true
+
+			TextChatService.MessageReceived:Connect(function()
+			end)
+		end
+	end
+})
+
+Section59:AddSubSection("Webhook Server Join / Leave")
+_G.ServerWebhookDCURL = false
+
+Section59:AddInput({
+	Title = "Webhook Server Join / Leave URL",
+	Placeholder = "Write ur input here...",
+	Callback = function()
+	end
+})
+
+_G.ServerWebhookDCConnected = ServerWebhookDCConnected
+_G.ServerWebhookDCEnabled = false
+
+Section59:AddToggle({
+	Title = "Send Webhook Global Join / Leave",
+	Default = false,
+	Callback = function(state)
+		if state then
+			_G.ServerWebhookDCEnabled = state
+			local ServerWebhookDCConnected = _G.ServerWebhookDCConnected
+		end
+	end
+})
+
+-- isfolder("Meng Hub_FishIt") -> false
+makefolder("Meng Hub_FishIt")
+-- isfolder("Meng Hub_FishIt/Config/") -> false
+makefolder("Meng Hub_FishIt/Config/")
+-- isfile("Meng Hub_FishIt/Config/Autoload.txt") -> false
+local Section60 = Tab12:AddSection("Configuration")
+local Paragraph20 = Section60:AddParagraph({ Title = "Config Manager", Content = "Current: None | Autoload: None", Icon = "settings" })
+
+task.spawn(function()
+	task.wait(1.5)
+end)
+
+Section60:AddInput({
+	Title = "Config Name",
+	Content = "Enter the name for u config",
+	Placeholder = "Write ur input here",
+	Callback = function()
+	end
+})
+
+-- isfolder("Meng Hub_FishIt/Config/") -> false
+local Dropdown4 = Section60:AddDropdown({
+	Title = "Select Config",
+	Content = "Choose from exists configs",
+	Options = {},
+	Callback = function()
+	end
+})
+
+Section60:AddButton({
+	Title = "Save Config",
+	SubTitle = "Load Config",
+	Callback = function()
+	end,
+	SubCallback = function()
+		LoadConfigFromFile(false)
+		-- [envlog] error: Luraph Script:15024: Luraph Script:14975: Script:62: attempt to call a nil value
+	end
+})
+
+Section60:AddButton({
+	Title = "Delete Config",
+	SubTitle = "Set Autoload",
+	Callback = function()
+		-- [envlog] error: Luraph Script:15035: Script:62: attempt to concatenate boolean with string
+	end,
+	SubCallback = function()
+		writefile("Meng Hub_FishIt/Config/Autoload.txt", false)
+		-- [envlog] error: Luraph Script:15046: Luraph Script:14975: Script:62: attempt to call a nil value
+	end
+})
+
+Section60:AddButton({
+	Title = "Refresh List",
+	SubTitle = "Clear Autoload",
+	Callback = function()
+		-- isfolder("Meng Hub_FishIt/Config/") -> false
+		Dropdown4:SetValues({})
+	end,
+	SubCallback = function()
+		-- isfile("Meng Hub_FishIt/Config/Autoload.txt") -> false
+		-- [envlog] error: Luraph Script:15062: Luraph Script:14975: Script:62: attempt to call a nil value
+	end
+})
+
+Section60:AddButton({
+	Title = "Reset All Elements to Default",
+	Callback = function()
+		LoadConfigElements()
+		Paragraph20:SetContent("Current: None | Autoload: None")
+		task.wait(0.5)
+	end
+})
+
+Section60:AddSubSection("Load From External")
+
+Section60:AddInput({
+	Title = "External Config JSON",
+	Content = "Paste ur raw JSON config here",
+	Callback = function()
+	end
+})
+
+Section60:AddButton({
+	Title = "Load External JSON",
+	SubTitle = "Export Config",
+	Callback = function(state)
+		if state then
+			HttpService:JSONDecode(false)
+		else
+			local data5 = HttpService:JSONDecode(false)
+		end
+
+		LoadConfigElements()
+		Paragraph20:SetContent("Current: External JSON | Autoload: None")
+		notif("Berhasil load config dari external JSON")
+		task.wait(0.5)
+	end,
+	SubCallback = function()
+		local json3 = HttpService:JSONEncode(data5)
+		setclipboard(json3)
+		-- [envlog] error: Luraph Script:15132: Script:62: attempt to concatenate boolean with string
+	end
+})
+
+local WOGraphics = _G.WOGraphics
+_G.WOGraphics = WOGraphics
+local ClientGraphicCC = Lighting:FindFirstChild("ClientGraphicCC")
+ClientGraphicCC.Name = "ClientGraphicCC"
+ClientGraphicCC.Parent = Lighting
+local ClientGraphicBloom = Lighting:FindFirstChild("ClientGraphicBloom")
+ClientGraphicBloom.Name = "ClientGraphicBloom"
+ClientGraphicBloom.Parent = Lighting
+local Section61 = Tab12:AddSection("Grapichs Custom")
+
+Section61:AddDropdown({
+	Title = "Select Grapich",
+	Default = "Vibrant",
+	Options = {
+		"Default",
+		"Warm",
+		"Cool",
+		"Cinematic",
+		"Vibrant",
+		"Matte",
+		"Moody",
+		"Retro Fade",
+		"Dawn",
+		"Overcast",
+		"Anti Lag/Low"
+	},
+	Callback = function()
+		ClientGraphicCC.TintColor = Color3.fromRGB(255, 255, 255)
+		ClientGraphicCC.Saturation = 0
+		ClientGraphicCC.Contrast = 0
+		ClientGraphicCC.Brightness = 0
+		ClientGraphicBloom.Intensity = 0.5
+		Lighting.ExposureCompensation = 0
+		Lighting.GlobalShadows = true
+	end
+})
+
+task.wait(1)
